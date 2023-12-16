@@ -134,8 +134,6 @@ const $i = signinRequired();
 
 const modal = inject('modal');
 
-
-
 const props = withDefaults(defineProps<{
 	reply?: Misskey.entities.Note;
 	renote?: Misskey.entities.Note;
