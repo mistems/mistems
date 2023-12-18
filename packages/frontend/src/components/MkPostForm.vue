@@ -22,18 +22,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button ref="visibilityButton" v-click-anime v-tooltip="i18n.ts.visibility" :class="['_button', $style.headerRightItem, $style.visibility]" @click="setVisibility">
 				<template v-if="postChannel">
 					<span><i class="ti ti-device-tv"></i></span>
-					<span v-if="postChannel" :class="$style.headerRightButtonText">{{ postChannel.name }}</span>
+					<span v-if="postChannel" :class="$style.headerRightButtonText">{{ postChannelName }}</span>
 				</template>
 				<template v-else>
-					<span v-if="visibility === 'public'"><i class="ti ti-world"></i></span>
-					<span v-if="visibility === 'home'"><i class="ti ti-home"></i></span>
-					<span v-if="visibility === 'followers'"><i class="ti ti-lock"></i></span>
-					<span v-if="visibility === 'specified'"><i class="ti ti-mail"></i></span>
-					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[visibility] }}</span>
+					<span v-if="actualVisibility === 'public'"><i class="ti ti-world"></i></span>
+					<span v-if="actualVisibility === 'home'"><i class="ti ti-home"></i></span>
+					<span v-if="actualVisibility === 'followers'"><i class="ti ti-lock"></i></span>
+					<span v-if="actualVisibility === 'specified'"><i class="ti ti-mail"></i></span>
+					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[actualVisibility] }}</span>
 				</template>
 			</button>
-			<button v-click-anime v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="postChannel != null || visibility === 'specified'" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
+			<button v-click-anime v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: actualLocalOnly }]" :disabled="postChannel != null || actualVisibility === 'specified'" @click="toggleLocalOnly">
+				<span v-if="!actualLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
 			<button v-click-anime v-tooltip="i18n.ts.reactionAcceptance" class="_button" :class="[$style.headerRightItem, { [$style.danger]: reactionAcceptance === 'likeOnly' }]" @click="toggleReactionAcceptance">
@@ -54,7 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkNoteSimple v-if="reply" :class="$style.targetNote" :note="reply"/>
 	<MkNoteSimple v-if="renote" :class="$style.targetNote" :note="renote"/>
 	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote"></i> {{ i18n.ts.quoteAttached }}<button @click="quoteId = null"><i class="ti ti-x"></i></button></div>
-	<div v-if="visibility === 'specified'" :class="$style.toSpecified">
+	<div v-if="actualVisibility === 'specified'" :class="$style.toSpecified">
 		<span style="margin-right: 8px;">{{ i18n.ts.recipient }}</span>
 		<div :class="$style.visibleUsers">
 			<span v-for="u in visibleUsers" :key="u.id" :class="$style.visibleUser">
@@ -67,7 +67,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
 	<input v-show="useCw" ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" @keydown="onKeydown">
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
-		<div v-if="channel" :class="$style.colorBar" :style="{ background: channel.color }"></div>
+		<div v-if="postChannel" :class="$style.colorBar" :style="{ background: postChannel.color }"></div>
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
@@ -84,9 +84,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button v-tooltip="i18n.ts.useCw" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" @click="useCw = !useCw"><i class="ti ti-eye-off"></i></button>
 			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @click="insertMention"><i class="ti ti-at"></i></button>
 			<button v-tooltip="i18n.ts.hashtags" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: withHashtags }]" @click="withHashtags = !withHashtags"><i class="ti ti-hash"></i></button>
-			<button v-if="postFormActions.length > 0" v-tooltip="i18n.ts.plugins" class="_button" :class="$style.footerButton" @click="showActions"><i class="ti ti-plug"></i></button>
+			<button v-if="postFormActions.length > 0" v-tooltip="i18n.ts.plugin" class="_button" :class="$style.footerButton" @click="showActions"><i class="ti ti-plug"></i></button>
 			<button v-tooltip="i18n.ts.emoji" :class="['_button', $style.footerButton]" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
-			<button v-if="showAddMfmFunction" v-tooltip="i18n.ts.addMfmFunction" :class="['_button', $style.footerButton]" @click="insertMfmFunction"><i class="ti ti-palette"></i></button>
 		</div>
 		<div :class="$style.footerRight">
 			<button v-tooltip="i18n.ts.previewNoteText" class="_button" :class="[$style.footerButton, { [$style.previewButtonActive]: showPreview }]" @click="showPreview = !showPreview"><i class="ti ti-eye"></i></button>
@@ -108,44 +107,40 @@ import { toASCII } from 'punycode/';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkNotePreview from '@/components/MkNotePreview.vue';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
-import MkPollEditor, { type PollEditorModelValue } from '@/components/MkPollEditor.vue';
+import MkPollEditor from '@/components/MkPollEditor.vue';
 import { host, url } from '@/config.js';
 import { erase, unique } from '@/scripts/array.js';
 import { extractMentions } from '@/scripts/extract-mentions.js';
 import { formatTimeString } from '@/scripts/format-time-string.js';
 import { Autocomplete } from '@/scripts/autocomplete.js';
 import * as os from '@/os.js';
-import { misskeyApi } from '@/scripts/misskey-api.js';
 import { selectFiles } from '@/scripts/select-file.js';
 import { defaultStore, notePostInterruptors, postFormActions } from '@/store.js';
 import MkInfo from '@/components/MkInfo.vue';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
-import { signinRequired, notesCount, incNotesCount, getAccounts, openAccountMenu as openAccountMenu_ } from '@/account.js';
+import { $i, notesCount, incNotesCount, getAccounts, openAccountMenu as openAccountMenu_ } from '@/account.js';
 import { uploadFile } from '@/scripts/upload.js';
 import { deepClone } from '@/scripts/clone.js';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
 import { miLocalStorage } from '@/local-storage.js';
 import { claimAchievement } from '@/scripts/achievements.js';
 import { emojiPicker } from '@/scripts/emoji-picker.js';
-import { mfmFunctionPicker } from '@/scripts/mfm-function-picker.js';
-
-const $i = signinRequired();
 
 const modal = inject('modal');
 
 const props = withDefaults(defineProps<{
 	reply?: Misskey.entities.Note;
 	renote?: Misskey.entities.Note;
-	channel?: Misskey.entities.Channel; // TODO
+	channel?: Misskey.entities.Channel;
 	mention?: Misskey.entities.User;
-	specified?: Misskey.entities.UserDetailed;
+	specified?: Misskey.entities.User;
 	initialText?: string;
 	initialCw?: string;
 	initialVisibility?: (typeof Misskey.noteVisibilities)[number];
 	initialFiles?: Misskey.entities.DriveFile[];
 	initialLocalOnly?: boolean;
-	initialVisibleUsers?: Misskey.entities.UserDetailed[];
+	initialVisibleUsers?: Misskey.entities.User[];
 	initialNote?: Misskey.entities.Note;
 	instant?: boolean;
 	fixed?: boolean;
@@ -157,8 +152,6 @@ const props = withDefaults(defineProps<{
 	autofocus: true,
 	mock: false,
 });
-
-let postChannel = ref<Misskey.entities.Channel | null>(props.channel);
 
 provide('mock', props.mock);
 
@@ -180,28 +173,45 @@ const posting = ref(false);
 const posted = ref(false);
 const text = ref(props.initialText ?? '');
 const files = ref(props.initialFiles ?? []);
-const poll = ref<PollEditorModelValue | null>(null);
+const poll = ref<{
+	choices: string[];
+	multiple: boolean;
+	expiresAt: string | null;
+	expiredAfter: string | null;
+} | null>(null);
 const useCw = ref<boolean>(!!props.initialCw);
 const showPreview = ref(defaultStore.state.showPreview);
 watch(showPreview, () => defaultStore.set('showPreview', showPreview.value));
-const showAddMfmFunction = ref(defaultStore.state.enableQuickAddMfmFunction);
-watch(showAddMfmFunction, () => defaultStore.set('enableQuickAddMfmFunction', showAddMfmFunction.value));
 const cw = ref<string | null>(props.initialCw ?? null);
 const localOnly = ref<boolean>(props.initialLocalOnly ?? defaultStore.state.rememberNoteVisibility ? defaultStore.state.localOnly : defaultStore.state.defaultNoteLocalOnly);
 const visibility = ref(props.initialVisibility ?? (defaultStore.state.rememberNoteVisibility ? defaultStore.state.visibility : defaultStore.state.defaultNoteVisibility) as typeof Misskey.noteVisibilities[number]);
-const visibleUsers = ref<Misskey.entities.UserDetailed[]>([]);
+const visibleUsers = ref([]);
 if (props.initialVisibleUsers) {
 	props.initialVisibleUsers.forEach(pushVisibleUser);
 }
 const reactionAcceptance = ref(defaultStore.state.reactionAcceptance);
 const autocomplete = ref(null);
 const draghover = ref(false);
-const quoteId = ref<string | null>(null);
+const quoteId = ref(null);
 const hasNotSpecifiedMentions = ref(false);
 const recentHashtags = ref(JSON.parse(miLocalStorage.getItem('hashtags') ?? '[]'));
 const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
+
+const postChannel = ref<Misskey.entities.Channel | null>(props.channel ?? null);
+const postChannelName = computed<string>(() => postChannel.value?.name ?? '');
+
+/**
+ * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にfalse）
+ * チャンネル選択有無を考慮する必要がある場面では{@link localOnly}ではなくこの値を使用する。
+ */
+const actualLocalOnly = computed<boolean>(() => postChannel.value ? true : localOnly.value);
+/**
+ * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にpublic）。
+ * チャンネル選択有無を考慮する必要がある場面では{@link actualVisibility}ではなくこの値を使用する。
+ */
+const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => postChannel.value ? 'public' : visibility.value);
 
 const draftKey = computed((): string => {
 	let key = postChannel.value ? `channel:${postChannel.value.id}` : '';
@@ -267,7 +277,7 @@ watch(text, () => {
 	checkMissingMention();
 }, { immediate: true });
 
-watch(visibility, () => {
+watch(actualVisibility, () => {
 	checkMissingMention();
 }, { immediate: true });
 
@@ -307,13 +317,8 @@ if (props.reply && props.reply.text != null) {
 	}
 }
 
-if ($i.isSilenced && visibility.value === 'public') {
+if ($i?.isSilenced && visibility.value === 'public') {
 	visibility.value = 'home';
-}
-
-if (postChannel.value) {
-	visibility.value = 'public';
-	localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
 }
 
 // 公開以外へのリプライ時は元の公開範囲を引き継ぐ
@@ -328,15 +333,15 @@ if (props.reply && ['home', 'followers', 'specified'].includes(props.reply.visib
 
 	if (visibility.value === 'specified') {
 		if (props.reply.visibleUserIds) {
-			misskeyApi('users/show', {
-				userIds: props.reply.visibleUserIds.filter(uid => uid !== $i.id && uid !== props.reply?.userId),
+			os.api('users/show', {
+				userIds: props.reply.visibleUserIds.filter(uid => uid !== $i.id && uid !== props.reply.userId),
 			}).then(users => {
 				users.forEach(pushVisibleUser);
 			});
 		}
 
 		if (props.reply.userId !== $i.id) {
-			misskeyApi('users/show', { userId: props.reply.userId }).then(user => {
+			os.api('users/show', { userId: props.reply.userId }).then(user => {
 				pushVisibleUser(user);
 			});
 		}
@@ -365,7 +370,7 @@ function watchForDraft() {
 }
 
 function checkMissingMention() {
-	if (visibility.value === 'specified') {
+	if (actualVisibility.value === 'specified') {
 		const ast = mfm.parse(text.value);
 
 		for (const x of extractMentions(ast)) {
@@ -383,7 +388,7 @@ function addMissingMention() {
 
 	for (const x of extractMentions(ast)) {
 		if (!visibleUsers.value.some(u => (u.username === x.username) && (u.host === x.host))) {
-			misskeyApi('users/show', { username: x.username, host: x.host }).then(user => {
+			os.api('users/show', { username: x.username, host: x.host }).then(user => {
 				visibleUsers.value.push(user);
 			});
 		}
@@ -453,11 +458,12 @@ function upload(file: File, name?: string): void {
 
 function setVisibility() {
 	os.popup(defineAsyncComponent(() => import('@/components/MkVisibilityPicker.vue')), {
-		currentVisibility: visibility.value,
-		isSilenced: $i.isSilenced,
-		localOnly: localOnly.value,
+		currentVisibility: actualVisibility.value,
+		isSilenced: $i?.isSilenced,
+		// チャンネル→ダイレクトの選択変更ができなくなるので、チャンネル選択中の場合は意図的にfalseを渡すようにする
+		localOnly: postChannel.value ? false : actualLocalOnly.value,
 		src: visibilityButton.value,
-    currentChannel: postChannel.value,
+		currentChannel: postChannel.value,
 	}, {
 		changeVisibility: v => {
 			visibility.value = v;
@@ -466,21 +472,14 @@ function setVisibility() {
 				defaultStore.set('visibility', visibility.value);
 			}
 		},
-    changeChannel: channel => {
-      postChannel.value = channel;
-      visibility.value = 'public';
-      localOnly.value = true;
-    }
+		changeChannel: channel => {
+			// computedで読み替えをするので、localOnlyとvisibilityの変更はしない
+			postChannel.value = channel;
+		},
 	}, 'closed');
 }
 
 async function toggleLocalOnly() {
-	if (postChannel.value) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
-		return;
-	}
-
 	const neverShowInfo = miLocalStorage.getItem('neverShowLocalOnlyInfo');
 
 	if (!localOnly.value && neverShowInfo !== 'true') {
@@ -532,7 +531,7 @@ async function toggleReactionAcceptance() {
 	reactionAcceptance.value = select.result;
 }
 
-function pushVisibleUser(user: Misskey.entities.UserDetailed) {
+function pushVisibleUser(user) {
 	if (!visibleUsers.value.some(u => u.username === user.username && u.host === user.host)) {
 		visibleUsers.value.push(user);
 	}
@@ -574,12 +573,10 @@ function onCompositionEnd(ev: CompositionEvent) {
 
 async function onPaste(ev: ClipboardEvent) {
 	if (props.mock) return;
-	if (!ev.clipboardData) return;
 
-	for (const { item, i } of Array.from(ev.clipboardData.items, (data, x) => ({ item: data, i: x }))) {
+	for (const { item, i } of Array.from(ev.clipboardData.items, (item, i) => ({ item, i }))) {
 		if (item.kind === 'file') {
 			const file = item.getAsFile();
-			if (!file) continue;
 			const lio = file.name.lastIndexOf('.');
 			const ext = lio >= 0 ? file.name.slice(lio) : '';
 			const formatted = `${formatTimeString(new Date(file.lastModified), defaultStore.state.pastedFileName).replace(/{{number}}/g, `${i + 1}`)}${ext}`;
@@ -601,7 +598,7 @@ async function onPaste(ev: ClipboardEvent) {
 				return;
 			}
 
-			quoteId.value = paste.substring(url.length).match(/^\/notes\/(.+?)\/?$/)?.[1] ?? null;
+			quoteId.value = paste.substring(url.length).match(/^\/notes\/(.+?)\/?$/)[1];
 		});
 	}
 }
@@ -632,26 +629,26 @@ function onDragover(ev) {
 	}
 }
 
-function onDragenter() {
+function onDragenter(ev) {
 	draghover.value = true;
 }
 
-function onDragleave() {
+function onDragleave(ev) {
 	draghover.value = false;
 }
 
-function onDrop(ev: DragEvent): void {
+function onDrop(ev): void {
 	draghover.value = false;
 
 	// ファイルだったら
-	if (ev.dataTransfer && ev.dataTransfer.files.length > 0) {
+	if (ev.dataTransfer.files.length > 0) {
 		ev.preventDefault();
 		for (const x of Array.from(ev.dataTransfer.files)) upload(x);
 		return;
 	}
 
 	//#region ドライブのファイル
-	const driveFile = ev.dataTransfer?.getData(_DATA_TRANSFER_DRIVE_FILE_);
+	const driveFile = ev.dataTransfer.getData(_DATA_TRANSFER_DRIVE_FILE_);
 	if (driveFile != null && driveFile !== '') {
 		const file = JSON.parse(driveFile);
 		files.value.push(file);
@@ -699,14 +696,11 @@ async function post(ev?: MouseEvent) {
 	}
 
 	if (ev) {
-		const el = (ev.currentTarget ?? ev.target) as HTMLElement | null;
-
-		if (el) {
-			const rect = el.getBoundingClientRect();
-			const x = rect.left + (el.offsetWidth / 2);
-			const y = rect.top + (el.offsetHeight / 2);
-			os.popup(MkRippleEffect, { x, y }, {}, 'end');
-		}
+		const el = ev.currentTarget ?? ev.target;
+		const rect = el.getBoundingClientRect();
+		const x = rect.left + (el.offsetWidth / 2);
+		const y = rect.top + (el.offsetHeight / 2);
+		os.popup(MkRippleEffect, { x, y }, {}, 'end');
 	}
 
 	if (props.mock) return;
@@ -718,7 +712,8 @@ async function post(ev?: MouseEvent) {
 		text.value.includes('$[scale') ||
 		text.value.includes('$[position');
 
-	if (annoying && visibility.value === 'public') {
+	// チャンネル投稿時はサーバサイド側でpublicに変更されているため警告を出す意味がない
+	if (annoying && actualVisibility.value === 'public' && !postChannel.value) {
 		const { canceled, result } = await os.actions({
 			type: 'warning',
 			text: i18n.ts.thisPostMayBeAnnoying,
@@ -750,47 +745,37 @@ async function post(ev?: MouseEvent) {
 		channelId: postChannel.value ? postChannel.value.id : undefined,
 		poll: poll.value,
 		cw: useCw.value ? cw.value ?? '' : null,
-		localOnly: localOnly.value,
-		visibility: visibility.value,
-		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
+		localOnly: actualLocalOnly.value,
+		visibility: actualVisibility.value,
+		visibleUserIds: actualVisibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
 	};
 
 	if (withHashtags.value && hashtags.value && hashtags.value.trim() !== '') {
 		const hashtags_ = hashtags.value.trim().split(' ').map(x => x.startsWith('#') ? x : '#' + x).join(' ');
-		if (!postData.text) {
-			postData.text = hashtags_;
-		} else {
-			const postTextLines = postData.text.split('\n');
-			if (postTextLines[postTextLines.length - 1].trim() === '') {
-				postTextLines[postTextLines.length - 1] += hashtags_;
-			} else {
-				postTextLines[postTextLines.length - 1] += ' ' + hashtags_;
-			}
-			postData.text = postTextLines.join('\n');
-		}
+		postData.text = postData.text ? `${postData.text} ${hashtags_}` : hashtags_;
 	}
 
 	// plugin
 	if (notePostInterruptors.length > 0) {
 		for (const interruptor of notePostInterruptors) {
 			try {
-				postData = await interruptor.handler(deepClone(postData)) as typeof postData;
+				postData = await interruptor.handler(deepClone(postData));
 			} catch (err) {
 				console.error(err);
 			}
 		}
 	}
 
-	let token: string | undefined = undefined;
+	let token = undefined;
 
 	if (postAccount.value) {
 		const storedAccounts = await getAccounts();
-		token = storedAccounts.find(x => x.id === postAccount.value?.id)?.token;
+		token = storedAccounts.find(x => x.id === postAccount.value.id)?.token;
 	}
 
 	posting.value = true;
-	misskeyApi('notes/create', postData, token).then(() => {
+	os.api('notes/create', postData, token).then(() => {
 		if (props.freezeAfterPosted) {
 			posted.value = true;
 		} else {
@@ -800,7 +785,7 @@ async function post(ev?: MouseEvent) {
 			deleteDraft();
 			emit('posted');
 			if (postData.text && postData.text !== '') {
-				const hashtags_ = mfm.parse(postData.text).map(x => x.type === 'hashtag' && x.props.hashtag).filter(x => x) as string[];
+				const hashtags_ = mfm.parse(postData.text).filter(x => x.type === 'hashtag').map(x => x.props.hashtag);
 				const history = JSON.parse(miLocalStorage.getItem('hashtags') ?? '[]') as string[];
 				miLocalStorage.setItem('hashtags', JSON.stringify(unique(hashtags_.concat(history))));
 			}
@@ -863,17 +848,16 @@ function cancel() {
 }
 
 function insertMention() {
-	os.selectUser({ localOnly: localOnly.value, includeSelf: true }).then(user => {
+	os.selectUser().then(user => {
 		insertTextAtCursor(textareaEl.value, '@' + Misskey.acct.toString(user) + ' ');
 	});
 }
 
 async function insertEmoji(ev: MouseEvent) {
 	textAreaReadOnly.value = true;
-	const target = ev.currentTarget ?? ev.target;
-	if (target == null) return;
+
 	emojiPicker.show(
-		target as HTMLElement,
+		ev.currentTarget ?? ev.target,
 		emoji => {
 			insertTextAtCursor(textareaEl.value, emoji);
 		},
@@ -884,24 +868,14 @@ async function insertEmoji(ev: MouseEvent) {
 	);
 }
 
-async function insertMfmFunction(ev: MouseEvent) {
-	if (textareaEl.value == null) return;
-	mfmFunctionPicker(
-		ev.currentTarget ?? ev.target,
-		textareaEl.value,
-		text,
-	);
-}
-
-function showActions(ev: MouseEvent) {
+function showActions(ev) {
 	os.popupMenu(postFormActions.map(action => ({
 		text: action.title,
 		action: () => {
 			action.handler({
 				text: text.value,
 				cw: cw.value,
-			}, (key, value: any) => {
-				if (typeof key !== 'string') return;
+			}, (key, value) => {
 				if (key === 'text') { text.value = value; }
 				if (key === 'cw') { useCw.value = value !== null; cw.value = value; }
 			});
@@ -938,9 +912,9 @@ onMounted(() => {
 	}
 
 	// TODO: detach when unmount
-	if (textareaEl.value) new Autocomplete(textareaEl.value, text);
-	if (cwInputEl.value) new Autocomplete(cwInputEl.value, cw);
-	if (hashtagsInputEl.value) new Autocomplete(hashtagsInputEl.value, hashtags);
+	new Autocomplete(textareaEl.value, text);
+	new Autocomplete(cwInputEl.value, cw);
+	new Autocomplete(hashtagsInputEl.value, hashtags);
 
 	nextTick(() => {
 		// 書きかけの投稿を復元
@@ -963,19 +937,19 @@ onMounted(() => {
 		if (props.initialNote) {
 			const init = props.initialNote;
 			text.value = init.text ? init.text : '';
-			files.value = init.files ?? [];
-			cw.value = init.cw ?? null;
+			files.value = init.files;
+			cw.value = init.cw;
 			useCw.value = init.cw != null;
 			if (init.poll) {
 				poll.value = {
 					choices: init.poll.choices.map(x => x.text),
 					multiple: init.poll.multiple,
-					expiresAt: init.poll.expiresAt ? (new Date(init.poll.expiresAt)).getTime() : null,
-					expiredAfter: null,
+					expiresAt: init.poll.expiresAt,
+					expiredAfter: init.poll.expiredAfter,
 				};
 			}
 			visibility.value = init.visibility;
-			localOnly.value = init.localOnly ?? false;
+			localOnly.value = init.localOnly;
 			quoteId.value = init.renote ? init.renote.id : null;
 		}
 
