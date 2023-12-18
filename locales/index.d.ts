@@ -8201,6 +8201,9 @@ export interface Locale extends ILocale {
          * 指定したユーザーのみに公開
          */
         "specifiedDescription": string;
+        "channel": string;
+        "channelDescription": string;
+        "channelSelected": string;
         /**
          * 連合なし
          */
