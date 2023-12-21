@@ -99,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, shallowRef, computed, watch, onMounted } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, nextTick } from 'vue';
 import * as Misskey from 'misskey-js';
 import XSection from '@/components/MkEmojiPicker.section.vue';
 import {
@@ -357,6 +357,9 @@ function computeButtonTitle(ev: MouseEvent): void {
 function chosen(emoji: any, ev?: MouseEvent) {
 	const el = ev && (ev.currentTarget ?? ev.target) as HTMLElement | null | undefined;
 	if (el) {
+		// 検索してから絵文字を選択すると検索欄にフォーカスが残っておりキーボードがチラつくため
+		nextTick(() => el.focus());
+
 		const rect = el.getBoundingClientRect();
 		const x = rect.left + (el.offsetWidth / 2);
 		const y = rect.top + (el.offsetHeight / 2);
