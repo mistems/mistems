@@ -357,9 +357,6 @@ function computeButtonTitle(ev: MouseEvent): void {
 function chosen(emoji: any, ev?: MouseEvent) {
 	const el = ev && (ev.currentTarget ?? ev.target) as HTMLElement | null | undefined;
 	if (el) {
-		// 検索してから絵文字を選択すると検索欄にフォーカスが残っておりキーボードがチラつくため
-		nextTick(() => el.focus());
-
 		const rect = el.getBoundingClientRect();
 		const x = rect.left + (el.offsetWidth / 2);
 		const y = rect.top + (el.offsetHeight / 2);
@@ -367,7 +364,6 @@ function chosen(emoji: any, ev?: MouseEvent) {
 	}
 
 	const key = getKey(emoji);
-	emit('chosen', key);
 
 	// 最近使った絵文字更新
 	if (!pinned.value?.includes(key)) {
@@ -376,6 +372,11 @@ function chosen(emoji: any, ev?: MouseEvent) {
 		recents.unshift(key);
 		defaultStore.set('recentlyUsedEmojis', recents.splice(0, 32));
 	}
+
+	emit('chosen', key);
+
+	// 検索してから絵文字を選択すると検索欄にフォーカスが残っておりキーボードがチラつくため
+	nextTick(() => el?.focus());
 }
 
 function input(): void {
