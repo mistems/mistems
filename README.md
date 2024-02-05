@@ -31,14 +31,19 @@ Misskey Improvement and Synthesis Through Experimental Modified Systems.
 ## MISTEMS CHANGELOG
 
 
-#features (4)
+#features (7)
 
-- enhance: update datasaver switch titles (#16) ( ibuki2003 )
-- enhance: ノート詳細ページでリプライ一覧と引用一覧を別々に表示するように (#14) (GrapeApple0, kakkokari-gtyih )
-- 開いてるページで投稿先がチャンネルになってほしい misskey-dev#13028 (#13) (fruitriin, samunohito mesichicken )
-- プロフィールの編集を検知できるようにした (#11) (mesichicken)
+- enhance: update datasaver switch titles (#16, ) (@ibuki2003)
+- enhance: ノート詳細ページでリプライ一覧と引用一覧を別々に表示するように (#14) (@GrapeApple0, @kakkokari-gtyih)
+- 開いてるページで投稿先がチャンネルになってほしい misskey-dev#13028 (#13, #23) (@fruitriin, @samunohito mesichicken )
+- プロフィールの編集を検知できるようにした (#11) (@mesichicken)
+- どこからでもチャンネルに投稿したい (#25) (@fruitriin, @samunohito, @mesichicken)
+- fix(frontend): 「今日誕生日のフォロー中ユーザー」ウィジェットが正しく動作しない問題を修正 misskey-dev#12835 (#23) (@kakkokari-gtyih)
+- Enhance(frontend): もっと！ボタンでリアクション一覧が開けるように misskey-dev#12935 (#22) @1STEP621)
 
-# fix (2)
+
+# fix (3)
 - Fix hswipe animation control (#12) (kakkokari-gtyih)
 - build libraries after install (#10)
+- fix conflict #25 (#26) (fruitriin)
 
