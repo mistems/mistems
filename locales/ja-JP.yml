@@ -1142,6 +1142,7 @@ youHaveUnreadAnnouncements: "未読のお知らせがあります。"
 useSecurityKey: "ブラウザまたはデバイスの指示に従って、セキュリティキーまたはパスキーを使用してください。"
 replies: "返信"
 renotes: "リノート"
+quotes: "引用"
 loadReplies: "返信を見る"
 loadConversation: "会話を見る"
 pinnedList: "ピン留めされたリスト"
@@ -1223,7 +1224,7 @@ _announcement:
   tooManyActiveAnnouncementDescription: "アクティブなお知らせが多いため、UXが低下する可能性があります。終了したお知らせはアーカイブすることを検討してください。"
   readConfirmTitle: "既読にしますか？"
   readConfirmText: "「{title}」の内容を読み、既読にします。"
-  shouldNotBeUsedToPresentPermanentInfo: "特に新規ユーザーのUXを損ねる可能性が高いため、ストック情報ではなくフロー情報の掲示にお知らせを使用することを推奨します。"
+  shouldNotBeUsedToPresentPermanentInfo: "特に新規ユーザーのUXを損ねる可能性が高いため、常時掲示するための情報ではなく、即時性が求められる情報の掲示のためにお知らせを使用することを推奨します。"
   dialogAnnouncementUxWarn: "ダイアログ形式のお知らせが同時に2つ以上ある場合、UXに悪影響を及ぼす可能性が非常に高いため、使用は慎重に行うことを推奨します。"
   silence: "非通知"
   silenceDescription: "オンにすると、このお知らせは通知されず、既読にする必要もなくなります。"
@@ -2502,16 +2503,16 @@ _externalResourceInstaller:
 
 _dataSaver:
   _media:
-    title: "メディアの読み込み"
+    title: "メディアの読み込みを無効化"
     description: "画像・動画が自動で読み込まれるのを防止します。隠れている画像・動画はタップすると読み込まれます。"
   _avatar:
-    title: "アイコン画像"
+    title: "アイコン画像のアニメーションを無効化"
     description: "アイコン画像のアニメーションが停止します。アニメーション画像は通常の画像よりファイルサイズが大きいことがあるので、データ通信量をさらに削減できます。"
   _urlPreview:
-    title: "URLプレビューのサムネイル"
+    title: "URLプレビューのサムネイルを非表示"
     description: "URLプレビューのサムネイル画像が読み込まれなくなります。"
   _code:
-    title: "コードハイライト"
+    title: "コードハイライトを非表示"
     description: "MFMなどでコードハイライト記法が使われている場合、タップするまで読み込まれなくなります。コードハイライトではハイライトする言語ごとにその定義ファイルを読み込む必要がありますが、それらが自動で読み込まれなくなるため、通信量の削減が見込めます。"
 
 _hemisphere:

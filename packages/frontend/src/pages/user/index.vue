@@ -74,9 +74,16 @@ function fetchUser(): void {
 	});
 }
 
-watch(() => props.acct, fetchUser, {
-	immediate: true,
-});
+watch(
+	[() => props.acct, () => $i],
+	() => {
+		fetchUser();
+	},
+	{
+		immediate: true,
+		deep: true,
+	},
+);
 
 const headerActions = computed(() => []);
 
@@ -96,7 +103,7 @@ const headerTabs = computed(() => user.value ? [{
 	key: 'achievements',
 	title: i18n.ts.achievements,
 	icon: 'ti ti-medal',
-}] : []), ...($i && ($i.id === user.value.id)) || user.value.publicReactions ? [{
+}] : []), ...($i && ($i.id === user.value.id || $i.isAdmin || $i.isModerator)) || user.value.publicReactions ? [{
 	key: 'reactions',
 	title: i18n.ts.reaction,
 	icon: 'ti ti-mood-happy',
