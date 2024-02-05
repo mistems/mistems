@@ -2,6 +2,7 @@
 	"type": "module",
 	"name": "misskey-reversi",
 	"version": "0.0.1",
+	"types": "./built/dts/index.d.ts",
 	"exports": {
 		".": {
 			"import": "./built/esm/index.js",
@@ -13,6 +14,7 @@
 		}
 	},
 	"scripts": {
+		"postinstall": "pnpm build",
 		"build": "node ./build.js",
 		"build:tsc": "npm run tsc",
 		"tsc": "npm run tsc-esm && npm run tsc-dts",
