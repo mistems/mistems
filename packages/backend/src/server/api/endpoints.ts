@@ -4,8 +4,7 @@
  */
 
 import { permissions } from 'misskey-js';
-import type { Schema } from '@/misc/json-schema.js';
-import { RolePolicies } from '@/core/RoleService.js';
+import type { KeyOf, Schema } from '@/misc/json-schema.js';
 
 import * as ep___admin_meta from './endpoints/admin/meta.js';
 import * as ep___admin_abuseUserReports from './endpoints/admin/abuse-user-reports.js';
@@ -278,6 +277,7 @@ import * as ep___notes_localTimeline from './endpoints/notes/local-timeline.js';
 import * as ep___notes_mentions from './endpoints/notes/mentions.js';
 import * as ep___notes_polls_recommendation from './endpoints/notes/polls/recommendation.js';
 import * as ep___notes_polls_vote from './endpoints/notes/polls/vote.js';
+import * as ep___notes_quotes from './endpoints/notes/quotes.js';
 import * as ep___notes_reactions from './endpoints/notes/reactions.js';
 import * as ep___notes_reactions_create from './endpoints/notes/reactions/create.js';
 import * as ep___notes_reactions_delete from './endpoints/notes/reactions/delete.js';
@@ -367,6 +367,13 @@ import * as ep___fetchExternalResources from './endpoints/fetch-external-resourc
 import * as ep___retention from './endpoints/retention.js';
 import * as ep___bubbleGame_register from './endpoints/bubble-game/register.js';
 import * as ep___bubbleGame_ranking from './endpoints/bubble-game/ranking.js';
+import * as ep___reversi_cancelMatch from './endpoints/reversi/cancel-match.js';
+import * as ep___reversi_games from './endpoints/reversi/games.js';
+import * as ep___reversi_match from './endpoints/reversi/match.js';
+import * as ep___reversi_invitations from './endpoints/reversi/invitations.js';
+import * as ep___reversi_showGame from './endpoints/reversi/show-game.js';
+import * as ep___reversi_surrender from './endpoints/reversi/surrender.js';
+import * as ep___reversi_verify from './endpoints/reversi/verify.js';
 
 const eps = [
 	['admin/meta', ep___admin_meta],
@@ -640,6 +647,7 @@ const eps = [
 	['notes/mentions', ep___notes_mentions],
 	['notes/polls/recommendation', ep___notes_polls_recommendation],
 	['notes/polls/vote', ep___notes_polls_vote],
+	['notes/quotes', ep___notes_quotes],
 	['notes/reactions', ep___notes_reactions],
 	['notes/reactions/create', ep___notes_reactions_create],
 	['notes/reactions/delete', ep___notes_reactions_delete],
@@ -729,6 +737,13 @@ const eps = [
 	['retention', ep___retention],
 	['bubble-game/register', ep___bubbleGame_register],
 	['bubble-game/ranking', ep___bubbleGame_ranking],
+	['reversi/cancel-match', ep___reversi_cancelMatch],
+	['reversi/games', ep___reversi_games],
+	['reversi/match', ep___reversi_match],
+	['reversi/invitations', ep___reversi_invitations],
+	['reversi/show-game', ep___reversi_showGame],
+	['reversi/surrender', ep___reversi_surrender],
+	['reversi/verify', ep___reversi_verify],
 ];
 
 interface IEndpointMetaBase {
@@ -762,7 +777,7 @@ interface IEndpointMetaBase {
 	 */
 	readonly requireAdmin?: boolean;
 
-	readonly requireRolePolicy?: keyof RolePolicies;
+	readonly requireRolePolicy?: KeyOf<'RolePolicies'>;
 
 	/**
 	 * 引っ越し済みのユーザーによるリクエストを禁止するか

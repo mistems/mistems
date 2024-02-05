@@ -277,6 +277,7 @@ import * as ep___notes_localTimeline from './endpoints/notes/local-timeline.js';
 import * as ep___notes_mentions from './endpoints/notes/mentions.js';
 import * as ep___notes_polls_recommendation from './endpoints/notes/polls/recommendation.js';
 import * as ep___notes_polls_vote from './endpoints/notes/polls/vote.js';
+import * as ep___notes_quotes from './endpoints/notes/quotes.js';
 import * as ep___notes_reactions from './endpoints/notes/reactions.js';
 import * as ep___notes_reactions_create from './endpoints/notes/reactions/create.js';
 import * as ep___notes_reactions_delete from './endpoints/notes/reactions/delete.js';
@@ -366,6 +367,13 @@ import * as ep___fetchExternalResources from './endpoints/fetch-external-resourc
 import * as ep___retention from './endpoints/retention.js';
 import * as ep___bubbleGame_register from './endpoints/bubble-game/register.js';
 import * as ep___bubbleGame_ranking from './endpoints/bubble-game/ranking.js';
+import * as ep___reversi_cancelMatch from './endpoints/reversi/cancel-match.js';
+import * as ep___reversi_games from './endpoints/reversi/games.js';
+import * as ep___reversi_match from './endpoints/reversi/match.js';
+import * as ep___reversi_invitations from './endpoints/reversi/invitations.js';
+import * as ep___reversi_showGame from './endpoints/reversi/show-game.js';
+import * as ep___reversi_surrender from './endpoints/reversi/surrender.js';
+import * as ep___reversi_verify from './endpoints/reversi/verify.js';
 import { GetterService } from './GetterService.js';
 import { ApiLoggerService } from './ApiLoggerService.js';
 import type { Provider } from '@nestjs/common';
@@ -641,6 +649,7 @@ const $notes_localTimeline: Provider = { provide: 'ep:notes/local-timeline', use
 const $notes_mentions: Provider = { provide: 'ep:notes/mentions', useClass: ep___notes_mentions.default };
 const $notes_polls_recommendation: Provider = { provide: 'ep:notes/polls/recommendation', useClass: ep___notes_polls_recommendation.default };
 const $notes_polls_vote: Provider = { provide: 'ep:notes/polls/vote', useClass: ep___notes_polls_vote.default };
+const $notes_quotes: Provider = { provide: 'ep:notes/quotes', useClass: ep___notes_quotes.default };
 const $notes_reactions: Provider = { provide: 'ep:notes/reactions', useClass: ep___notes_reactions.default };
 const $notes_reactions_create: Provider = { provide: 'ep:notes/reactions/create', useClass: ep___notes_reactions_create.default };
 const $notes_reactions_delete: Provider = { provide: 'ep:notes/reactions/delete', useClass: ep___notes_reactions_delete.default };
@@ -730,6 +739,13 @@ const $fetchExternalResources: Provider = { provide: 'ep:fetch-external-resource
 const $retention: Provider = { provide: 'ep:retention', useClass: ep___retention.default };
 const $bubbleGame_register: Provider = { provide: 'ep:bubble-game/register', useClass: ep___bubbleGame_register.default };
 const $bubbleGame_ranking: Provider = { provide: 'ep:bubble-game/ranking', useClass: ep___bubbleGame_ranking.default };
+const $reversi_cancelMatch: Provider = { provide: 'ep:reversi/cancel-match', useClass: ep___reversi_cancelMatch.default };
+const $reversi_games: Provider = { provide: 'ep:reversi/games', useClass: ep___reversi_games.default };
+const $reversi_match: Provider = { provide: 'ep:reversi/match', useClass: ep___reversi_match.default };
+const $reversi_invitations: Provider = { provide: 'ep:reversi/invitations', useClass: ep___reversi_invitations.default };
+const $reversi_showGame: Provider = { provide: 'ep:reversi/show-game', useClass: ep___reversi_showGame.default };
+const $reversi_surrender: Provider = { provide: 'ep:reversi/surrender', useClass: ep___reversi_surrender.default };
+const $reversi_verify: Provider = { provide: 'ep:reversi/verify', useClass: ep___reversi_verify.default };
 
 @Module({
 	imports: [
@@ -1009,6 +1025,7 @@ const $bubbleGame_ranking: Provider = { provide: 'ep:bubble-game/ranking', useCl
 		$notes_mentions,
 		$notes_polls_recommendation,
 		$notes_polls_vote,
+		$notes_quotes,
 		$notes_reactions,
 		$notes_reactions_create,
 		$notes_reactions_delete,
@@ -1098,6 +1115,13 @@ const $bubbleGame_ranking: Provider = { provide: 'ep:bubble-game/ranking', useCl
 		$retention,
 		$bubbleGame_register,
 		$bubbleGame_ranking,
+		$reversi_cancelMatch,
+		$reversi_games,
+		$reversi_match,
+		$reversi_invitations,
+		$reversi_showGame,
+		$reversi_surrender,
+		$reversi_verify,
 	],
 	exports: [
 		$admin_meta,
@@ -1371,6 +1395,7 @@ const $bubbleGame_ranking: Provider = { provide: 'ep:bubble-game/ranking', useCl
 		$notes_mentions,
 		$notes_polls_recommendation,
 		$notes_polls_vote,
+		$notes_quotes,
 		$notes_reactions,
 		$notes_reactions_create,
 		$notes_reactions_delete,
@@ -1457,6 +1482,13 @@ const $bubbleGame_ranking: Provider = { provide: 'ep:bubble-game/ranking', useCl
 		$retention,
 		$bubbleGame_register,
 		$bubbleGame_ranking,
+		$reversi_cancelMatch,
+		$reversi_games,
+		$reversi_match,
+		$reversi_invitations,
+		$reversi_showGame,
+		$reversi_surrender,
+		$reversi_verify,
 	],
 })
 export class EndpointsModule {}
