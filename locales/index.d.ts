@@ -8201,9 +8201,18 @@ export interface Locale extends ILocale {
          * 指定したユーザーのみに公開
          */
         "specifiedDescription": string;
+        /**
+         * チャンネル
+         */
         "channel": string;
+        /**
+         * 選択したチャンネルに公開
+         */
         "channelDescription": string;
-        "channelSelected": string;
+        /**
+         * 選択中:{name}
+         */
+        "channelSelected": ParameterizedString<"name">;
         /**
          * 連合なし
          */
