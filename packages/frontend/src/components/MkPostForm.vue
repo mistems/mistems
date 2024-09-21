@@ -19,21 +19,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</button>
 		</div>
 		<div :class="$style.headerRight">
-			<template v-if="!(channel != null && fixed)">
-				<button v-if="channel == null" ref="visibilityButton" v-click-anime v-tooltip="i18n.ts.visibility" :class="['_button', $style.headerRightItem, $style.visibility]" @click="setVisibility">
-					<span v-if="visibility === 'public'"><i class="ti ti-world"></i></span>
-					<span v-if="visibility === 'home'"><i class="ti ti-home"></i></span>
-					<span v-if="visibility === 'followers'"><i class="ti ti-lock"></i></span>
-					<span v-if="visibility === 'specified'"><i class="ti ti-mail"></i></span>
-					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[visibility] }}</span>
-				</button>
-				<button v-else class="_button" :class="[$style.headerRightItem, $style.visibility]" disabled>
+			<button ref="visibilityButton" v-click-anime v-tooltip="i18n.ts.visibility" :class="['_button', $style.headerRightItem, $style.visibility]" @click="setVisibility">
+				<template v-if="postChannel">
 					<span><i class="ti ti-device-tv"></i></span>
-					<span :class="$style.headerRightButtonText">{{ channel.name }}</span>
-				</button>
-			</template>
-			<button v-click-anime v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="channel != null || visibility === 'specified'" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
+					<span v-if="postChannel" :class="$style.headerRightButtonText">{{ postChannelName }}</span>
+				</template>
+				<template v-else>
+					<span v-if="actualVisibility === 'public'"><i class="ti ti-world"></i></span>
+					<span v-if="actualVisibility === 'home'"><i class="ti ti-home"></i></span>
+					<span v-if="actualVisibility === 'followers'"><i class="ti ti-lock"></i></span>
+					<span v-if="actualVisibility === 'specified'"><i class="ti ti-mail"></i></span>
+					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[actualVisibility] }}</span>
+				</template>
+			</button>
+			<button v-click-anime v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: actualLocalOnly }]" :disabled="postChannel != null || actualVisibility === 'specified'" @click="toggleLocalOnly">
+				<span v-if="!actualLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
 			<button v-click-anime v-tooltip="i18n.ts.reactionAcceptance" class="_button" :class="[$style.headerRightItem, { [$style.danger]: reactionAcceptance === 'likeOnly' }]" @click="toggleReactionAcceptance">
@@ -53,8 +53,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</header>
 	<MkNoteSimple v-if="reply" :class="$style.targetNote" :note="reply"/>
 	<MkNoteSimple v-if="renote" :class="$style.targetNote" :note="renote"/>
+
 	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote"></i> {{ i18n.ts.quoteAttached }}<button @click="quoteId = null"><i class="ti ti-x"></i></button></div>
-	<div v-if="visibility === 'specified'" :class="$style.toSpecified">
+	<div v-if="actualVisibility === 'specified'" :class="$style.toSpecified">
 		<span style="margin-right: 8px;">{{ i18n.ts.recipient }}</span>
 		<div :class="$style.visibleUsers">
 			<span v-for="u in visibleUsers" :key="u.id" :class="$style.visibleUser">
@@ -78,10 +79,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</button>
 		</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
-		<div v-if="channel" :class="$style.colorBar" :style="{ background: channel.color }"></div>
+		<div v-if="postChannel" :class="$style.colorBar" :style="{ background: postChannel.color }"></div>
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
+
 	</div>
+	<div :class="$style.channelName" v-if="postChannel"><i class="ti ti-device-tv" style="margin-right: 4px;"></i>{{ postChannel.name }}</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName" @replaceFile="replaceFile"/>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
@@ -213,6 +216,20 @@ const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
 
+const postChannel = ref<Misskey.entities.Channel | null>(props.channel ?? null);
+const postChannelName = computed<string>(() => postChannel.value?.name ?? '');
+
+/**
+ * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にfalse）
+ * チャンネル選択有無を考慮する必要がある場面では{@link localOnly}ではなくこの値を使用する。
+ */
+const actualLocalOnly = computed<boolean>(() => postChannel.value ? true : localOnly.value);
+/**
+ * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にpublic）。
+ * チャンネル選択有無を考慮する必要がある場面では{@link actualVisibility}ではなくこの値を使用する。
+ */
+const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => postChannel.value ? 'public' : visibility.value);
+
 const draftKey = computed((): string => {
 	let key = props.channel ? `channel:${props.channel.id}` : '';
 
@@ -283,7 +300,7 @@ watch(text, () => {
 	checkMissingMention();
 }, { immediate: true });
 
-watch(visibility, () => {
+watch(actualVisibility, () => {
 	checkMissingMention();
 }, { immediate: true });
 
@@ -323,7 +340,7 @@ if (props.reply && props.reply.text != null) {
 	}
 }
 
-if ($i.isSilenced && visibility.value === 'public') {
+if ($i?.isSilenced && visibility.value === 'public') {
 	visibility.value = 'home';
 }
 
@@ -344,15 +361,15 @@ if (props.reply && ['home', 'followers', 'specified'].includes(props.reply.visib
 
 	if (visibility.value === 'specified') {
 		if (props.reply.visibleUserIds) {
-			misskeyApi('users/show', {
-				userIds: props.reply.visibleUserIds.filter(uid => uid !== $i.id && uid !== props.reply?.userId),
+			os.api('users/show', {
+				userIds: props.reply.visibleUserIds.filter(uid => uid !== $i.id && uid !== props.reply.userId),
 			}).then(users => {
 				users.forEach(u => pushVisibleUser(u));
 			});
 		}
 
 		if (props.reply.userId !== $i.id) {
-			misskeyApi('users/show', { userId: props.reply.userId }).then(user => {
+			os.api('users/show', { userId: props.reply.userId }).then(user => {
 				pushVisibleUser(user);
 			});
 		}
@@ -383,7 +400,7 @@ function watchForDraft() {
 }
 
 function checkMissingMention() {
-	if (visibility.value === 'specified') {
+	if (actualVisibility.value === 'specified') {
 		const ast = mfm.parse(text.value);
 
 		for (const x of extractMentions(ast)) {
@@ -493,24 +510,24 @@ function setVisibility() {
 		localOnly: localOnly.value,
 		src: visibilityButton.value,
 		...(props.reply ? { isReplyVisibilitySpecified: props.reply.visibility === 'specified' } : {}),
+		currentChannel: postChannel.value,
 	}, {
 		changeVisibility: v => {
 			visibility.value = v;
+			postChannel.value = null;
 			if (defaultStore.state.rememberNoteVisibility) {
 				defaultStore.set('visibility', visibility.value);
 			}
 		},
 		closed: () => dispose(),
-	});
+		changeChannel: channel => {
+			// computedで読み替えをするので、localOnlyとvisibilityの変更はしない
+			postChannel.value = channel;
+		},
+	}, 'closed');
 }
 
 async function toggleLocalOnly() {
-	if (props.channel) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
-		return;
-	}
-
 	const neverShowInfo = miLocalStorage.getItem('neverShowLocalOnlyInfo');
 
 	if (!localOnly.value && neverShowInfo !== 'true') {
@@ -565,7 +582,7 @@ async function toggleReactionAcceptance() {
 	reactionAcceptance.value = select.result;
 }
 
-function pushVisibleUser(user: Misskey.entities.UserDetailed) {
+function pushVisibleUser(user) {
 	if (!visibleUsers.value.some(u => u.username === user.username && u.host === user.host)) {
 		visibleUsers.value.push(user);
 	}
@@ -608,12 +625,10 @@ function onCompositionEnd(ev: CompositionEvent) {
 
 async function onPaste(ev: ClipboardEvent) {
 	if (props.mock) return;
-	if (!ev.clipboardData) return;
 
-	for (const { item, i } of Array.from(ev.clipboardData.items, (data, x) => ({ item: data, i: x }))) {
+	for (const { item, i } of Array.from(ev.clipboardData.items, (item, i) => ({ item, i }))) {
 		if (item.kind === 'file') {
 			const file = item.getAsFile();
-			if (!file) continue;
 			const lio = file.name.lastIndexOf('.');
 			const ext = lio >= 0 ? file.name.slice(lio) : '';
 			const formatted = `${formatTimeString(new Date(file.lastModified), defaultStore.state.pastedFileName).replace(/{{number}}/g, `${i + 1}`)}${ext}`;
@@ -635,7 +650,7 @@ async function onPaste(ev: ClipboardEvent) {
 				return;
 			}
 
-			quoteId.value = paste.substring(url.length).match(/^\/notes\/(.+?)\/?$/)?.[1] ?? null;
+			quoteId.value = paste.substring(url.length).match(/^\/notes\/(.+?)\/?$/)[1];
 		});
 	}
 
@@ -683,26 +698,26 @@ function onDragover(ev) {
 	}
 }
 
-function onDragenter() {
+function onDragenter(ev) {
 	draghover.value = true;
 }
 
-function onDragleave() {
+function onDragleave(ev) {
 	draghover.value = false;
 }
 
-function onDrop(ev: DragEvent): void {
+function onDrop(ev): void {
 	draghover.value = false;
 
 	// ファイルだったら
-	if (ev.dataTransfer && ev.dataTransfer.files.length > 0) {
+	if (ev.dataTransfer.files.length > 0) {
 		ev.preventDefault();
 		for (const x of Array.from(ev.dataTransfer.files)) upload(x);
 		return;
 	}
 
 	//#region ドライブのファイル
-	const driveFile = ev.dataTransfer?.getData(_DATA_TRANSFER_DRIVE_FILE_);
+	const driveFile = ev.dataTransfer.getData(_DATA_TRANSFER_DRIVE_FILE_);
 	if (driveFile != null && driveFile !== '') {
 		const file = JSON.parse(driveFile);
 		files.value.push(file);
@@ -738,6 +753,15 @@ function saveDraft() {
 function deleteDraft() {
 	const draftData = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}');
 
+	if (postChannel.value) {
+		// draftKey.valueからchannel:${postChannel.value.id}部分を削除したのがpartialDraftKey
+		// 通常の投稿からチャンネルに切り替えて投稿した際に、通常の投稿の下書きが残ってしまい不自然な挙動になるのを防ぐ
+		const partialDraftKey = draftKey.value.replace(`channel:${postChannel.value.id}`, '');
+		if (draftData[partialDraftKey]) {
+			delete draftData[partialDraftKey];
+		}
+	}
+
 	delete draftData[draftKey.value];
 
 	miLocalStorage.setItem('drafts', JSON.stringify(draftData));
@@ -753,9 +777,7 @@ async function post(ev?: MouseEvent) {
 	}
 
 	if (ev) {
-		const el = (ev.currentTarget ?? ev.target) as HTMLElement | null;
-
-		if (el) {
+		const el = ev.currentTarget ?? ev.target;
 			const rect = el.getBoundingClientRect();
 			const x = rect.left + (el.offsetWidth / 2);
 			const y = rect.top + (el.offsetHeight / 2);
@@ -763,7 +785,6 @@ async function post(ev?: MouseEvent) {
 				end: () => dispose(),
 			});
 		}
-	}
 
 	if (props.mock) return;
 
@@ -774,7 +795,8 @@ async function post(ev?: MouseEvent) {
 		text.value.includes('$[scale') ||
 		text.value.includes('$[position');
 
-	if (annoying && visibility.value === 'public') {
+	// チャンネル投稿時はサーバサイド側でpublicに変更されているため警告を出す意味がない
+	if (annoying && actualVisibility.value === 'public' && !postChannel.value) {
 		const { canceled, result } = await os.actions({
 			type: 'warning',
 			text: i18n.ts.thisPostMayBeAnnoying,
@@ -803,46 +825,36 @@ async function post(ev?: MouseEvent) {
 		fileIds: files.value.length > 0 ? files.value.map(f => f.id) : undefined,
 		replyId: props.reply ? props.reply.id : undefined,
 		renoteId: props.renote ? props.renote.id : quoteId.value ? quoteId.value : undefined,
-		channelId: props.channel ? props.channel.id : undefined,
+		channelId: postChannel?.value?.id,
 		poll: poll.value,
 		cw: useCw.value ? cw.value ?? '' : null,
-		localOnly: localOnly.value,
-		visibility: visibility.value,
-		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
+		localOnly: actualLocalOnly.value,
+		visibility: actualVisibility.value,
+		visibleUserIds: actualVisibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
 	};
 
 	if (withHashtags.value && hashtags.value && hashtags.value.trim() !== '') {
 		const hashtags_ = hashtags.value.trim().split(' ').map(x => x.startsWith('#') ? x : '#' + x).join(' ');
-		if (!postData.text) {
-			postData.text = hashtags_;
-		} else {
-			const postTextLines = postData.text.split('\n');
-			if (postTextLines[postTextLines.length - 1].trim() === '') {
-				postTextLines[postTextLines.length - 1] += hashtags_;
-			} else {
-				postTextLines[postTextLines.length - 1] += ' ' + hashtags_;
-			}
-			postData.text = postTextLines.join('\n');
-		}
+		postData.text = postData.text ? `${postData.text} ${hashtags_}` : hashtags_;
 	}
 
 	// plugin
 	if (notePostInterruptors.length > 0) {
 		for (const interruptor of notePostInterruptors) {
 			try {
-				postData = await interruptor.handler(deepClone(postData)) as typeof postData;
+				postData = await interruptor.handler(deepClone(postData));
 			} catch (err) {
 				console.error(err);
 			}
 		}
 	}
 
-	let token: string | undefined = undefined;
+	let token = undefined;
 
 	if (postAccount.value) {
 		const storedAccounts = await getAccounts();
-		token = storedAccounts.find(x => x.id === postAccount.value?.id)?.token;
+		token = storedAccounts.find(x => x.id === postAccount.value.id)?.token;
 	}
 
 	posting.value = true;
@@ -856,7 +868,7 @@ async function post(ev?: MouseEvent) {
 			deleteDraft();
 			emit('posted');
 			if (postData.text && postData.text !== '') {
-				const hashtags_ = mfm.parse(postData.text).map(x => x.type === 'hashtag' && x.props.hashtag).filter(x => x) as string[];
+				const hashtags_ = mfm.parse(postData.text).filter(x => x.type === 'hashtag').map(x => x.props.hashtag);
 				const history = JSON.parse(miLocalStorage.getItem('hashtags') ?? '[]') as string[];
 				miLocalStorage.setItem('hashtags', JSON.stringify(unique(hashtags_.concat(history))));
 			}
@@ -919,7 +931,7 @@ function cancel() {
 }
 
 function insertMention() {
-	os.selectUser({ localOnly: localOnly.value, includeSelf: true }).then(user => {
+	os.selectUser().then(user => {
 		insertTextAtCursor(textareaEl.value, '@' + Misskey.acct.toString(user) + ' ');
 	});
 }
@@ -938,7 +950,7 @@ async function insertEmoji(ev: MouseEvent) {
 	let pos = textareaEl.value?.selectionStart ?? 0;
 	let posEnd = textareaEl.value?.selectionEnd ?? text.value.length;
 	emojiPicker.show(
-		target as HTMLElement,
+		ev.currentTarget ?? ev.target,
 		emoji => {
 			const textBefore = text.value.substring(0, pos);
 			const textAfter = text.value.substring(posEnd);
@@ -953,24 +965,14 @@ async function insertEmoji(ev: MouseEvent) {
 	);
 }
 
-async function insertMfmFunction(ev: MouseEvent) {
-	if (textareaEl.value == null) return;
-	mfmFunctionPicker(
-		ev.currentTarget ?? ev.target,
-		textareaEl.value,
-		text,
-	);
-}
-
-function showActions(ev: MouseEvent) {
+function showActions(ev) {
 	os.popupMenu(postFormActions.map(action => ({
 		text: action.title,
 		action: () => {
 			action.handler({
 				text: text.value,
 				cw: cw.value,
-			}, (key, value: any) => {
-				if (typeof key !== 'string') return;
+			}, (key, value) => {
 				if (key === 'text') { text.value = value; }
 				if (key === 'cw') { useCw.value = value !== null; cw.value = value; }
 			});
@@ -1007,9 +1009,9 @@ onMounted(() => {
 	}
 
 	// TODO: detach when unmount
-	if (textareaEl.value) new Autocomplete(textareaEl.value, text);
-	if (cwInputEl.value) new Autocomplete(cwInputEl.value, cw);
-	if (hashtagsInputEl.value) new Autocomplete(hashtagsInputEl.value, hashtags);
+	new Autocomplete(textareaEl.value, text);
+	new Autocomplete(cwInputEl.value, cw);
+	new Autocomplete(hashtagsInputEl.value, hashtags);
 
 	nextTick(() => {
 		// 書きかけの投稿を復元
@@ -1048,8 +1050,8 @@ onMounted(() => {
 				poll.value = {
 					choices: init.poll.choices.map(x => x.text),
 					multiple: init.poll.multiple,
-					expiresAt: init.poll.expiresAt ? (new Date(init.poll.expiresAt)).getTime() : null,
-					expiredAfter: null,
+					expiresAt: init.poll.expiresAt,
+					expiredAfter: init.poll.expiredAfter,
 				};
 			}
 			if (init.visibleUserIds) {
@@ -1057,6 +1059,7 @@ onMounted(() => {
 					users.forEach(u => pushVisibleUser(u));
 				});
 			}
+			localOnly.value = init.localOnly;
 			quoteId.value = init.renote ? init.renote.id : null;
 			reactionAcceptance.value = init.reactionAcceptance;
 		}
@@ -1265,6 +1268,15 @@ defineExpose({
 
 .hasNotSpecifiedMentions {
 	margin: 0 20px 16px 20px;
+}
+
+.channelName {
+	display: flex;
+	padding-top: 8px;
+	padding-left: 18px;
+	opacity: 0.7;
+	font-size: 80%;
+	align-items: center;
 }
 
 .cw,
