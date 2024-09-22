@@ -5,9 +5,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div style="position: relative;">
+	チャンネル総数 - {{allChannels.length}}
 	<div style="display: flex; flex-wrap: wrap">
 		<!-- 本当はソートしたいけどslotの中なのでMkPaginationにその機能をもたせるのか？など問題がある -->
-		<div v-for="channel in allChannels" :key="channel.id" style="margin-right: 8px">
+		<div v-for="channel in viewChannels" :key="channel.id" style="margin-right: 8px">
 			<MkA :to="`/channels/${channel.id}`">
 				<span v-if="channel.isSensitive">▲</span><span v-if="channel.isFavorited">★</span><span v-if="channel.isFollowing">↑</span>
 				{{channel.name}}({{channel.notesCount}})
@@ -26,6 +27,16 @@ import {Channel} from "../../../misskey-js/built/autogen/models.js";
 
 
 const allChannels = ref<Channel[]>([])
+const viewChannels = computed(() => {
+	return allChannels.value.toSorted((a: Channel, b: Channel) => {
+		if(a.lastNotedAt === null) return -1
+		if(b.lastNotedAt === null) return +1
+
+
+		return new Date(a.lastNotedAt) - new Date(b.lastNotedAt)
+
+	})
+})
 
 let isLast = false
 const ascLastNoted = computed(() => {
@@ -41,18 +52,19 @@ const descLastNoted = computed(() => {
 	})
 })
 
-onMounted(() => {
+onMounted(async () => {
 	let maxLoop = 10
 	let loopCount = 0
 	const limit = 100
 	// 最後じゃない, maxLoopに到達してない
-	while(!isLast || maxLoop >= loopCount ) {
+	while(!isLast || maxLoop <= loopCount ) {
 		loopCount++
 		const res = await misskeyApi("channels/search",{
+			allowPartial: true,
 			limit: limit,
-			params: {
-				query: ""
-			}
+			query: "",
+			type: "nameAndDescription",
+			untilId: allChannels.value[allChannels.value.length]?.id
 		})
 		if(limit !== res.length) isLast = true
 		allChannels.value.splice(0,0, ...res)

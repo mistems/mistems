@@ -26,17 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</MkFoldableSection>
 			</div>
 			<div v-if="tab === 'index'">
-				<MkPagination v-slot="{items}" :pagination="indexPagination">
-					<div style="display: flex; flex-wrap: wrap">
-						<!-- 本当はソートしたいけどslotの中なのでMkPaginationにその機能をもたせるのか？など問題がある -->
-						<div v-for="channel in items" :key="channel.id" style="margin-right: 8px">
-							<MkA :to="`/channels/${channel.id}`">
-								<span v-if="channel.isSensitive">▲</span><span v-if="channel.isFavorited">★</span><span v-if="channel.isFollowing">↑</span>
-								{{channel.name}}({{channel.notesCount}})
-							</MkA>
-						</div>
-					</div>
-				</MkPagination>
+				<MkChannelIndex />
 			</div>
 			<div v-if="tab === 'featured'" key="featured">
 				<MkPagination v-slot="{items}" :pagination="featuredPagination">
@@ -66,6 +56,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue';
+import MkChannelIndex from "@/components/MkChannelIndex.vue";
 import MkChannelPreview from '@/components/MkChannelPreview.vue';
 import MkChannelList from '@/components/MkChannelList.vue';
 import MkPagination from '@/components/MkPagination.vue';
@@ -77,8 +68,6 @@ import MkHorizontalSwipe from '@/components/MkHorizontalSwipe.vue';
 import { definePageMetadata } from '@/scripts/page-metadata.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router/supplier.js';
-import {Channel} from "../../../misskey-js/built/autogen/models.js";
-
 
 const router = useRouter();
 
@@ -97,14 +86,6 @@ onMounted(() => {
 	searchQuery.value = props.query ?? '';
 	searchType.value = props.type ?? 'nameAndDescription';
 });
-
-const indexPagination = {
-	endpoint: 'channels/search',
-	limit: 100,
-	params: {
-		query: ""
-	}
-}
 
 const featuredPagination = {
 	endpoint: 'channels/featured' as const,
