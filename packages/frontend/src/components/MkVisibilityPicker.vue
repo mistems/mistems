@@ -37,7 +37,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<span :class="$style.itemDescription">{{ i18n.ts._visibility.specifiedDescription }}</span>
 			</div>
 		</button>
-		<button ref="channelsButton" class="_button" :class="[$style.item, { [$style.active]: currentChannel }]" data-index="5" @click="chooseChannel">
+		<button ref="channelsButton" :disabled="isReplyVisibilitySpecified" class="_button" :class="[$style.item, { [$style.active]: v === 'specified' && currentChannel }]" data-index="5" @click="chooseChannel">
 			<div :class="$style.channelWrapper" :style="[currentChannel ? {borderLeftColor: `${currentChannel.color}`} : {}]">
 				<div :class="$style.icon">
 					<i class="ti ti-device-tv"></i>
