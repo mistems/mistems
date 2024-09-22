@@ -59,6 +59,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { nextTick, shallowRef, ref, computed } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
+import * as os from '@/os.js';
+import { misskeyApi } from '@/scripts/misskey-api.js';
 
 const modal = shallowRef<InstanceType<typeof MkModal>>();
 const channelsButton = shallowRef<InstanceType<typeof HTMLButtonElement>>();
