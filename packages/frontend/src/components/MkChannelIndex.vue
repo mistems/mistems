@@ -5,16 +5,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div style="position: relative;">
+	<ul style="display:flex">
+		<div>★：お気に入り済み　</div>
+		<div>↑：フォロー済み　</div>
+		<div>▲：センシティブ</div>
+	</ul>
+
 	チャンネル総数 - {{allChannels.length}}
 
-	<button @click="viewMode = 'legacy'">Legacy</button><button @click="viewMode = 'listed'">Listed</button>
+	<button @click="viewMode = 'legacy'">Legacy</button>
+	<button @click="viewMode = 'listed'">Listed</button>
+	<button @click="viewMode = 'modan'">Modan</button>
+
+
 	<div :style="{display: viewMode === 'legacy' ? 'flex': 'block', flexWrap: viewMode === 'legacy' ? 'wrap' : 'nowrap'}">
-		<!-- 本当はソートしたいけどslotの中なのでMkPaginationにその機能をもたせるのか？など問題がある -->
 		<div v-for="channel in viewChannels" :key="channel.id" style="margin-right: 8px">
-			<MkA :to="`/channels/${channel.id}`">
+			<MkA v-if="viewMode !== 'modan'" :to="`/channels/${channel.id}`">
 				<span v-if="channel.isSensitive">▲</span><span v-if="channel.isFavorited">★</span><span v-if="channel.isFollowing">↑</span>
 				{{channel.name}}({{channel.notesCount}})
 			</MkA>
+			<MkChannelPreview v-else class="_margin" :channel="channel"/>
 		</div>
 	</div>
 </div>
@@ -26,8 +36,9 @@ import {computed, onMounted, ref, watch} from 'vue';
 import { miLocalStorage } from '@/local-storage.js';
 import {misskeyApi} from "@/scripts/misskey-api.js";
 import {Channel} from "../../../misskey-js/built/autogen/models.js";
+import MkChannelPreview from "@/components/MkChannelPreview.vue";
 
-const viewMode = ref<"legacy" | "listed">("legacy");
+const viewMode = ref<"legacy" | "listed" | "modan">("legacy");
 
 const allChannels = ref<Channel[]>([])
 const viewChannels = computed(() => {
@@ -36,7 +47,7 @@ const viewChannels = computed(() => {
 		if(b.lastNotedAt === null) return -1
 
 
-		return new Date(a.lastNotedAt) - new Date(b.lastNotedAt)
+		return new Date(b.lastNotedAt) - new Date(a.lastNotedAt)
 
 	})
 })
