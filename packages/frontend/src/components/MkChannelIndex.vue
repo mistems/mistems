@@ -50,7 +50,7 @@ const allChannels = ref<Channel[]>([])
 const viewChannels = computed(() => {
 	return allChannels.value.filter((channel) => {
 		if(showSensitive.value) return true
-		return channel.isSensitive
+		return !channel.isSensitive
 	}).toSorted((a: Channel, b: Channel) => {
 		if(a.lastNotedAt === null) return +1
 		if(b.lastNotedAt === null) return -1
