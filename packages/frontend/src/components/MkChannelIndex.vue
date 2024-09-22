@@ -11,11 +11,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div>▲：センシティブ</div>
 	</ul>
 
-	チャンネル総数 - {{allChannels.length}}
 
-	<button @click="viewMode = 'legacy'">Legacy</button>
-	<button @click="viewMode = 'listed'">Listed</button>
-	<button @click="viewMode = 'modan'">Modan</button>
+	<div style="display:flex">
+	<div>チャンネル総数 - {{viewChannels.length}}</div>
+		<div>
+			<button @click="viewMode = 'legacy'">Legacy</button>
+			<button @click="viewMode = 'listed'">Listed</button>
+			<button @click="viewMode = 'modan'">Modan</button>
+		</div>
+
+
+	</div>
+	<MkSwitch v-model="showSensitive"> センシティブチャンネルも表示する</MkSwitch>
 
 
 	<div :style="{display: viewMode === 'legacy' ? 'flex': 'block', flexWrap: viewMode === 'legacy' ? 'wrap' : 'nowrap'}">
@@ -31,18 +38,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import {computed, onMounted, ref, watch} from 'vue';
-// import { i18n } from '@/i18n.js';
-import { miLocalStorage } from '@/local-storage.js';
+import {computed, onMounted, ref} from 'vue';
 import {misskeyApi} from "@/scripts/misskey-api.js";
 import {Channel} from "../../../misskey-js/built/autogen/models.js";
 import MkChannelPreview from "@/components/MkChannelPreview.vue";
-
+import MkSwitch from "@/components/MkSwitch.vue";
 const viewMode = ref<"legacy" | "listed" | "modan">("legacy");
+const showSensitive = ref(false);
 
 const allChannels = ref<Channel[]>([])
 const viewChannels = computed(() => {
-	return allChannels.value.toSorted((a: Channel, b: Channel) => {
+	return allChannels.value.filter((channel) => {
+		if(showSensitive.value) return true
+		return channel.isSensitive
+	}).toSorted((a: Channel, b: Channel) => {
 		if(a.lastNotedAt === null) return +1
 		if(b.lastNotedAt === null) return -1
 
