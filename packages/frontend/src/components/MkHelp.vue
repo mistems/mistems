@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-	<MkModalWindow ref="self" @closed="self.close()" @esc="self.close()" @click="self.close()">
+	<MkModalWindow ref="self" @close="self.close()" @closed="self.close()" @esc="self.close()" @click="self.close()">
 		<template v-slot:header>ショートカット抜粋</template>
 		<div style="padding:24px;">
 			<ul>
