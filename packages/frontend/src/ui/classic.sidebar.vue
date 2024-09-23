@@ -9,9 +9,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkAvatar :user="$i" class="avatar"/><MkAcct class="text" :user="$i"/>
 	</button>
 	<div class="post" data-cy-open-post-form style="display: flex;">
-		<MkButton v-if="isInChannel" class="button" gradate full rounded @click="os.post()">
-			<i class="ti ti-device-tv ti-fw"></i><span v-if="!iconOnly" class="text">ch</span>
-		</MkButton>
+		<transition>
+			<MkButton v-if="isInChannel" class="button" gradate full rounded @click="os.post()">
+				<i class="ti ti-device-tv ti-fw"></i><span v-if="!iconOnly" class="text">ch</span>
+			</MkButton>
+		</transition>
 		<MkButton class="button" gradate full rounded @click="os.post({}, {forceTimeline: true})">
 			<i class="ti ti-pencil ti-fw"></i><span v-if="!iconOnly" class="text">{{ i18n.ts.note }}</span>
 		</MkButton>
@@ -112,6 +114,16 @@ watch(defaultStore.reactiveState.menuDisplay, () => {
 </script>
 
 <style lang="scss" scoped>
+.v-enter-active,
+.v-leave-active {
+  transition: all 0.5s ease;
+}
+
+.v-enter-from,
+.v-leave-to {
+	opacity: 0;
+}
+
 .npcljfve {
 	$ui-font-size: 1em; // TODO: どこかに集約したい
 	$nav-icon-only-width: 78px; // TODO: どこかに集約したい
