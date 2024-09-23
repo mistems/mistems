@@ -6,6 +6,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <MkStickyContainer>
 	<template #header><MkPageHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs"/></template>
+
+	<template #footer>
+		<div v-if="isSubWindow" style="display: flex; justify-content: center; padding:16px; background: rgba(0, 0, 0, 0.2);">
+		<MkButton rounded primary :class="$style.button" @click="post({channel})"><i class="ti ti-pencil"></i>チャンネルへ投稿</MkButton>
+		</div>
+	</template>
+
 	<MkSpacer :contentMax="700" :class="$style.main">
 		<MkHorizontalSwipe v-model:tab="tab" :tabs="headerTabs">
 			<div v-if="channel && tab === 'overview'" key="overview" class="_gaps">
@@ -57,6 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</MkHorizontalSwipe>
 	</MkSpacer>
+
 </MkStickyContainer>
 </template>
 
@@ -87,8 +95,18 @@ import { isSupportShare } from '@/scripts/navigator.js';
 import { copyToClipboard } from '@/scripts/copy-to-clipboard.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { useRouter } from '@/router/supplier.js';
+import {mainRouter} from "@/router/main.js";
+import {post} from "@/os.js"
 
 const router = useRouter();
+
+const isSubWindow = computed(() => {
+	return router !== mainRouter
+})
+
+function postChannel(){
+	post({ channelId})
+}
 
 const props = defineProps<{
 	channelId: string;
@@ -261,6 +279,14 @@ definePageMetadata(() => ({
 <style lang="scss" module>
 .main {
 	min-height: calc(100cqh - (var(--stickyTop, 0px) + var(--stickyBottom, 0px)));
+}
+.bottom {
+	position: sticky;
+	bottom: 0;
+	padding-top: 20px;
+	background: var(--nav-bg-transparent);
+	-webkit-backdrop-filter: var(--blur, blur(8px));
+	backdrop-filter: var(--blur, blur(8px));
 }
 
 .footer {
