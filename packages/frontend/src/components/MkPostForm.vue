@@ -77,9 +77,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i class="ti ti-switch-vertical"></i>
 			</button>
 		</div>
-	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
+	<div :class="[$style.textOuter, { [$style.withCw]: useCw }, ]">
 		<div v-if="postChannel" :class="$style.colorBar" :style="{ background: postChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text, {[$style.postChannel]: postChannel }]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<div :class="$style.channelName" v-if="postChannel"><i class="ti ti-device-tv" style="margin-right: 4px;"></i>{{ postChannel.name }}</div>
@@ -1201,6 +1201,7 @@ defineExpose({
 	height: 100% ;
 	border-radius: 999px;
 	pointer-events: none;
+	margin-right: 8px;
 }
 
 .submitInner {
@@ -1462,6 +1463,10 @@ html[data-color-scheme=light] .preview {
 	.text {
 		padding: 0 16px;
 	}
+	.postChannel.text{
+		margin-left: 8px;
+	}
+
 
 	.text {
 		min-height: 80px;

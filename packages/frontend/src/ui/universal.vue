@@ -34,7 +34,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</span>
 		</button>
 		<button :class="$style.navButton" class="_button" @click="widgetsShowing = true"><i :class="$style.navButtonIcon" class="ti ti-apps"></i></button>
-		<button :class="$style.postButton" class="_button" @click="os.post()"><i :class="$style.navButtonIcon" class="ti ti-pencil"></i></button>
+
+		<button v-if="isChannel" :class="$style.postButton" class="_button" @click="os.post()"><i :class="$style.navButtonIcon" class="ti ti-device-tv"></i></button>
+		<button :class="[$style.postButton, isChannel ? $style.postButtonFloat : undefined ]" class="_button" @click="os.post({},{forceTimeline: true})"><i :class="$style.navButtonIcon" class="ti ti-pencil"></i></button>
 	</div>
 
 	<Transition
@@ -119,6 +121,7 @@ const XStatusBars = defineAsyncComponent(() => import('@/ui/_common_/statusbars.
 const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announcements.vue'));
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
+const isChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
 
 const DESKTOP_THRESHOLD = 1100;
 const MOBILE_THRESHOLD = 500;
@@ -438,6 +441,13 @@ $widgets-hide-threshold: 1090px;
 	&:active {
 		background: linear-gradient(90deg, hsl(from var(--accent) h s calc(l + 5)), hsl(from var(--accent) h s calc(l + 5)));
 	}
+}
+
+.postButtonFloat {
+	position: absolute;
+	top: -40px;
+	width: 40px;
+	right: 16px;
 }
 
 .navButtonIcon {

@@ -57,15 +57,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</MkHorizontalSwipe>
 	</MkSpacer>
-	<template #footer>
-		<div :class="$style.footer">
-			<MkSpacer :contentMax="700" :marginMin="16" :marginMax="16">
-				<div class="_buttonsCenter">
-					<MkButton inline rounded primary gradate @click="openPostForm()"><i class="ti ti-pencil"></i> {{ i18n.ts.postToTheChannel }}</MkButton>
-				</div>
-			</MkSpacer>
-		</div>
-	</template>
 </MkStickyContainer>
 </template>
 
