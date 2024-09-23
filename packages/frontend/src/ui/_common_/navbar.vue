@@ -48,9 +48,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</MkA>
 		</div>
 		<div :class="$style.bottom">
-			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="os.post">
+
+			<button  v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="os.post">
 				<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
 			</button>
+			<Transition>
+				<button v-show="isInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="os.post">
+					<i class="ti ti-device-tv ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">ch</span>
+				</button>
+			</Transition>
 			<button v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">
 				<MkAvatar :user="$i" :class="$style.avatar"/><MkAcct class="_nowrap" :class="$style.acct" :user="$i"/>
 			</button>
@@ -68,8 +74,11 @@ import { $i, openAccountMenu as openAccountMenu_ } from '@/account.js';
 import { defaultStore } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
+import {mainRouter} from "@/router/main.js";
 
 const iconOnly = ref(false);
+
+const isInChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
 
 const menu = computed(() => defaultStore.state.menu);
 const otherMenuItemIndicated = computed(() => {
@@ -106,6 +115,18 @@ function more(ev: MouseEvent) {
 	});
 }
 </script>
+
+<style lang="scss" scoped>
+.v-enter-active,
+.v-leave-active {
+	transition: all 0.5s ease;
+}
+
+.v-enter-from,
+.v-leave-to {
+	opacity: 0;
+}
+</style>
 
 <style lang="scss" module>
 .root {
@@ -366,6 +387,7 @@ function more(ev: MouseEvent) {
 	}
 }
 
+
 .root.iconOnly {
 	flex: 0 0 var(--nav-icon-only-width);
 	width: var(--nav-icon-only-width);
@@ -420,6 +442,7 @@ function more(ev: MouseEvent) {
 		width: 100%;
 		height: 52px;
 		text-align: center;
+		margin-bottom: 8px;
 
 		&::before {
 			content: "";
