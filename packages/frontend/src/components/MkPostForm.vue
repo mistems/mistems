@@ -66,17 +66,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
 	<div v-show="useCw" style="display: flex">
-			<input
-				ref="cwInputEl"
-				v-model="cw"
-				:class="$style.cw"
-				:placeholder="i18n.ts.annotation"
-				@keydown="onKeydown"
-			/>
-			<button class="_button" :class="$style.cwSwapButton" @click="swapCwText">
-				<i class="ti ti-switch-vertical"></i>
-			</button>
-		</div>
+		<input
+			ref="cwInputEl"
+			v-model="cw"
+			:class="$style.cw"
+			:placeholder="i18n.ts.annotation"
+			@keydown="onKeydown"
+		/>
+		<button class="_button" :class="$style.cwSwapButton" @click="swapCwText">
+			<i class="ti ti-switch-vertical"></i>
+		</button>
+	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="channel" :class="$style.colorBar" :style="{ background: channel.color }"></div>
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
