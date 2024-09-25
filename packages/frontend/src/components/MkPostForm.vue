@@ -1217,6 +1217,7 @@ defineExpose({
 	}
 }
 //#endregion
+
 .cwSwapButton {
 	margin-left: 8px;
 	padding: 8px;
@@ -1225,7 +1226,6 @@ defineExpose({
 		background: var(--X4);
 	}
 }
-
 
 .preview {
 	padding: 16px 20px 0 20px;
