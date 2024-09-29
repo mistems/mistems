@@ -85,14 +85,6 @@ export interface Locale extends ILocale {
      */
     "renotedByToChannel": ParameterizedString<"user" | "toChannel">;
     /**
-     * {user}が{fromChannel}からリノート
-     */
-    "renotedByFromChannel": ParameterizedString<"user" | "fromChannel">;
-    /**
-     * {user}が{fromChannel}から{toChannel}へリノート
-     */
-    "renotedByFromChannelToChannel": ParameterizedString<"user" | "fromChannel" | "toChannel">;
-    /**
      * ノートはありません
      */
     "noNotes": string;
