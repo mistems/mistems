@@ -19,6 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<div v-if="getEmoji(reaction)">
+		<p>カテゴリ：{{ getEmoji(reaction).category }}</p>
 		<p>ヨミ：{{ getEmoji(reaction).aliases }}</p>
 		<p v-if="getEmoji(reaction).license">ライセンス：{{getEmoji(reaction).license }}</p>
 		<p v-if="getEmoji(reaction).localOnly">ローカルのみ</p>
@@ -47,7 +48,7 @@ const emit = defineEmits<{
 }>();
 
 
-function getEmoji(reaction: string): entities.EmojiDetailed {
+function getEmoji(reaction: string): entities.EmojiSimple {
 	return customEmojisByName.value[getReactionName(reaction)];
 }
 
