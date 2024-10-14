@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div v-if="getEmoji(reaction)">
 		<p>ヨミ：{{ getEmoji(reaction).aliases }}</p>
-		<p>ライセンス：{{getEmoji(reaction).license }}</p>
+		<p v-if="getEmoji(reaction).license">ライセンス：{{getEmoji(reaction).license }}</p>
 		<p v-if="getEmoji(reaction).localOnly">ローカルのみ</p>
 		<p v-if="getEmoji(reaction).isSensitive">センシティブ</p>
 	</div>
