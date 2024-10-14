@@ -18,14 +18,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="count > 10" :class="$style.more">+{{ count - 10 }}</div>
 		</div>
 	</div>
+	<div v-if="getEmoji(reaction)">
+		<p>ヨミ：{{ getEmoji(reaction).aliases }}</p>
+		<p>ライセンス：{{getEmoji(reaction).license }}</p>
+		<p v-if="getEmoji(reaction).localOnly">ローカルのみ</p>
+		<p v-if="getEmoji(reaction).isSensitive">センシティブ</p>
+	</div>
 </MkTooltip>
 </template>
 
 <script lang="ts" setup>
-import { } from 'vue';
 import { getEmojiName } from '@@/js/emojilist.js';
 import MkTooltip from './MkTooltip.vue';
 import MkReactionIcon from '@/components/MkReactionIcon.vue';
+import {customEmojisByName} from "@/custom-emojis.js";
+import type {entities} from "misskey-js"
 
 defineProps<{
 	showing: boolean;
@@ -38,6 +45,11 @@ defineProps<{
 const emit = defineEmits<{
 	(ev: 'closed'): void;
 }>();
+
+
+function getEmoji(reaction: string): entities.EmojiDetailed {
+	return customEmojisByName.value[getReactionName(reaction)];
+}
 
 function getReactionName(reaction: string): string {
 	const trimLocal = reaction.replace('@.', '');
