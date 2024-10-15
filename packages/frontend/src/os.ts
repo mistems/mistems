@@ -28,6 +28,7 @@ import { pleaseLogin } from '@/scripts/please-login.js';
 import { showMovedDialog } from '@/scripts/show-moved-dialog.js';
 import { getHTMLElementOrNull } from '@/scripts/get-dom-node-or-null.js';
 import { focusParent } from '@/scripts/focus.js';
+import { mainRouter } from '@/router/main.js';
 
 export const openingWindowsCount = ref(0);
 
@@ -687,7 +688,10 @@ export function contextMenu(items: MenuItem[], ev: MouseEvent): Promise<void> {
 	}));
 }
 
-export function post(props: Record<string, any> = {}): Promise<void> {
+type PostFormOption = {
+	forceTimeline: boolean
+}
+export function post(props: Record<string, any> = {}, options?: PostFormOption): Promise<void> {
 	pleaseLogin(undefined, (props.initialText || props.initialNote ? {
 		type: 'share',
 		params: {
@@ -698,13 +702,27 @@ export function post(props: Record<string, any> = {}): Promise<void> {
 	} : undefined));
 
 	showMovedDialog();
-	return new Promise(resolve => {
+	return new Promise(async (resolve) => {
+		// URLがチャンネルなら宛先をチャンネルへ
+		// TODO: DMのときとか困るかも
+		const route = mainRouter.getCurrentPath().split('/');
+		if (!options?.forceTimeline && route[1] === 'channels') await misskeyApi('channels/show', {
+			channelId: route[2],
+		}).then(channel => {
+			props = {
+				...props,
+				// 本当はチャンネル名や色もほしいけどどっからとってこよう
+				channel,
+			};
+		});
+
 		// NOTE: MkPostFormDialogをdynamic importするとiOSでテキストエリアに自動フォーカスできない
 		// NOTE: ただ、dynamic importしない場合、MkPostFormDialogインスタンスが使いまわされ、
 		//       Vueが渡されたコンポーネントに内部的に__propsというプロパティを生やす影響で、
 		//       複数のpost formを開いたときに場合によってはエラーになる
 		//       もちろん複数のpost formを開けること自体Misskeyサイドのバグなのだが
 		const { dispose } = popup(MkPostFormDialog, props, {
+
 			closed: () => {
 				resolve();
 				dispose();
