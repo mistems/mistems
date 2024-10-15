@@ -8,8 +8,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<button v-click-anime class="item _button account" @click="openAccountMenu">
 		<MkAvatar :user="$i" class="avatar"/><MkAcct class="text" :user="$i"/>
 	</button>
-	<div class="post" data-cy-open-post-form @click="os.post">
-		<MkButton class="button" gradate full rounded>
+	<div class="post" data-cy-open-post-form style="display: flex;">
+		<transition>
+			<MkButton v-if="isInChannel" class="button" gradate full rounded @click="os.post()">
+				<i class="ti ti-device-tv ti-fw"></i><span v-if="!iconOnly" class="text">ch</span>
+			</MkButton>
+		</transition>
+		<MkButton class="button" gradate full rounded @click="os.post({}, {forceTimeline: true})">
 			<i class="ti ti-pencil ti-fw"></i><span v-if="!iconOnly" class="text">{{ i18n.ts.note }}</span>
 		</MkButton>
 	</div>
@@ -62,8 +67,11 @@ import MkButton from '@/components/MkButton.vue';
 import { defaultStore } from '@/store.js';
 import { instance } from '@/instance.js';
 import { i18n } from '@/i18n.js';
+import {mainRouter} from "@/router/main.js";
 
 const WINDOW_THRESHOLD = 1400;
+
+const isInChannel = computed(() => mainRouter.currentRoute.value.name === 'channel')
 
 const menu = ref(defaultStore.state.menu);
 const menuDisplay = computed(defaultStore.makeGetterSetter('menuDisplay'));
@@ -106,6 +114,16 @@ watch(defaultStore.reactiveState.menuDisplay, () => {
 </script>
 
 <style lang="scss" scoped>
+.v-enter-active,
+.v-leave-active {
+  transition: all 0.5s ease;
+}
+
+.v-enter-from,
+.v-leave-to {
+	opacity: 0;
+}
+
 .npcljfve {
 	$ui-font-size: 1em; // TODO: どこかに集約したい
 	$nav-icon-only-width: 78px; // TODO: どこかに集約したい

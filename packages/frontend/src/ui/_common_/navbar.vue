@@ -48,9 +48,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</MkA>
 		</div>
 		<div :class="$style.bottom">
-			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="os.post">
-				<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
+			<div style="display:flex;">
+			<button  v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, {[$style.twoColumn]: isInChannel}]" data-cy-open-post-form @click="os.post({}, {forceTimeline: true})">
+				<div><i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span></div>
 			</button>
+			<Transition>
+				<button v-show="isInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.postChannel, {[$style.twoColumn]: isInChannel}]" data-cy-open-post-form @click="os.post">
+					<i class="ti ti-device-tv ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">ch</span>
+				</button>
+			</Transition>
+			</div>
 			<button v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">
 				<MkAvatar :user="$i" :class="$style.avatar"/><MkAcct class="_nowrap" :class="$style.acct" :user="$i"/>
 			</button>
@@ -68,8 +75,11 @@ import { $i, openAccountMenu as openAccountMenu_ } from '@/account.js';
 import { defaultStore } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
+import {mainRouter} from "@/router/main.js";
 
 const iconOnly = ref(false);
+
+const isInChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
 
 const menu = computed(() => defaultStore.state.menu);
 const otherMenuItemIndicated = computed(() => {
@@ -106,6 +116,18 @@ function more(ev: MouseEvent) {
 	});
 }
 </script>
+
+<style lang="scss" scoped>
+.v-enter-active,
+.v-leave-active {
+	transition: all 0.5s ease;
+}
+
+.v-enter-from,
+.v-leave-to {
+	opacity: 0;
+}
+</style>
 
 <style lang="scss" module>
 .root {
@@ -193,19 +215,21 @@ function more(ev: MouseEvent) {
 		backdrop-filter: var(--MI-blur, blur(8px));
 	}
 
-	.post {
+	.post, .postChannel {
 		position: relative;
-		display: block;
+		display: flex;
+		justify-content: center;
+		align-items: center;
 		width: 100%;
 		height: 40px;
 		color: var(--MI_THEME-fgOnAccent);
 		font-weight: bold;
-		text-align: left;
+
 
 		&::before {
 			content: "";
 			display: block;
-			width: calc(100% - 38px);
+			width: calc(100% - 32px);
 			height: 100%;
 			margin: auto;
 			position: absolute;
@@ -215,6 +239,12 @@ function more(ev: MouseEvent) {
 			bottom: 0;
 			border-radius: 999px;
 			background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+		}
+
+		&.twoColumn {
+			&::before{
+				width: calc(100% - 12px)
+			}
 		}
 
 		&:focus-visible {
@@ -235,8 +265,7 @@ function more(ev: MouseEvent) {
 
 	.postIcon {
 		position: relative;
-		margin-left: 30px;
-		margin-right: 8px;
+		margin-left: -16px;
 		width: 32px;
 	}
 
@@ -365,6 +394,7 @@ function more(ev: MouseEvent) {
 	}
 }
 
+
 .root.iconOnly {
 	flex: 0 0 var(--nav-icon-only-width);
 	width: var(--nav-icon-only-width);
@@ -419,6 +449,7 @@ function more(ev: MouseEvent) {
 		width: 100%;
 		height: 52px;
 		text-align: center;
+		margin-bottom: 8px;
 
 		&::before {
 			content: "";

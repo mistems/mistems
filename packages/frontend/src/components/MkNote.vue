@@ -19,14 +19,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="isRenote" :class="$style.renote">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
-		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
-		<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
+		<div>
+			<i class="ti ti-repeat" style="margin-right: 4px;"></i>
+			<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
 			<template #user>
 				<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
 					<MkUserName :user="note.user"/>
+					<span v-if="note.user.instance">
+						<img v-if="note.user.instance.faviconUrl" style="height: 1em;" :src="note.user.instance.faviconUrl" />
+						<span v-else>@</span>{{note.user.instance.name}}
+					</span>
 				</MkA>
 			</template>
 		</I18n>
+
+			<div class="renoted-from-channel" style="line-height: normal;margin-top:-4px;">
+				<MkA  v-if="note.channel" style="text-decoration: underline; margin-left: 16px; font-size: 12px; line-height: 12px;" :to="`/channels/${note.channelId}`">
+					<i class="ti ti-device-tv" />{{note.channel.name}}
+				</MkA>
+			</div>
+		</div>
 		<div :class="$style.renoteInfo">
 			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
 				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
@@ -39,12 +51,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</span>
 			<span v-if="note.localOnly" style="margin-left: 0.5em;" :title="i18n.ts._visibility['disableFederation']"><i class="ti ti-rocket-off"></i></span>
 			<span v-if="note.channel" style="margin-left: 0.5em;" :title="note.channel.name"><i class="ti ti-device-tv"></i></span>
-		</div>
+			</div>
 	</div>
 	<div v-if="renoteCollapsed" :class="$style.collapsedRenoteTarget">
 		<MkAvatar :class="$style.collapsedRenoteTargetAvatar" :user="appearNote.user" link preview/>
-		<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
+		<div>
+			<div><Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/></div>
+			<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
+		</div>
 	</div>
+
 	<article v-else :class="$style.article" @contextmenu.stop="onContextmenu">
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="$style.avatar" :user="appearNote.user" :link="!mock" :preview="!mock"/>
@@ -706,7 +722,7 @@ function emitUpdReaction(emoji: string, delta: number) {
 .renote {
 	position: relative;
 	display: flex;
-	align-items: center;
+	align-items: start;
 	padding: 16px 32px 8px 32px;
 	line-height: 28px;
 	white-space: pre;

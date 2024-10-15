@@ -10,6 +10,13 @@ import { get, set } from '@/scripts/idb-proxy.js';
 
 const storageCache = await get('emojis');
 export const customEmojis = shallowRef<Misskey.entities.EmojiSimple[]>(Array.isArray(storageCache) ? storageCache : []);
+export const customEmojisByName = computed(() => {
+	const tmp = {}
+	for (let emojiSimple of customEmojis.value) {
+		tmp[':'+ emojiSimple.name +':'] = emojiSimple;
+	}
+	return tmp
+})
 export const customEmojiCategories = computed<[ ...string[], null ]>(() => {
 	const categories = new Set<string>();
 	for (const emoji of customEmojis.value) {

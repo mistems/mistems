@@ -39,6 +39,9 @@ function reload() {
 
 useStream().on('_disconnected_', onDisconnected);
 
+// wsの_connected_が来たら disconnected のダイアログを閉じたい
+useStream().on('_connected_', resetDisconnected)
+
 onUnmounted(() => {
 	useStream().off('_disconnected_', onDisconnected);
 });
