@@ -25,6 +25,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkChannelList :key="key" :pagination="channelPagination"/>
 				</MkFoldableSection>
 			</div>
+			<div v-if="tab === 'index'">
+				<MkChannelIndex />
+			</div>
 			<div v-if="tab === 'featured'" key="featured">
 				<MkPagination v-slot="{items}" :pagination="featuredPagination">
 					<MkChannelPreview v-for="channel in items" :key="channel.id" class="_margin" :channel="channel"/>
@@ -53,6 +56,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue';
+import MkChannelIndex from "@/components/MkChannelIndex.vue";
 import MkChannelPreview from '@/components/MkChannelPreview.vue';
 import MkChannelList from '@/components/MkChannelList.vue';
 import MkPagination from '@/components/MkPagination.vue';
@@ -101,6 +105,8 @@ const ownedPagination = {
 	limit: 10,
 };
 
+const isEnd = ref(false);
+
 async function search() {
 	const query = searchQuery.value.toString().trim();
 
@@ -130,7 +136,13 @@ const headerActions = computed(() => [{
 	handler: create,
 }]);
 
-const headerTabs = computed(() => [{
+const headerTabs = computed(() => [
+	{
+		key: "index",
+		title: "だいたいぜんぶ",
+		icon: 'ti ti-plus',
+	},
+	{
 	key: 'search',
 	title: i18n.ts.search,
 	icon: 'ti ti-search',
