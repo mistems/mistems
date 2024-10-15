@@ -350,7 +350,16 @@ export async function mainBoot() {
 
 	// shortcut
 	const keymap = {
-		'p|n': () => {
+		'h': () => {
+			const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkHelp.vue')), { }, {
+				closed: () => dispose(),
+			});
+		},
+		'p': () => {
+			if ($i == null) return;
+			post({}, {forceTimeline: true});
+		},
+		'n': () => {
 			if ($i == null) return;
 			post();
 		},
