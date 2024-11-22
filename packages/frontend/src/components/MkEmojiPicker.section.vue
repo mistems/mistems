@@ -24,6 +24,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
 		</button>
 	</div>
+	<div v-if="!shown" class="body" style="display: flex; align-items: center;">
+		<button
+			v-for="emoji in emojis.splice(0, 4)"
+			:key="emoji"
+			:data-emoji="emoji"
+			class="_button item"
+			:disabled="disabledEmojis?.value.includes(emoji)"
+			@pointerenter="computeButtonTitle"
+			@click="emit('chosen', emoji, $event)"
+		>
+			<MkCustomEmoji v-if="emoji[0] === ':'" class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
+			<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
+		</button>
+		<i class="toggle ti-fw" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
+	</div>
 </section>
 <!-- フォルダの中にはカスタム絵文字やフォルダがある -->
 <section v-else v-panel style="border-radius: 6px; border-bottom: 0.5px solid var(--MI_THEME-divider);">
@@ -56,6 +71,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkCustomEmoji v-if="emoji[0] === ':'" class="emoji" :name="emoji" :normal="true"/>
 			<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
 		</button>
+		<div v-if="!shown" class="body" style="display: flex; align-items: center;">
+			<button
+				v-for="emoji in emojis.slice(0, 4)"
+				:key="emoji"
+				:data-emoji="emoji"
+				class="_button item"
+				:disabled="disabledEmojis?.value.includes(emoji)"
+				@pointerenter="computeButtonTitle"
+				@click="emit('chosen', emoji, $event)"
+			>
+				<MkCustomEmoji v-if="emoji[0] === ':'" class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
+				<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
+			</button>
+			<i class="toggle ti-fw" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
+		</div>
 	</div>
 </section>
 </template>
