@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div v-if="!shown" class="body" style="display: flex; align-items: center;">
 		<button
-			v-for="emoji in emojis.splice(0, 4)"
+			v-for="emoji in emojis.slice(0, 4)"
 			:key="emoji"
 			:data-emoji="emoji"
 			class="_button item"
