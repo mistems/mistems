@@ -30,6 +30,9 @@ export class RateLimiterService {
 		}
 	}
 
+	// Memo: RateLimiter の remaining は 時間内に呼び出せる残り回数
+	// resetはunixtime(エポック秒)
+
 	@bindThis
 	public limit(limitation: IEndpointMeta['limit'] & { key: NonNullable<string> }, actor: string, factor = 1) {
 		{
@@ -54,7 +57,10 @@ export class RateLimiterService {
 					this.logger.debug(`${actor} ${limitation.key} min remaining: ${info.remaining}`);
 
 					if (info.remaining === 0) {
-						return reject({ code: 'BRIEF_REQUEST_INTERVAL', info });
+						return reject({ code: 'BRIEF_REQUEST_INTERVAL', info: {
+							key: limitation.key + ' ' + actor,
+							interval: `minInterval: ${limitation.minInterval}, factor: ${factor}, resetUntilMs: ${Date.now() - info.resetMs}`,
+						} });
 					} else {
 						if (hasLongTermLimit) {
 							return max.then(ok, reject);
