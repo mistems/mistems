@@ -21,7 +21,7 @@ import { ApDbResolverService } from '@/core/activitypub/ApDbResolverService.js';
 import { StatusError } from '@/misc/status-error.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { ApPersonService } from '@/core/activitypub/models/ApPersonService.js';
-import { JsonLdError, JsonLdService } from '@/core/activitypub/JsonLdService.js';
+import { JsonLdService } from '@/core/activitypub/JsonLdService.js';
 import { ApInboxService } from '@/core/activitypub/ApInboxService.js';
 import { bindThis } from '@/decorators.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
@@ -64,198 +64,201 @@ export class InboxProcessorService implements OnApplicationShutdown {
 
 	@bindThis
 	public async process(job: Bull.Job<InboxJobData>): Promise<string> {
-		const signature = job.data.signature;	// HTTP-signature
-		let activity = job.data.activity;
+		try {
+			const signature = job.data.signature;	// HTTP-signature
+			let activity = job.data.activity;
 
-		//#region Log
-		const info = Object.assign({}, activity);
-		delete info['@context'];
-		this.logger.debug(JSON.stringify(info, null, 2));
-		//#endregion
+			//#region Log
+			const info = Object.assign({}, activity);
+			delete info['@context'];
+			this.logger.debug(JSON.stringify(info, null, 2));
+			//#endregion
 
-		const host = this.utilityService.toPuny(new URL(signature.keyId).hostname);
+			const host = this.utilityService.toPuny(new URL(signature.keyId).hostname);
 
-		if (!this.utilityService.isFederationAllowedHost(host)) {
-			return `Blocked request: ${host}`;
-		}
-
-		const keyIdLower = signature.keyId.toLowerCase();
-		if (keyIdLower.startsWith('acct:')) {
-			return `Old keyId is no longer supported. ${keyIdLower}`;
-		}
-
-		{
-			let userExistenceCheckApId: string | null = null;
-
-			// 存在しないActorに対するActorのDeleteアクティビティは無視する。
-			// actorとobjectが同じならばそれはActorに違いない
-			if (isDelete(activity) && typeof activity.object === 'object' && (isActor(activity.object) || getApId(activity.actor) === getApId(activity.object))) {
-				userExistenceCheckApId = getApId(activity.object);
+			if (!this.utilityService.isFederationAllowedHost(host)) {
+				return `Blocked request: ${host}`;
 			}
 
-			if (userExistenceCheckApId != null) {
-				const user = await this.apDbResolverService.getUserFromApId(userExistenceCheckApId);
-				if (user == null) {
-					return `skip: user not found for delete activity. ${getApId(userExistenceCheckApId)}`;
+			const keyIdLower = signature.keyId.toLowerCase();
+			if (keyIdLower.startsWith('acct:')) {
+				return `Old keyId is no longer supported. ${keyIdLower}`;
+			}
+
+			{
+				let userExistenceCheckApId: string | null = null;
+
+				// 存在しないActorに対するActorのDeleteアクティビティは無視する。
+				// actorとobjectが同じならばそれはActorに違いない
+				if (isDelete(activity) && typeof activity.object === 'object' && (isActor(activity.object) || getApId(activity.actor) === getApId(activity.object))) {
+					userExistenceCheckApId = getApId(activity.object);
+				}
+
+				if (userExistenceCheckApId != null) {
+					const user = await this.apDbResolverService.getUserFromApId(userExistenceCheckApId);
+					if (user == null) {
+						return `skip: user not found for delete activity. ${getApId(userExistenceCheckApId)}`;
+					}
 				}
 			}
-		}
 
-		// HTTP-Signature keyIdを元にDBから取得
-		let authUser: {
-			user: MiRemoteUser;
-			key: MiUserPublickey | null;
-		} | null = await this.apDbResolverService.getAuthUserFromKeyId(signature.keyId);
+			// HTTP-Signature keyIdを元にDBから取得
+			let authUser: {
+				user: MiRemoteUser;
+				key: MiUserPublickey | null;
+			} | null = await this.apDbResolverService.getAuthUserFromKeyId(signature.keyId);
 
-		// keyIdでわからなければ、activity.actorを元にDBから取得 || activity.actorを元にリモートから取得
-		if (authUser == null) {
-			try {
-				authUser = await this.apDbResolverService.getAuthUserFromApId(getApId(activity.actor));
-			} catch (err) {
-				// 対象が4xxならスキップ
-				if (err instanceof StatusError) {
-					if (!err.isRetryable) {
-						throw new Bull.UnrecoverableError(`skip: Ignored deleted actors on both ends ${getApId(activity.actor)} - ${err.statusCode}`);
+			// keyIdでわからなければ、activity.actorを元にDBから取得 || activity.actorを元にリモートから取得
+			if (authUser == null) {
+				try {
+					authUser = await this.apDbResolverService.getAuthUserFromApId(getApId(activity.actor));
+				} catch (err) {
+					// 対象が4xxならスキップ
+					if (err instanceof StatusError) {
+						if (!err.isRetryable) {
+							throw new Bull.UnrecoverableError(`skip: Ignored deleted actors on both ends ${getApId(activity.actor)} - ${err.statusCode}`);
+						}
+						throw new Error(`Error in actor ${getApId(activity.actor)} - ${err.statusCode}`);
 					}
-					throw new Error(`Error in actor ${getApId(activity.actor)} - ${err.statusCode}`);
 				}
 			}
-		}
 
-		// それでもわからなければ終了
-		if (authUser == null) {
-			throw new Bull.UnrecoverableError(`skip: failed to resolve user ${getApId(activity.actor)}`);
-		}
+			// それでもわからなければ終了
+			if (authUser == null) {
+				throw new Bull.UnrecoverableError(`skip: failed to resolve user ${getApId(activity.actor)}`);
+			}
 
-		// publicKey がなくても終了
-		if (authUser.key == null) {
-			throw new Bull.UnrecoverableError(`skip: failed to resolve user publicKey ${getApId(activity.actor)}`);
-		}
+			// publicKey がなくても終了
+			if (authUser.key == null) {
+				throw new Bull.UnrecoverableError(`skip: failed to resolve user publicKey ${getApId(activity.actor)}`);
+			}
 
-		// HTTP-Signatureの検証
-		const httpSignatureValidated = httpSignature.verifySignature(signature, authUser.key.keyPem);
+			// HTTP-Signatureの検証
+			const httpSignatureValidated = httpSignature.verifySignature(signature, authUser.key.keyPem);
 
-		// また、signatureのsignerは、activity.actorと一致する必要がある
-		if (!httpSignatureValidated || authUser.user.uri !== getApId(activity.actor)) {
-			// 一致しなくても、でもLD-Signatureがありそうならそっちも見る
-			const ldSignature = activity.signature;
-			if (ldSignature) {
-				if (ldSignature.type !== 'RsaSignature2017') {
-					throw new Bull.UnrecoverableError(`skip: unsupported LD-signature type ${ldSignature.type}`);
-				}
-
-				// ldSignature.creator: https://example.oom/users/user#main-key
-				// みたいになっててUserを引っ張れば公開キーも入ることを期待する
-				if (ldSignature.creator) {
-					const candicate = ldSignature.creator.replace(/#.*/, '');
-					await this.apPersonService.resolvePerson(candicate).catch(() => null);
-				}
-
-				// keyIdからLD-Signatureのユーザーを取得
-				authUser = await this.apDbResolverService.getAuthUserFromKeyId(ldSignature.creator);
-				if (authUser == null) {
-					throw new Bull.UnrecoverableError('skip: LD-Signatureのユーザーが取得できませんでした');
-				}
-
-				if (authUser.key == null) {
-					throw new Bull.UnrecoverableError('skip: LD-SignatureのユーザーはpublicKeyを持っていませんでした');
-				}
-
-				const jsonLd = this.jsonLdService.use();
-
-				delete activity.signature;
-				try {
-					activity = await jsonLd.compact(activity) as IActivity;
-				} catch (error) {
-					throw new Bull.UnrecoverableError(`skip: failed to compact activity: ${error}`);
-				}
-				try {
-					jsonLd.checkForForbiddenDirectives(activity);
-				} catch (error) {
-					throw new Bull.UnrecoverableError(`skip: ${error}`);
-				}
-
-				//#region Log
-				const compactedInfo = Object.assign({}, activity);
-				delete compactedInfo['@context'];
-				this.logger.debug(`compacted: ${JSON.stringify(compactedInfo, null, 2)}`);
-				//#endregion
-
-				activity.signature = ldSignature;
-
-				jsonLd.freeze();
-
-				// LD-Signature検証
-				let verified;
-				try {
-					verified = await jsonLd.verifyRsaSignature2017(activity, authUser.key.keyPem);
-					if (!verified) {
-						throw new Bull.UnrecoverableError('skip: LD-Signatureの検証に失敗しました');
+			// また、signatureのsignerは、activity.actorと一致する必要がある
+			if (!httpSignatureValidated || authUser.user.uri !== getApId(activity.actor)) {
+				// 一致しなくても、でもLD-Signatureがありそうならそっちも見る
+				const ldSignature = activity.signature;
+				if (ldSignature) {
+					if (ldSignature.type !== 'RsaSignature2017') {
+						throw new Bull.UnrecoverableError(`skip: unsupported LD-signature type ${ldSignature.type}`);
 					}
-				} catch (error) {
-					if (error instanceof JsonLdError) {
-						throw new Bull.UnrecoverableError(`skip: encountered a JSON-LD error while verifying signature: ${error}`);
-					} else {
-						throw error;
+
+					// ldSignature.creator: https://example.oom/users/user#main-key
+					// みたいになっててUserを引っ張れば公開キーも入ることを期待する
+					if (ldSignature.creator) {
+						const candicate = ldSignature.creator.replace(/#.*/, '');
+						await this.apPersonService.resolvePerson(candicate).catch(() => null);
 					}
-				}
 
-				// もう一度actorチェック
-				if (authUser.user.uri !== getApId(activity.actor)) {
-					throw new Bull.UnrecoverableError(`skip: LD-Signature user(${authUser.user.uri}) !== activity.actor(${getApId(activity.actor)})`);
-				}
+					// keyIdからLD-Signatureのユーザーを取得
+					authUser = await this.apDbResolverService.getAuthUserFromKeyId(ldSignature.creator);
+					if (authUser == null) {
+						throw new Bull.UnrecoverableError('skip: LD-Signatureのユーザーが取得できませんでした');
+					}
 
-				const ldHost = this.utilityService.extractDbHost(authUser.user.uri);
-				if (!this.utilityService.isFederationAllowedHost(ldHost)) {
-					throw new Bull.UnrecoverableError(`Blocked request: ${ldHost}`);
+					if (authUser.key == null) {
+						throw new Bull.UnrecoverableError('skip: LD-SignatureのユーザーはpublicKeyを持っていませんでした');
+					}
+
+					const jsonLd = this.jsonLdService.use();
+
+					delete activity.signature;
+					try {
+						activity = await jsonLd.compact(activity) as IActivity;
+					} catch (error) {
+						throw new Bull.UnrecoverableError(`skip: failed to compact activity: ${error}`);
+					}
+					try {
+						jsonLd.checkForForbiddenDirectives(activity);
+					} catch (error) {
+						throw new Bull.UnrecoverableError(`skip: ${error}`);
+					}
+
+					//#region Log
+					const compactedInfo = Object.assign({}, activity);
+					delete compactedInfo['@context'];
+					this.logger.debug(`compacted: ${JSON.stringify(compactedInfo, null, 2)}`);
+					//#endregion
+
+					activity.signature = ldSignature;
+
+					jsonLd.freeze();
+
+					// LD-Signature検証
+					let verified;
+					try {
+						verified = await jsonLd.verifyRsaSignature2017(activity, authUser.key.keyPem);
+						if (!verified) {
+							throw new Bull.UnrecoverableError('skip: LD-Signatureの検証に失敗しました');
+						}
+					} catch (error) {
+						if (error instanceof Bull.UnrecoverableError) {
+							throw error;
+						}
+						throw new Bull.UnrecoverableError(`skip: encountered an error while verifying LD-Signature: ${error}`);
+					}
+
+					// もう一度actorチェック
+					if (authUser.user.uri !== getApId(activity.actor)) {
+						throw new Bull.UnrecoverableError(`skip: LD-Signature user(${authUser.user.uri}) !== activity.actor(${getApId(activity.actor)})`);
+					}
+
+					const ldHost = this.utilityService.extractDbHost(authUser.user.uri);
+					if (!this.utilityService.isFederationAllowedHost(ldHost)) {
+						throw new Bull.UnrecoverableError(`Blocked request: ${ldHost}`);
+					}
+				} else {
+					throw new Bull.UnrecoverableError(`skip: http-signature verification failed and no LD-Signature. keyId=${signature.keyId}`);
+				}
+			}
+
+			// activity.idがあればホストが署名者のホストであることを確認する
+			if (typeof activity.id === 'string') {
+				const signerHost = this.utilityService.extractDbHost(authUser.user.uri!);
+				const activityIdHost = this.utilityService.extractDbHost(activity.id);
+				if (signerHost !== activityIdHost) {
+					throw new Bull.UnrecoverableError(`skip: signerHost(${signerHost}) !== activity.id host(${activityIdHost}`);
 				}
 			} else {
-				throw new Bull.UnrecoverableError(`skip: http-signature verification failed and no LD-Signature. keyId=${signature.keyId}`);
+				throw new Bull.UnrecoverableError('skip: activity id is not a string');
 			}
-		}
 
-		// activity.idがあればホストが署名者のホストであることを確認する
-		if (typeof activity.id === 'string') {
-			const signerHost = this.utilityService.extractDbHost(authUser.user.uri!);
-			const activityIdHost = this.utilityService.extractDbHost(activity.id);
-			if (signerHost !== activityIdHost) {
-				throw new Bull.UnrecoverableError(`skip: signerHost(${signerHost}) !== activity.id host(${activityIdHost}`);
-			}
-		} else {
-			throw new Bull.UnrecoverableError('skip: activity id is not a string');
-		}
+			this.apRequestChart.inbox();
+			this.federationChart.inbox(authUser.user.host);
 
-		this.apRequestChart.inbox();
-		this.federationChart.inbox(authUser.user.host);
+			// Update instance stats
+			process.nextTick(async () => {
+				const i = await (this.meta.enableStatsForFederatedInstances
+					? this.federatedInstanceService.fetchOrRegister(authUser.user.host)
+					: this.federatedInstanceService.fetch(authUser.user.host));
 
-		// Update instance stats
-		process.nextTick(async () => {
-			const i = await (this.meta.enableStatsForFederatedInstances
-				? this.federatedInstanceService.fetchOrRegister(authUser.user.host)
-				: this.federatedInstanceService.fetch(authUser.user.host));
+				if (i == null) return;
 
-			if (i == null) return;
+				this.updateInstanceQueue.enqueue(i.id, {
+					latestRequestReceivedAt: new Date(),
+					shouldUnsuspend: i.suspensionState === 'autoSuspendedForNotResponding',
+				});
 
-			this.updateInstanceQueue.enqueue(i.id, {
-				latestRequestReceivedAt: new Date(),
-				shouldUnsuspend: i.suspensionState === 'autoSuspendedForNotResponding',
+				if (this.meta.enableChartsForFederatedInstances) {
+					this.instanceChart.requestReceived(i.host);
+				}
+
+				this.fetchInstanceMetadataService.fetchInstanceMetadata(i);
 			});
 
-			if (this.meta.enableChartsForFederatedInstances) {
-				this.instanceChart.requestReceived(i.host);
-			}
-
-			this.fetchInstanceMetadataService.fetchInstanceMetadata(i);
-		});
-
-		// アクティビティを処理
-		try {
+			// アクティビティを処理
 			const result = await this.apInboxService.performActivity(authUser.user, activity);
 			if (result && !result.startsWith('ok')) {
 				this.logger.warn(`inbox activity ignored (maybe): id=${activity.id} reason=${result}`);
 				return result;
 			}
 		} catch (e) {
+			// Bull.UnrecoverableError が運用上見えてもしょうがないので静かにする
+			if (e instanceof Bull.UnrecoverableError && process.env.NODE_ENV === 'production') {
+				return 'UnrecoverableError';
+			}
 			if (e instanceof IdentifiableError) {
 				switch (e.id) {
 					case '689ee33f-f97c-479a-ac49-1b9f8140af99':
