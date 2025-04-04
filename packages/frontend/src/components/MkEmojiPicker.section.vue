@@ -37,7 +37,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkCustomEmoji v-if="emoji[0] === ':'" class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
 			<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
 		</button>
-		<i class="toggle ti-fw" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
+		<i v-if="emojis.length > 4" class="toggle ti-fw" style="font-size: 14px;" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
+		<span v-if="emojis.length > 4" style="font-size: 14px;" @click="shown = true">({{ (emojis.length - 4) }})</span>
 	</div>
 </section>
 <!-- フォルダの中にはカスタム絵文字やフォルダがある -->
@@ -84,7 +85,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkCustomEmoji v-if="emoji[0] === ':'" class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
 				<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
 			</button>
-			<i class="toggle ti-fw" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
+			<i v-if="emojis.length > 4" class="toggle ti-fw" :class="shown ? 'ti ti-minus' : 'ti ti-plus'" @click="shown = true"></i>
 		</div>
 	</div>
 </section>
