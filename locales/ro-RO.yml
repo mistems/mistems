@@ -250,7 +250,6 @@ noUsers: "Niciun utilizator"
 editProfile: "Editează profilul"
 noteDeleteConfirm: "Ești sigur(ă) că vrei să ștergi această notă?"
 pinLimitExceeded: "Nu poți mai fixa mai multe note"
-intro: "Misskey s-a instalat! Te rog crează un utilizator admin."
 done: "Gata"
 processing: "Se procesează"
 preview: "Previzualizare"
@@ -784,7 +783,6 @@ thisIsExperimentalFeature: "Aceasta este o funcție experimentală. Funcționali
 developer: "Dezvoltator"
 makeExplorable: "Fă-ți contul vizibil în secțiunea„Explorați”"
 makeExplorableDescription: "Dacă dezactivezi această opțiune, contul dvs. nu va fi vizibil în secțiunea\"Explorați\"."
-showGapBetweenNotesInTimeline: "Afișați un decalaj între postările de pe cronologie"
 duplicate: "Duplicat"
 left: "Stânga"
 center: "Centru"
@@ -1304,6 +1302,7 @@ _cw:
 _visibility:
   home: "Acasă"
   followers: "Urmăritori"
+  specified: "Note directe"
 _postForm:
   replyPlaceholder: "Răspunde la această notă..."
   quotePlaceholder: "Citează aceasta nota..."
@@ -1358,6 +1357,7 @@ _deck:
     list: "Liste"
     channel: "Canale"
     mentions: "Mențiuni"
+    direct: "Note directe"
     roleTimeline: "Cronologia rolului"
 _webhookSettings:
   name: "Nume"
@@ -1393,3 +1393,14 @@ _search:
   searchScopeLocal: "Local"
   searchScopeUser: "Utilizator specific"
   serverHostPlaceholder: "Exemplu: misskey.example.com"
+_watermarkEditor:
+  scale: "Dimensiune"
+  text: "Text"
+  position: "Poziție"
+  type: "Tip"
+  image: "Imagini"
+  advanced: "Avansat"
+_imageEffector:
+  _fxProps:
+    scale: "Dimensiune"
+    size: "Dimensiune"

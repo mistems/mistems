@@ -22,8 +22,7 @@ export type Keys = (
 	'fontSize' |
 	'ui' |
 	'ui_temp' |
-	'locale' |
-	'localeVersion' |
+	'bootloaderLocales' |
 	'theme' |
 	'themeId' |
 	'customCss' |
@@ -33,13 +32,15 @@ export type Keys = (
 	'preferences' |
 	'latestPreferencesUpdate' |
 	'hidePreferencesRestoreSuggestion' |
+	'isSafeMode' |
 	`miux:${string}` |
 	`ui:folder:${string}` |
 	`themes:${string}` | // DEPRECATED
 	`aiscript:${string}` |
 	'lastEmojisFetchedAt' | // DEPRECATED, stored in indexeddb (13.9.0~)
 	'emojis' | // DEPRECATED, stored in indexeddb (13.9.0~);
-	`channelLastReadedAt:${string}` |
+	`channelLastReadedAt:${string}` | // DEPRECATED, stored channelsLastReadedAt and registry
+	'channelsLastReadedAt' |
 	`idbfallback::${string}`
 );
 

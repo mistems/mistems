@@ -83,5 +83,10 @@ $height: 2ex;
 	font-weight: bold;
 	white-space: nowrap;
 	overflow: visible;
+
+	// text-shadowは重いから使うな
+	color: var(--MI_THEME-fg);
+	-webkit-text-stroke: var(--MI_THEME-panel) .225em;
+	paint-order: stroke fill;
 }
 </style>

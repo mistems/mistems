@@ -89,7 +89,8 @@ import { Chart } from 'chart.js';
 import type { HeatmapSource } from '@/components/MkHeatmap.vue';
 import MkSelect from '@/components/MkSelect.vue';
 import MkChart from '@/components/MkChart.vue';
-import { useChartTooltip } from '@/use/use-chart-tooltip.js';
+import type { ChartSrc } from '@/components/MkChart.vue';
+import { useChartTooltip } from '@/composables/use-chart-tooltip.js';
 import { $i } from '@/i.js';
 import * as os from '@/os.js';
 import { misskeyApiGet } from '@/utility/misskey-api.js';
@@ -107,7 +108,7 @@ const shouldShowFederation = computed(() => instance.federation !== 'none' || $i
 
 const chartLimit = 500;
 const chartSpan = ref<'hour' | 'day'>('hour');
-const chartSrc = ref('active-users');
+const chartSrc = ref<ChartSrc>('active-users');
 const heatmapSrc = ref<HeatmapSource>('active-users');
 const subDoughnutEl = useTemplateRef('subDoughnutEl');
 const pubDoughnutEl = useTemplateRef('pubDoughnutEl');
