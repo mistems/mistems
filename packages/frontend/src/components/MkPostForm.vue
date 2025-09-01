@@ -62,8 +62,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
-	<div v-show="useCw" :class="$style.cwOuter">
-		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
+	<div v-show="useCw" style="display: flex">
+		<input
+			ref="cwInputEl"
+			v-model="cw"
+			:class="$style.cw"
+			:placeholder="i18n.ts.annotation"
+			@keydown="onKeydown"
+			@compositionend="onCompositionEnd"
+		/>
+		<button class="_button" :class="$style.cwSwapButton" @click="swapCwText">
+			<i class="ti ti-switch-vertical"></i>
+		</button>
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
@@ -71,6 +81,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
+	<div v-if="postChannel" :class="$style.channelName"><i class="ti ti-device-tv" style="margin-right: 4px;"></i>{{ postChannel.name }}</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
 	<div v-if="uploader.items.value.length > 0" style="padding: 12px;">
@@ -206,6 +217,20 @@ const recentHashtags = ref(JSON.parse(miLocalStorage.getItem('hashtags') ?? '[]'
 const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
+
+const postChannel = ref<Misskey.entities.Channel | null>(props.channel ?? null);
+const postChannelName = computed<string>(() => postChannel.value?.name ?? '');
+
+/**
+ * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にfalse）
+ * チャンネル選択有無を考慮する必要がある場面では{@link localOnly}ではなくこの値を使用する。
+ */
+const actualLocalOnly = computed<boolean>(() => postChannel.value ? true : localOnly.value);
+/**
+ * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にpublic）。
+ * チャンネル選択有無を考慮する必要がある場面では{@link actualVisibility}ではなくこの値を使用する。
+ */
+const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => postChannel.value ? 'public' : visibility.value);
 const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
@@ -313,7 +338,7 @@ watch(text, () => {
 	checkMissingMention();
 }, { immediate: true });
 
-watch(visibility, () => {
+watch(actualVisibility, () => {
 	checkMissingMention();
 }, { immediate: true });
 
@@ -413,7 +438,7 @@ function watchForDraft() {
 }
 
 function checkMissingMention() {
-	if (visibility.value === 'specified') {
+	if (actualVisibility.value === 'specified') {
 		const ast = mfm.parse(text.value);
 
 		for (const x of extractMentions(ast)) {
@@ -435,6 +460,14 @@ function addMissingMention() {
 				pushVisibleUser(user);
 			});
 		}
+	}
+}
+
+function swapCwText() {
+	if (useCw.value) {
+		const temp = text.value.split(/\r?\n/).join(' ');
+		text.value = cw.value ?? '';
+		cw.value = temp;
 	}
 }
 
@@ -502,7 +535,7 @@ function setVisibility() {
 	}
 
 	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkVisibilityPicker.vue')), {
-		currentVisibility: visibility.value,
+		currentVisibility: actualVisibility.value,
 		isSilenced: $i.isSilenced,
 		localOnly: localOnly.value,
 		anchorElement: visibilityButton.value,
@@ -510,12 +543,17 @@ function setVisibility() {
 	}, {
 		changeVisibility: v => {
 			visibility.value = v;
+			postChannel.value = null;
 			if (prefer.s.rememberNoteVisibility) {
 				store.set('visibility', visibility.value);
 			}
 		},
 		closed: () => dispose(),
-	});
+		changeChannel: channel => {
+			// computedで読み替えをするので、localOnlyとvisibilityの変更はしない
+			postChannel.value = channel;
+		},
+	}, 'closed');
 }
 
 async function toggleLocalOnly() {
@@ -814,6 +852,15 @@ function saveDraft() {
 function deleteDraft() {
 	const draftData = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}');
 
+	if (postChannel.value) {
+		// draftKey.valueからchannel:${postChannel.value.id}部分を削除したのがpartialDraftKey
+		// 通常の投稿からチャンネルに切り替えて投稿した際に、通常の投稿の下書きが残ってしまい不自然な挙動になるのを防ぐ
+		const partialDraftKey = draftKey.value.replace(`channel:${postChannel.value.id}`, '');
+		if (draftData[partialDraftKey]) {
+			delete draftData[partialDraftKey];
+		}
+	}
+
 	delete draftData[draftKey.value];
 
 	miLocalStorage.setItem('drafts', JSON.stringify(draftData));
@@ -922,9 +969,9 @@ async function post(ev?: MouseEvent) {
 		channelId: targetChannel.value ? targetChannel.value.id : undefined,
 		poll: poll.value,
 		cw: useCw.value ? cw.value ?? '' : null,
-		localOnly: localOnly.value,
-		visibility: visibility.value,
-		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
+		localOnly: actualLocalOnly.value,
+		visibility: actualVisibility.value,
+		visibleUserIds: actualVisibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
 	};
 
@@ -1232,7 +1279,7 @@ onMounted(() => {
 	if (cwInputEl.value) new Autocomplete(cwInputEl.value, cw);
 	if (hashtagsInputEl.value) new Autocomplete(hashtagsInputEl.value, hashtags);
 
-	nextTick(() => {
+	nextTick(async () => {
 		// 書きかけの投稿を復元
 		if (!props.instant && !props.mention && !props.specified && !props.mock) {
 			const draft = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}')[draftKey.value];
@@ -1247,9 +1294,10 @@ onMounted(() => {
 					poll.value = draft.data.poll;
 				}
 				if (draft.data.visibleUserIds) {
-					misskeyApi('users/show', { userIds: draft.data.visibleUserIds }).then(users => {
-						users.forEach(u => pushVisibleUser(u));
+					const users = await misskeyApi('users/show', {
+						userIds: draft.data.visibleUserIds,
 					});
+					visibleUsers.value = users;
 				}
 				quoteId.value = draft.data.quoteId;
 				reactionAcceptance.value = draft.data.reactionAcceptance;
@@ -1274,11 +1322,14 @@ onMounted(() => {
 				};
 			}
 			if (init.visibleUserIds) {
-				misskeyApi('users/show', { userIds: init.visibleUserIds }).then(users => {
-					users.forEach(u => pushVisibleUser(u));
+				const users = await misskeyApi('users/show', {
+					userIds: init.visibleUserIds,
 				});
+				visibleUsers.value = users;
 			}
 			quoteId.value = renoteTargetNote.value ? renoteTargetNote.value.id : null;
+			localOnly.value = init.localOnly ?? false;
+			quoteId.value = init.renote ? init.renote.id : null;
 			reactionAcceptance.value = init.reactionAcceptance;
 		}
 
@@ -1418,6 +1469,7 @@ defineExpose({
 	height: 100% ;
 	border-radius: 999px;
 	pointer-events: none;
+	margin-right: 8px;
 }
 
 .submitInner {
@@ -1466,6 +1518,23 @@ defineExpose({
 	}
 }
 //#endregion
+.cwSwapButton {
+	margin-left: 8px;
+	padding: 8px;
+	border-radius: 6px;
+	&:hover {
+		background: var(--X4);
+	}
+}
+
+.cwSwapButton {
+	margin-left: 8px;
+	padding: 8px;
+	border-radius: 6px;
+	&:hover {
+		background: var(--X4);
+	}
+}
 
 .preview {
 	padding: 16px 20px 0 20px;
@@ -1514,6 +1583,15 @@ html[data-color-scheme=light] .preview {
 
 .hasNotSpecifiedMentions {
 	margin: 0 20px 16px 20px;
+}
+
+.channelName {
+	display: flex;
+	padding-top: 8px;
+	padding-left: 18px;
+	opacity: 0.7;
+	font-size: 80%;
+	align-items: center;
 }
 
 .cw,
@@ -1682,6 +1760,9 @@ html[data-color-scheme=light] .preview {
 	.hashtags,
 	.text {
 		padding: 0 16px;
+	}
+	.postChannel.text{
+		margin-left: 8px;
 	}
 
 	.text {

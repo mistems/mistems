@@ -386,7 +386,16 @@ export async function mainBoot() {
 	let safemodeRequestCount = 0;
 	let safemodeRequestTimer: number | null = null;
 	const keymap = {
-		'p|n': () => {
+		'h': () => {
+			const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkHelp.vue')), { }, {
+				closed: () => dispose(),
+			});
+		},
+		'p': () => {
+			if ($i == null) return;
+			post({}, { forceTimeline: true });
+		},
+		'n': () => {
 			if ($i == null) return;
 			post();
 		},
