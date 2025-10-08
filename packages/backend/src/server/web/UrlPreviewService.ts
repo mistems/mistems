@@ -72,7 +72,7 @@ export class UrlPreviewService {
 			};
 		}
 
-		this.logger.info(this.meta.urlPreviewSummaryProxyUrl
+		this.logger.debug(this.meta.urlPreviewSummaryProxyUrl
 			? `(Proxy) Getting preview of ${url}@${lang} ...`
 			: `Getting preview of ${url}@${lang} ...`);
 
@@ -81,7 +81,7 @@ export class UrlPreviewService {
 				? await this.fetchSummaryFromProxy(url, this.meta, lang)
 				: await this.fetchSummary(url, this.meta, lang);
 
-			this.logger.succ(`Got preview of ${url}: ${summary.title}`);
+			this.logger.debug(`Got preview of ${url}: ${summary.title}`);
 
 			if (!(summary.url.startsWith('http://') || summary.url.startsWith('https://'))) {
 				throw new Error('unsupported schema included');

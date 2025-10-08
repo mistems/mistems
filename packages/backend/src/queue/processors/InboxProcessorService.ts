@@ -31,6 +31,7 @@ import { MiMeta } from '@/models/Meta.js';
 import { DI } from '@/di-symbols.js';
 import { QueueLoggerService } from '../QueueLoggerService.js';
 import type { InboxJobData } from '../types.js';
+import { env } from 'node:process';
 
 type UpdateInstanceJob = {
 	latestRequestReceivedAt: Date,
@@ -225,6 +226,10 @@ export class InboxProcessorService implements OnApplicationShutdown {
 				return result;
 			}
 		} catch (e) {
+			// Bull.UnrecoverableError が運用上見えてもしょうがないので静かにする
+			if(e instanceof Bull.UnrecoverableError && process.env.NODE_ENV === 'production') {
+				return
+			}
 			if (e instanceof IdentifiableError) {
 				if (e.id === '689ee33f-f97c-479a-ac49-1b9f8140af99') {
 					return 'blocked notes with prohibited words';
