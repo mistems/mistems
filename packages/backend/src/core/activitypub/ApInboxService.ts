@@ -218,7 +218,7 @@ export class ApInboxService {
 	private async accept(actor: MiRemoteUser, activity: IAccept, resolver?: Resolver): Promise<string> {
 		const uri = activity.id ?? activity;
 
-		this.logger.info(`Accept: ${uri}`);
+		this.logger.debug(`Accept: ${uri}`);
 
 		// eslint-disable-next-line no-param-reassign
 		resolver ??= this.apResolverService.createResolver();
@@ -281,7 +281,7 @@ export class ApInboxService {
 	private async announce(actor: MiRemoteUser, activity: IAnnounce, resolver?: Resolver): Promise<string | void> {
 		const uri = getApId(activity);
 
-		this.logger.info(`Announce: ${uri}`);
+		this.logger.debug(`Announce: ${uri}`);
 
 		// eslint-disable-next-line no-param-reassign
 		resolver ??= this.apResolverService.createResolver();
@@ -340,7 +340,7 @@ export class ApInboxService {
 				return 'skip: invalid actor for this activity';
 			}
 
-			this.logger.info(`Creating the (Re)Note: ${uri}`);
+			this.logger.debug(`Creating the (Re)Note: ${uri}`);
 
 			const activityAudience = await this.apAudienceService.parseAudience(actor, activity.to, activity.cc, resolver);
 			const createdAt = activity.published ? new Date(activity.published) : null;
@@ -383,7 +383,7 @@ export class ApInboxService {
 	private async create(actor: MiRemoteUser, activity: ICreate, resolver?: Resolver): Promise<string | void> {
 		const uri = getApId(activity);
 
-		this.logger.info(`Create: ${uri}`);
+		this.logger.debug(`Create: ${uri}`);
 
 		if (!activity.object) return 'skip: activity has no object property';
 		const targetUri = getApId(activity.object);
