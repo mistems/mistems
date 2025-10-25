@@ -59,6 +59,7 @@ const XStatusBars = defineAsyncComponent(() => import('@/ui/_common_/statusbars.
 const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announcements.vue'));
 
 const isRoot = computed(() => mainRouter.currentRoute.value.name === 'index');
+const isChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
 
 const DESKTOP_THRESHOLD = 1100;
 const MOBILE_THRESHOLD = 500;
@@ -187,5 +188,139 @@ $widgets-hide-threshold: 1090px;
 	@media (max-width: $widgets-hide-threshold) {
 		display: none;
 	}
+}
+
+.widgetsDrawerBg {
+	z-index: 1001;
+}
+
+.widgetsDrawer {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 1001;
+	width: 310px;
+	height: 100dvh;
+	padding: var(--MI-margin) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px)) !important;
+	box-sizing: border-box;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--MI_THEME-bg);
+}
+
+.widgetsCloseButton {
+	padding: 8px;
+	display: block;
+	margin: 0 auto;
+}
+
+@media (min-width: 370px) {
+	.widgetsCloseButton {
+		display: none;
+	}
+}
+
+.nav {
+	position: sticky;
+	z-index: 1000;
+	bottom: 0;
+	left: 0;
+	padding: 12px 12px max(12px, env(safe-area-inset-bottom, 0px)) 12px;
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+	grid-gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+	-webkit-backdrop-filter: var(--MI-blur, blur(24px));
+	backdrop-filter: var(--MI-blur, blur(24px));
+	background-color: var(--MI_THEME-header);
+	border-top: solid 0.5px var(--MI_THEME-divider);
+}
+
+.navButton {
+	position: relative;
+	padding: 0;
+	aspect-ratio: 1;
+	width: 100%;
+	max-width: 60px;
+	margin: auto;
+	border-radius: 100%;
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+
+	&:hover {
+		background: var(--MI_THEME-panelHighlight);
+	}
+
+	&:active {
+		background: hsl(from var(--MI_THEME-panel) h s calc(l - 2));
+	}
+}
+
+.postButton {
+	composes: navButton;
+	background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+	color: var(--MI_THEME-fgOnAccent);
+
+	&:hover {
+		background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
+	}
+
+	&:active {
+		background: linear-gradient(90deg, hsl(from var(--MI_THEME-accent) h s calc(l + 5)), hsl(from var(--MI_THEME-accent) h s calc(l + 5)));
+	}
+}
+
+.postButtonFloat {
+	position: absolute;
+	top: -40px;
+	width: 40px;
+	right: 16px;
+}
+
+.navButtonIcon {
+	font-size: 18px;
+	vertical-align: middle;
+}
+
+.navButtonIndicator {
+	position: absolute;
+	top: 0;
+	left: 0;
+	color: var(--MI_THEME-indicator);
+	font-size: 16px;
+
+	&:has(.itemIndicateValueIcon) {
+		animation: none;
+		font-size: 12px;
+	}
+}
+
+.menuDrawerBg {
+	z-index: 1001;
+}
+
+.menuDrawer {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 1001;
+	height: 100dvh;
+	width: 240px;
+	box-sizing: border-box;
+	contain: strict;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--MI_THEME-navBg);
+}
+
+.statusbars {
+	position: sticky;
+	top: 0;
+	left: 0;
+}
+
+.spacer {
+	height: calc(var(--MI-minBottomSpacing));
 }
 </style>
