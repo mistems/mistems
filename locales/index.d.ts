@@ -99,10 +99,6 @@ export interface Locale extends ILocale {
      */
     "renotedBy": ParameterizedString<"user">;
     /**
-     * {user}が{toChannel}へリノート
-     */
-    "renotedByToChannel": ParameterizedString<"user" | "toChannel">;
-    /**
      * ノートはありません
      */
     "noNotes": string;
