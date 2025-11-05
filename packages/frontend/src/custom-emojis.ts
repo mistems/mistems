@@ -62,11 +62,26 @@ export async function fetchCustomEmojis(force = false) {
 		res = await misskeyApiGet('emojis', {});
 	}
 
+	res.emojis.forEach(emoji => {
+		const stdAliases: string[] = [];
+		emoji.aliases.forEach(alias => {
+			stdAliases.push(toKanaToHira(alias.toLowerCase()));
+		});
+
+		emoji.aliases = stdAliases;
+	});
+
 	customEmojis.value = res.emojis;
 	set('emojis', res.emojis);
 	set('lastEmojisFetchedAt', now);
 }
 
+function toKanaToHira(str: string): string {
+	return str.replace(/[\u30a1-\u30f6]/g, (match) => {
+		const chr = match.charCodeAt(0) - 0x60;
+		return String.fromCharCode(chr);
+	});
+}
 let cachedTags;
 export function getCustomEmojiTags() {
 	if (cachedTags) return cachedTags;
@@ -74,7 +89,7 @@ export function getCustomEmojiTags() {
 	const tags = new Set();
 	for (const emoji of customEmojis.value) {
 		for (const tag of emoji.aliases) {
-			tags.add(tag);
+			tags.add(toKanaToHira(tag.toLowerCase()));
 		}
 	}
 	const res = Array.from(tags);
