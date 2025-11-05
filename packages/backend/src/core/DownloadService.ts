@@ -37,7 +37,7 @@ export class DownloadService {
 	public async downloadUrl(url: string, path: string): Promise<{
 		filename: string;
 	}> {
-		this.logger.info(`Downloading ${chalk.cyan(url)} to ${chalk.cyanBright(path)} ...`);
+		this.logger.debug(`Downloading ${chalk.cyan(url)} to ${chalk.cyanBright(path)} ...`);
 
 		const timeout = 30 * 1000;
 		const operationTimeout = 60 * 1000;
@@ -106,7 +106,7 @@ export class DownloadService {
 			}
 		}
 
-		this.logger.succ(`Download finished: ${chalk.cyan(url)}`);
+		this.logger.debug(`Download finished: ${chalk.cyan(url)}`);
 
 		return {
 			filename,
@@ -118,7 +118,7 @@ export class DownloadService {
 		// Create temp file
 		const [path, cleanup] = await createTemp();
 
-		this.logger.info(`text file: Temp file is ${path}`);
+		this.logger.debug(`text file: Temp file is ${path}`);
 
 		try {
 			// write content at URL to temp file
