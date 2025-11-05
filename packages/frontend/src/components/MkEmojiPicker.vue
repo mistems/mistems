@@ -611,8 +611,8 @@ defineExpose({
 
 					> .item {
 						aspect-ratio: 1 / 1;
-						width: auto;
-						height: auto;
+						// width: auto;
+						// height: auto;
 						min-width: 0;
 
 						&:disabled {
