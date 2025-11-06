@@ -16,14 +16,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="isRenote" :class="$style.renote">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
 		<MkAvatar :class="$style.renoteAvatar" :user="note.user" link preview/>
-		<i class="ti ti-repeat" style="margin-right: 4px;"></i>
-		<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
-			<template #user>
-				<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
-					<MkUserName :user="note.user"/>
+		<div>
+			<i class="ti ti-repeat" style="margin-right: 4px;"></i>
+			<I18n :src="i18n.ts.renotedBy" tag="span" :class="$style.renoteText">
+				<template #user>
+					<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
+						<div style="display:inline-flex; flex-wrap:nowrap; align-items: center;">
+							<MkUserName :user="note.user"/>
+							<MkInstanceTicker v-if="showTickerRenote " :host="note.user.host" :instance="note.user.instance"/>
+						</div>
+						<!-- <span v-if="note.user.instance" :style="{backgroundColor: note.user.instance?.themeColor}">
+							<img v-if="note.user.instance.faviconUrl" style="height: 1em;" :src="note.user.instance.faviconUrl"/>
+							<span v-else>@</span>{{ note.user.instance.name }}
+						</span> -->
+					</MkA>
+				</template>
+			</I18n>
+
+			<div class="renoted-from-channel" style="line-height: normal;margin-top:-4px;">
+				<MkA v-if="note.channel" style="text-decoration: underline; margin-left: 16px; font-size: 12px; line-height: 12px;" :to="`/channels/${note.channelId}`">
+					<i class="ti ti-device-tv"/>{{ note.channel.name }}
 				</MkA>
-			</template>
-		</I18n>
+			</div>
+		</div>
 		<div :class="$style.renoteInfo">
 			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
 				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
@@ -38,10 +53,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span v-if="note.channel" style="margin-left: 0.5em;" :title="note.channel.name"><i class="ti ti-device-tv"></i></span>
 		</div>
 	</div>
-	<div v-if="renoteCollapsed" :class="$style.collapsedRenoteTarget">
-		<MkAvatar :class="$style.collapsedRenoteTargetAvatar" :user="appearNote.user" link preview/>
-		<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
+	<div v-if="renoteCollapsed" :class="$style.collapsedRenoteTarget" style="display: block">
+		<div style="display:flex;">
+			<MkAvatar :class="$style.collapsedRenoteTargetAvatar" :user="appearNote.user" link preview/>
+			
+			<div>
+				<div>
+					<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
+				</div>
+				<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
+			</div>
+		</div>
+		<div>
+			<span v-if="appearNote.user.instance" :class="$style.instanceInfo">
+				<img v-if="appearNote.user.instance.faviconUrl" :class="$style.instanceFavicon" :src="appearNote.user.instance.faviconUrl"/>
+				<span v-else>@</span>{{ appearNote.user.instance.name }}
+			</span>
+		</div>
 	</div>
+
 	<article v-else :class="$style.article" @contextmenu.stop="onContextmenu">
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
@@ -306,6 +336,7 @@ const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);
 const translation = ref<Misskey.entities.NotesTranslateResponse | null>(null);
 const translating = ref(false);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
+const showTickerRenote = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id));
 const renoteCollapsed = ref(
 	prefer.s.collapseRenotes && isRenote && (
@@ -786,7 +817,7 @@ function emitUpdReaction(emoji: string, delta: number) {
 .renote {
 	position: relative;
 	display: flex;
-	align-items: center;
+	align-items: start;
 	padding: 16px 32px 8px 32px;
 	line-height: 28px;
 	white-space: pre;
@@ -1143,5 +1174,19 @@ function emitUpdReaction(emoji: string, delta: number) {
 	margin-left: 8px;
 	opacity: .8;
 	font-size: 95%;
+}
+
+.instanceInfo {
+	color: var(--MI_THEME-fg);
+	opacity: 0.7;
+	display: flex;
+	align-items: center;
+	margin-left: 4px;
+	font-size: 90%;
+}
+
+.instanceFavicon {
+	height: 1em;
+	margin-right: 0.5em;
 }
 </style>
