@@ -8,9 +8,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 700px;">
 		<div v-if="channel && tab === 'overview'" class="_gaps">
 			<div class="_panel" :class="$style.bannerContainer">
-				<XChannelFollowButton :channel="channel" :full="true" :class="$style.subscribe"/>
-				<MkButton v-if="favorited" v-tooltip="i18n.ts.unfavorite" asLike class="button" rounded primary :class="$style.favorite" @click="unfavorite()"><i class="ti ti-star"></i></MkButton>
-				<MkButton v-else v-tooltip="i18n.ts.favorite" asLike class="button" rounded :class="$style.favorite" @click="favorite()"><i class="ti ti-star"></i></MkButton>
+				<div :class="$style.buttons">
+					<XChannelFollowButton :channel="channel" :full="true" :class="$style.subscribe"/>
+					<div :class="$style.buttonDescription">新着がタイムラインに現れます</div>
+					<MkButton v-if="favorited" v-tooltip="i18n.ts.unfavorite" asLike class="button" rounded primary :class="$style.favorite" @click="unfavorite()"><i class="ti ti-star"></i></MkButton>
+					<MkButton v-else v-tooltip="i18n.ts.favorite" asLike class="button" rounded :class="$style.favorite" @click="favorite()"><i class="ti ti-star"></i></MkButton>
+				<div :class="$style.buttonDescription">ヘッダーのチャンネルからアクセスできるようになります</div>
+				</div>
 				<div :style="{ backgroundImage: channel.bannerUrl ? `url(${channel.bannerUrl})` : undefined }" :class="$style.banner">
 					<div :class="$style.bannerStatus">
 						<div><i class="ti ti-users ti-fw"></i><I18n :src="i18n.ts._channel.usersCount" tag="span" style="margin-left: 4px;"><template #n><b>{{ channel.usersCount }}</b></template></I18n></div>
@@ -312,18 +316,29 @@ definePage(() => ({
 	position: relative;
 }
 
-.subscribe {
+.buttons {
 	position: absolute;
 	z-index: 1;
 	top: 16px;
 	left: 16px;
+	display: flex;
+	flex-direction: column;
+}
+
+.subscribe {
+	width: fit-content;
 }
 
 .favorite {
-	position: absolute;
-	z-index: 1;
-	top: 16px;
-	right: 16px;
+	width: fit-content;
+}
+
+.buttonDescription {
+	font-size: 0.8em;
+	color: var(--MI_THEME-fg);
+	opacity: 0.7;
+	margin-left: 8px;
+	margin-bottom: 4px;
 }
 
 .banner {
