@@ -143,6 +143,38 @@ export interface Locale extends ILocale {
      */
     "timeline": string;
     /**
+     * タイムマシン
+     */
+    "timeMachine": string;
+    /**
+     * 日時を選択
+     */
+    "timeMachineSelectDateTime": string;
+    /**
+     * タイムマシンで移動
+     */
+    "timeMachineGo": string;
+    /**
+     * 現在に戻る
+     */
+    "timeMachineBackToNow": string;
+    /**
+     * 現在位置: {datetime}
+     */
+    "timeMachineCurrentPosition": ParameterizedString<"datetime">;
+    /**
+     * 日時を選択して、その時点のソーシャルタイムラインを表示します。
+     */
+    "timeMachineDescription": string;
+    /**
+     * 日付
+     */
+    "date": string;
+    /**
+     * 時刻
+     */
+    "time": string;
+    /**
      * 自己紹介はありません
      */
     "noAccountDescription": string;
