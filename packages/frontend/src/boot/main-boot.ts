@@ -29,6 +29,7 @@ import { prefer } from '@/preferences.js';
 import { updateCurrentAccountPartial } from '@/accounts.js';
 import { migrateOldSettings } from '@/pref-migrate.js';
 import { unisonReload } from '@/utility/unison-reload.js';
+import { miRegistoryItem } from '@/registry-item.js';
 
 export async function mainBoot() {
 	const { isClientUpdated, lastVersion } = await common(async () => {
@@ -285,6 +286,8 @@ export async function mainBoot() {
 		//	}
 		//}
 		//miLocalStorage.setItem('lastUsed', Date.now().toString());
+		const channelLastReadedAt = await miRegistoryItem.get('channelsLastReadedAt');
+		miLocalStorage.setItemAsJson('channelsLastReadedAt', channelLastReadedAt);
 
 		const latestDonationInfoShownAt = miLocalStorage.getItem('latestDonationInfoShownAt');
 		const neverShowDonationInfo = miLocalStorage.getItem('neverShowDonationInfo');
@@ -379,7 +382,16 @@ export async function mainBoot() {
 	let safemodeRequestCount = 0;
 	let safemodeRequestTimer: number | null = null;
 	const keymap = {
-		'p|n': () => {
+		'h': () => {
+			const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkHelp.vue')), { }, {
+				closed: () => dispose(),
+			});
+		},
+		'p': () => {
+			if ($i == null) return;
+			post({}, { forceTimeline: true });
+		},
+		'n': () => {
 			if ($i == null) return;
 			post();
 		},
