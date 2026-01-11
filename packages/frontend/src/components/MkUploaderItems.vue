@@ -51,6 +51,7 @@ import type { UploaderItem } from '@/composables/use-uploader.js';
 import { i18n } from '@/i18n.js';
 import MkButton from '@/components/MkButton.vue';
 import bytes from '@/filters/bytes.js';
+import * as os from '@/os.js';
 
 const props = defineProps<{
 	items: UploaderItem[];
@@ -68,8 +69,33 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 	emit('showMenuViaContextmenu', item, ev);
 }
 
-function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
-	// TODO: preview when item is image
+async function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
+	// Only show preview for image files
+	if (!item.file.type.startsWith('image/')) return;
+
+	// If already uploaded, use the uploaded file
+	if (item.uploaded) {
+		const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
+			file: item.uploaded,
+		}, {
+			closed: () => dispose(),
+		});
+		return;
+	}
+
+	// For files not yet uploaded, create a temporary DriveFile-like object
+	const tempFile = {
+		id: item.id,
+		name: item.name,
+		url: item.thumbnail || URL.createObjectURL(item.file),
+		comment: item.caption || null,
+	} as any;
+
+	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
+		file: tempFile,
+	}, {
+		closed: () => dispose(),
+	});
 }
 </script>
 

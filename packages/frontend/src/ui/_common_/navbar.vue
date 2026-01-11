@@ -61,10 +61,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i v-if="store.r.realtimeMode.value" class="ti ti-bolt ti-fw"></i>
 				<i v-else class="ti ti-bolt-off ti-fw"></i>
 			</button>
-			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="() => { os.post(); }">
-				<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
-			</button>
-			<button v-if="$i != null" v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">
+			<div style="display:flex; flex-wrap: wrap;">
+				<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, {[$style.twoColumn]: isInChannel}]" data-cy-open-post-form @click="os.post({}, {forceTimeline: true})">
+					<div><i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span></div>
+				</button>
+				<Transition>
+					<button v-if="isInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, {[$style.twoColumn]: isInChannel}]" data-cy-open-post-form @click="os.post">
+						<i class="ti ti-device-tv ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">ch</span>
+					</button>
+				</Transition>
+			</div>
+			<button v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">
 				<MkAvatar :user="$i" :class="$style.avatar" style="viewTransitionName: navbar-avatar;"/><MkAcct class="_nowrap" :class="$style.acct" :user="$i"/>
 			</button>
 		</div>
@@ -111,6 +118,7 @@ import { navbarItemDef } from '@/navbar.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
+import { mainRouter } from '@/router.js';
 import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 import { useRouter } from '@/router.js';
 import { prefer } from '@/preferences.js';
@@ -133,6 +141,7 @@ const iconOnly = computed(() => {
 	return !props.asDrawer && (forceIconOnly.value || (store.r.menuDisplay.value === 'sideIcon'));
 });
 
+const isInChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
 const otherMenuItemIndicated = computed(() => {
 	for (const def in navbarItemDef) {
 		if (prefer.r.menu.value.includes(def)) continue;
@@ -197,6 +206,18 @@ function menuEdit() {
 	router.push('/settings/navbar');
 }
 </script>
+
+<style lang="scss" scoped>
+.v-enter-active,
+.v-leave-active {
+	transition: all 0.5s ease;
+}
+
+.v-enter-from,
+.v-leave-to {
+	opacity: 0;
+}
+</style>
 
 <style lang="scss" module>
 .root {
@@ -451,19 +472,20 @@ function menuEdit() {
 		padding-top: 20px;
 	}
 
-	.post {
+	.post, .postChannel {
 		position: relative;
-		display: block;
+		display: flex;
+		justify-content: center;
+		align-items: center;
 		width: 100%;
 		height: 40px;
 		color: var(--MI_THEME-fgOnAccent);
 		font-weight: bold;
-		text-align: left;
 
 		&::before {
 			content: "";
 			display: block;
-			width: calc(100% - 38px);
+			width: calc(100% - 32px);
 			height: 100%;
 			margin: auto;
 			position: absolute;
@@ -473,6 +495,12 @@ function menuEdit() {
 			bottom: 0;
 			border-radius: 999px;
 			background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+		}
+
+		&.twoColumn {
+			&::before{
+				width: calc(100% - 12px)
+			}
 		}
 
 		&:focus-visible {
@@ -493,8 +521,7 @@ function menuEdit() {
 
 	.postIcon {
 		position: relative;
-		margin-left: 30px;
-		margin-right: 8px;
+		margin-left: -16px;
 		width: 32px;
 	}
 
@@ -692,6 +719,7 @@ function menuEdit() {
 		width: 100%;
 		height: 52px;
 		text-align: center;
+		margin-bottom: 8px;
 
 		&::before {
 			content: "";
