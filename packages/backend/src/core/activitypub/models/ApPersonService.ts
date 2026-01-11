@@ -317,7 +317,7 @@ export class ApPersonService implements OnModuleInit {
 
 		const person = this.validateActor(object, uri);
 
-		this.logger.info(`Creating the Person: ${person.id}`);
+		this.logger.debug(`Creating the Person: ${person.id}`);
 
 		const fields = this.analyzeAttachments(person.attachment ?? []);
 
@@ -506,11 +506,11 @@ export class ApPersonService implements OnModuleInit {
 
 		const person = this.validateActor(object, uri);
 
-		this.logger.info(`Updating the Person: ${person.id}`);
+		this.logger.debug(`Updating the Person: ${person.id}`);
 
 		// カスタム絵文字取得
 		const emojis = await this.apNoteService.extractEmojis(person.tag ?? [], exist.host).catch(e => {
-			this.logger.info(`extractEmojis: ${e}`);
+			this.logger.debug(`extractEmojis: ${e}`);
 			return [];
 		});
 
@@ -705,7 +705,7 @@ export class ApPersonService implements OnModuleInit {
 		if (!this.userEntityService.isRemoteUser(user)) return;
 		if (!user.featured) return;
 
-		this.logger.info(`Updating the featured: ${user.uri}`);
+		this.logger.debug(`Updating the featured: ${user.uri}`);
 
 		const _resolver = resolver ?? await this.apResolverService.createResolver();
 
