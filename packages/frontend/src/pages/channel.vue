@@ -59,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<template #footer>
-		<div :class="$style.footer">
+		<div :class="$style.footer" v-if="isSubWindow">
 			<div class="_spacer" style="--MI_SPACER-w: 700px; --MI_SPACER-min: 16px; --MI_SPACER-max: 16px;">
 				<div class="_buttonsCenter">
 					<MkButton inline rounded primary gradate @click="openPostForm()"><i class="ti ti-pencil"></i> {{ i18n.ts.postToTheChannel }}</MkButton>
@@ -99,6 +99,12 @@ import { notesSearchAvailable } from '@/utility/check-permissions.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { useRouter } from '@/router.js';
 import { Paginator } from '@/utility/paginator.js';
+import { miRegistoryItem } from '@/registry-item';
+import { mainRouter } from '@/router.js';
+import { ui } from '@@/js/config.js';
+const isSubWindow = computed(() => {
+	return router.current !== mainRouter.current || ui === 'deck' && router.current === mainRouter.current;
+});
 
 const router = useRouter();
 
@@ -120,13 +126,6 @@ const featuredPaginator = markRaw(new Paginator('notes/featured', {
 	})),
 }));
 
-useInterval(() => {
-	if (channel.value == null) return;
-	miLocalStorage.setItemAsJson(`channelLastReadedAt:${channel.value.id}`, Date.now());
-}, 3000, {
-	immediate: true,
-	afterMounted: true,
-});
 
 watch(() => props.channelId, async () => {
 	const _channel = await misskeyApi('channels/show', {
@@ -139,16 +138,28 @@ watch(() => props.channelId, async () => {
 	}
 
 	if ((favorited.value || _channel.isFollowing) && _channel.lastNotedAt) {
-		const lastReadedAt: number = miLocalStorage.getItemAsJson(`channelLastReadedAt:${_channel.id}`) ?? 0;
+		const lastReadedAt : number =  miLocalStorage.getItemAsJson('channelsLastReadedAt')[_channel.id] ?? 0;
 		const lastNotedAt = Date.parse(_channel.lastNotedAt);
 
+		if (!lastReadedAt) {
+			saveLastReadedAt();
+		}
+
 		if (lastNotedAt > lastReadedAt) {
-			miLocalStorage.setItemAsJson(`channelLastReadedAt:${_channel.id}`, lastNotedAt);
+			saveLastReadedAt();
 		}
 	}
 
 	channel.value = _channel;
 }, { immediate: true });
+
+async function saveLastReadedAt() {
+	if (!props.channelId) return;
+	const tmp = await miRegistoryItem.get('channelsLastReadedAt');
+	tmp[props.channelId] = Date.now();
+	await miRegistoryItem.set('channelsLastReadedAt', tmp);
+	miLocalStorage.setItemAsJson('channelsLastReadedAt', tmp);
+}
 
 function edit() {
 	router.push('/channels/:channelId/edit', {
