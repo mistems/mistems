@@ -6,24 +6,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
 	<div class="_spacer" style="--MI_SPACER-w: 1200px;">
-		<div v-if="tab === 'search'" :class="$style.searchRoot">
-			<div class="_gaps">
-				<MkInput v-model="searchQuery" :large="true" :autofocus="true" type="search" @enter="search">
-					<template #prefix><i class="ti ti-search"></i></template>
-				</MkInput>
-				<MkRadios v-model="searchType" @update:modelValue="search()">
-					<option value="nameAndDescription">{{ i18n.ts._channel.nameAndDescription }}</option>
-					<option value="nameOnly">{{ i18n.ts._channel.nameOnly }}</option>
-				</MkRadios>
-				<MkButton large primary gradate rounded @click="search">{{ i18n.ts.search }}</MkButton>
-			</div>
 
-			<MkFoldableSection v-if="channelPaginator">
-				<template #header>{{ i18n.ts.searchResult }}</template>
-				<MkChannelList :key="key" :paginator="channelPaginator"/>
-			</MkFoldableSection>
+		<div v-if="tab === 'index'">
+			<MkChannelIndex />
 		</div>
-		<div v-if="tab === 'featured'">
+		<div v-if="tab === 'search'" >
+			<MkChannelSearch />
+		</div>
+		<div v-if="tab === 'featured'" key="featured">
 			<MkPagination v-slot="{items}" :paginator="featuredPaginator">
 				<div :class="$style.root">
 					<MkChannelPreview v-for="channel in items" :key="channel.id" :channel="channel"/>
@@ -58,8 +48,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, markRaw, onMounted, ref, shallowRef } from 'vue';
+import MkChannelIndex from '@/components/MkChannelIndex.vue';
 import MkChannelPreview from '@/components/MkChannelPreview.vue';
 import MkChannelList from '@/components/MkChannelList.vue';
+import MkChannelSearch from "@/components/MkChannelSearch.vue"
 import MkPagination from '@/components/MkPagination.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkRadios from '@/components/MkRadios.vue';
@@ -103,6 +95,8 @@ const ownedPaginator = markRaw(new Paginator('channels/owned', {
 	limit: 10,
 }));
 
+const isEnd = ref(false);
+
 async function search() {
 	const query = searchQuery.value.toString().trim();
 
@@ -128,27 +122,33 @@ async function search() {
 
 const headerActions = computed(() => []);
 
-const headerTabs = computed(() => [{
-	key: 'search',
-	title: i18n.ts.search,
-	icon: 'ti ti-search',
-}, {
-	key: 'featured',
-	title: i18n.ts._channel.featured,
-	icon: 'ti ti-comet',
-}, {
-	key: 'favorites',
-	title: i18n.ts.favorites,
-	icon: 'ti ti-star',
-}, {
-	key: 'following',
-	title: i18n.ts._channel.following,
-	icon: 'ti ti-eye',
-}, {
-	key: 'owned',
-	title: i18n.ts._channel.owned,
-	icon: 'ti ti-edit',
-}]);
+const headerTabs = computed(() => [
+	{
+		key: 'index',
+		title: 'だいたいぜんぶ',
+		icon: 'ti ti-plus',
+	},
+	{
+		key: 'search',
+		title: i18n.ts.search,
+		icon: 'ti ti-search',
+	}, {
+		key: 'featured',
+		title: i18n.ts._channel.featured,
+		icon: 'ti ti-comet',
+	}, {
+		key: 'favorites',
+		title: i18n.ts.favorites,
+		icon: 'ti ti-star',
+	}, {
+		key: 'following',
+		title: i18n.ts._channel.following,
+		icon: 'ti ti-eye',
+	}, {
+		key: 'owned',
+		title: i18n.ts._channel.owned,
+		icon: 'ti ti-edit',
+	}]);
 
 definePage(() => ({
 	title: i18n.ts.channel,
