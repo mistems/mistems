@@ -367,6 +367,68 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</MkFolder>
 
+			<MkFolder v-if="matchQuery([i18n.ts._role._options.canUseTimemachine, 'canUseTimemachine'])">
+				<template #label>{{ i18n.ts._role._options.canUseTimemachine }}</template>
+				<template #suffix>
+					<span v-if="role.policies.canUseTimemachine.useDefault" :class="$style.useDefaultLabel">{{ i18n.ts._role.useBaseValue }}</span>
+					<span v-else>{{ role.policies.canUseTimemachine.value ? i18n.ts.yes : i18n.ts.no }}</span>
+					<span :class="$style.priorityIndicator"><i :class="getPriorityIcon(role.policies.canUseTimemachine)"></i></span>
+				</template>
+				<div class="_gaps">
+					<MkSwitch v-model="role.policies.canUseTimemachine.useDefault" :readonly="readonly">
+						<template #label>{{ i18n.ts._role.useBaseValue }}</template>
+					</MkSwitch>
+					<MkSwitch v-model="role.policies.canUseTimemachine.value" :disabled="role.policies.canUseTimemachine.useDefault" :readonly="readonly">
+						<template #label>{{ i18n.ts.enable }}</template>
+					</MkSwitch>
+					<MkRange v-model="role.policies.canUseTimemachine.priority" :min="0" :max="2" :step="1" easing :textConverter="(v) => v === 0 ? i18n.ts._role._priority.low : v === 1 ? i18n.ts._role._priority.middle : v === 2 ? i18n.ts._role._priority.high : ''">
+						<template #label>{{ i18n.ts._role.priority }}</template>
+					</MkRange>
+				</div>
+			</MkFolder>
+
+			<MkFolder v-if="matchQuery([i18n.ts._role._options.timemachineReachableFrom, 'timemachineReachableFrom'])">
+				<template #label>{{ i18n.ts._role._options.timemachineReachableFrom }}</template>
+				<template #suffix>
+					<span v-if="role.policies.timemachineReachableFrom.useDefault" :class="$style.useDefaultLabel">{{ i18n.ts._role.useBaseValue }}</span>
+					<span v-else>{{ role.policies.timemachineReachableFrom.value === 0 ? i18n.ts.unlimited : new Date(role.policies.timemachineReachableFrom.value).toLocaleString() }}</span>
+					<span :class="$style.priorityIndicator"><i :class="getPriorityIcon(role.policies.timemachineReachableFrom)"></i></span>
+				</template>
+				<div class="_gaps">
+					<MkSwitch v-model="role.policies.timemachineReachableFrom.useDefault" :readonly="readonly">
+						<template #label>{{ i18n.ts._role.useBaseValue }}</template>
+					</MkSwitch>
+					<MkInput :model-value="formatTimestampToDatetimeLocal(role.policies.timemachineReachableFrom.value)" @update:model-value="(v) => role.policies.timemachineReachableFrom.value = parseDatetimeLocalToTimestamp(v)" :disabled="role.policies.timemachineReachableFrom.useDefault" :readonly="readonly" type="datetime-local">
+						<template #label>{{ i18n.ts._role._options.timemachineReachableFromDescription }}</template>
+						<template #caption>{{ i18n.ts._role._options.timemachineReachableFromHint }}</template>
+					</MkInput>
+					<MkRange v-model="role.policies.timemachineReachableFrom.priority" :min="0" :max="2" :step="1" easing :textConverter="(v) => v === 0 ? i18n.ts._role._priority.low : v === 1 ? i18n.ts._role._priority.middle : v === 2 ? i18n.ts._role._priority.high : ''">
+						<template #label>{{ i18n.ts._role.priority }}</template>
+					</MkRange>
+				</div>
+			</MkFolder>
+
+			<MkFolder v-if="matchQuery([i18n.ts._role._options.timemachineTravelableMaxDays, 'timemachineTravelableMaxDays'])">
+				<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDays }}</template>
+				<template #suffix>
+					<span v-if="role.policies.timemachineTravelableMaxDays.useDefault" :class="$style.useDefaultLabel">{{ i18n.ts._role.useBaseValue }}</span>
+					<span v-else>{{ role.policies.timemachineTravelableMaxDays.value === 0 ? i18n.ts.unlimited : role.policies.timemachineTravelableMaxDays.value + i18n.ts._time.day }}</span>
+					<span :class="$style.priorityIndicator"><i :class="getPriorityIcon(role.policies.timemachineTravelableMaxDays)"></i></span>
+				</template>
+				<div class="_gaps">
+					<MkSwitch v-model="role.policies.timemachineTravelableMaxDays.useDefault" :readonly="readonly">
+						<template #label>{{ i18n.ts._role.useBaseValue }}</template>
+					</MkSwitch>
+					<MkInput v-model.number="role.policies.timemachineTravelableMaxDays.value" :disabled="role.policies.timemachineTravelableMaxDays.useDefault" :readonly="readonly" type="number">
+						<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDaysDescription }}</template>
+						<template #caption>{{ i18n.ts._role._options.timemachineTravelableMaxDaysHint }}</template>
+					</MkInput>
+					<MkRange v-model="role.policies.timemachineTravelableMaxDays.priority" :min="0" :max="2" :step="1" easing :textConverter="(v) => v === 0 ? i18n.ts._role._priority.low : v === 1 ? i18n.ts._role._priority.middle : v === 2 ? i18n.ts._role._priority.high : ''">
+						<template #label>{{ i18n.ts._role.priority }}</template>
+					</MkRange>
+				</div>
+			</MkFolder>
+
 			<MkFolder v-if="matchQuery([i18n.ts._role._options.canUseTranslator, 'canUseTranslator'])">
 				<template #label>{{ i18n.ts._role._options.canUseTranslator }}</template>
 				<template #suffix>
@@ -898,6 +960,24 @@ function updateAvatarDecorationLimit(value: string | number) {
 	const numValue = Number(value);
 	const limited = Math.min(16, Math.max(0, numValue));
 	role.value.policies.avatarDecorationLimit.value = limited;
+}
+
+function formatTimestampToDatetimeLocal(timestamp: number): string {
+	if (timestamp === 0) return '';
+	const date = new Date(timestamp);
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	const hours = String(date.getHours()).padStart(2, '0');
+	const minutes = String(date.getMinutes()).padStart(2, '0');
+	return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseDatetimeLocalToTimestamp(datetimeLocal: string): number {
+	if (!datetimeLocal) return 0;
+	const timestamp = new Date(datetimeLocal).getTime();
+	if (isNaN(timestamp)) return 0;
+	return timestamp;
 }
 
 const rolePermissionDef = [
