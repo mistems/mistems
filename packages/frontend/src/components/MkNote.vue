@@ -42,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.renoteInfo">
 			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
 				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
-				<MkTime :time="note.createdAt"/>
+				<MkTime :time="note.createdAt" :mode="forceAbsoluteTime ? 'absolute' : 'relative'"/>
 			</button>
 			<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 				<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
@@ -294,6 +294,7 @@ const emit = defineEmits<{
 const inTimeline = inject<boolean>('inTimeline', false);
 const tl_withSensitive = inject<Ref<boolean>>('tl_withSensitive', ref(true));
 const inChannel = inject('inChannel', null);
+const forceAbsoluteTime = inject<boolean>('forceAbsoluteTime', false);
 const currentClip = inject<Ref<Misskey.entities.Clip> | null>('currentClip', null);
 
 let note = deepClone(props.note);

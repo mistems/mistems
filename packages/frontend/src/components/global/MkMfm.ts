@@ -383,7 +383,7 @@ export default function (props: MfmProps, { emit }: { emit: SetupContext<MfmEven
 					style: 'color:var(--MI_THEME-hashtag);',
 					behavior: props.linkNavigationBehavior,
 					tag: token.props.hashtag,
-				}, `#${token.props.hashtag}`)];
+				}, { default: () => `#${token.props.hashtag}` })];
 			}
 
 			case 'blockCode': {

@@ -29,6 +29,13 @@ export const ROUTE_DEF = [{
 	path: '/timeline',
 	component: PageTimeline,
 }, {
+	path: '/timemachine',
+	component: page(() => import('@/pages/timemachine.vue')),
+	loginRequired: true,
+	query: {
+		goto: 'goto',
+	},
+}, {
 	path: '/@:username/pages/:pageName(*)',
 	component: page(() => import('@/pages/page.vue')),
 }, {
