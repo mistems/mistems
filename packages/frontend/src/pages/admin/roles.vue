@@ -134,6 +134,32 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</MkSwitch>
 					</MkFolder>
 
+					<MkFolder v-if="matchQuery([i18n.ts._role._options.canUseTimemachine, 'canUseTimemachine'])">
+						<template #label>{{ i18n.ts._role._options.canUseTimemachine }}</template>
+						<template #suffix>{{ policies.canUseTimemachine ? i18n.ts.yes : i18n.ts.no }}</template>
+						<MkSwitch v-model="policies.canUseTimemachine">
+							<template #label>{{ i18n.ts.enable }}</template>
+						</MkSwitch>
+					</MkFolder>
+
+					<MkFolder v-if="matchQuery([i18n.ts._role._options.timemachineReachableFrom, 'timemachineReachableFrom'])">
+						<template #label>{{ i18n.ts._role._options.timemachineReachableFrom }}</template>
+						<template #suffix>{{ policies.timemachineReachableFrom === 0 ? i18n.ts.unlimited : new Date(policies.timemachineReachableFrom).toLocaleString() }}</template>
+						<MkInput :model-value="formatTimestampToDatetimeLocal(policies.timemachineReachableFrom)" @update:model-value="(v) => policies.timemachineReachableFrom = parseDatetimeLocalToTimestamp(v)" type="datetime-local">
+							<template #label>{{ i18n.ts._role._options.timemachineReachableFromDescription }}</template>
+							<template #caption>{{ i18n.ts._role._options.timemachineReachableFromHint }}</template>
+						</MkInput>
+					</MkFolder>
+
+					<MkFolder v-if="matchQuery([i18n.ts._role._options.timemachineTravelableMaxDays, 'timemachineTravelableMaxDays'])">
+						<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDays }}</template>
+						<template #suffix>{{ policies.timemachineTravelableMaxDays === 0 ? i18n.ts.unlimited : policies.timemachineTravelableMaxDays + i18n.ts._time.day }}</template>
+						<MkInput v-model.number="policies.timemachineTravelableMaxDays" type="number">
+							<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDaysDescription }}</template>
+							<template #caption>{{ i18n.ts._role._options.timemachineTravelableMaxDaysHint }}</template>
+						</MkInput>
+					</MkFolder>
+
 					<MkFolder v-if="matchQuery([i18n.ts._role._options.canUseTranslator, 'canUseTranslator'])">
 						<template #label>{{ i18n.ts._role._options.canUseTranslator }}</template>
 						<template #suffix>{{ policies.canUseTranslator ? i18n.ts.yes : i18n.ts.no }}</template>
@@ -379,6 +405,24 @@ const avatarDecorationLimit = computed({
 
 function updateAvatarDecorationLimit(value: string | number) {
 	avatarDecorationLimit.value = Number(value);
+}
+
+function formatTimestampToDatetimeLocal(timestamp: number): string {
+	if (timestamp === 0) return '';
+	const date = new Date(timestamp);
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	const hours = String(date.getHours()).padStart(2, '0');
+	const minutes = String(date.getMinutes()).padStart(2, '0');
+	return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseDatetimeLocalToTimestamp(datetimeLocal: string): number {
+	if (!datetimeLocal) return 0;
+	const timestamp = new Date(datetimeLocal).getTime();
+	if (isNaN(timestamp)) return 0;
+	return timestamp;
 }
 
 function matchQuery(keywords: string[]): boolean {

@@ -16,5 +16,21 @@
 	"editor.codeActionsOnSave": {
 		"source.fixAll": "explicit"
 	},
-	"editor.formatOnSave": false
+	"editor.formatOnSave": false,
+	"gitlens.currentLine.enabled": false,
+	"gitlens.hovers.currentLine.over": "line",
+	"gitlens.codeLens.enabled": false,
+	"gitlens.statusBar.enabled": false,
+	"gitlens.hovers.enabled": false,
+	"gitlens.fileAnnotations.dismissOnEscape": false,
+	"gitlens.fileAnnotations.preserveWhileEditing": false,
+	"gitlens.blame.heatmap.enabled": false,
+	"gitlens.blame.avatars": false,
+	"gitlens.blame.compact": false,
+	"gitlens.blame.highlight.enabled": false,
+	"gitlens.changes.locations": [
+		"line"
+	],
+	"gitlens.heatmap.locations": [],
+	"gitlens.heatmap.fadeLines": false
 }
