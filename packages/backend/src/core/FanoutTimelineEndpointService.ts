@@ -82,7 +82,8 @@ export class FanoutTimelineEndpointService {
 
 		let noteIds = redisResultIds.slice(0, ps.limit);
 		const oldestNoteId = ascending ? redisResultIds[0] : redisResultIds[redisResultIds.length - 1];
-		const shouldFallbackToDb = noteIds.length === 0 || ps.sinceId != null && ps.sinceId < oldestNoteId;
+		const newestNoteId = ascending ? redisResultIds[redisResultIds.length - 1] : redisResultIds[0];
+		const shouldFallbackToDb = noteIds.length === 0 || (ps.sinceId != null && oldestNoteId != null && ps.sinceId < oldestNoteId) || (ps.untilId != null && newestNoteId != null && ps.untilId > newestNoteId);
 
 		if (!shouldFallbackToDb) {
 			let filter = ps.noteFilter ?? (_note => true) as NoteFilter;
@@ -181,7 +182,9 @@ export class FanoutTimelineEndpointService {
 				redisTimeline.push(...gotFromDb);
 				lastSuccessfulRate = gotFromDb.length / noteIds.length;
 
-				if (ps.allowPartial ? redisTimeline.length !== 0 : redisTimeline.length >= ps.limit) {
+				// untilIdがRedisの範囲外の場合はallowPartialを無視してDBフォールバックを実行
+				const isUntilIdOutOfRange = ps.untilId != null && newestNoteId != null && ps.untilId > newestNoteId;
+				if (!isUntilIdOutOfRange && (ps.allowPartial ? redisTimeline.length !== 0 : redisTimeline.length >= ps.limit)) {
 					// 十分Redisからとれた
 					return redisTimeline.slice(0, ps.limit);
 				}
@@ -195,7 +198,7 @@ export class FanoutTimelineEndpointService {
 				dbUntil = ps.untilId;
 				dbSince = noteIds[noteIds.length - 1];
 			} else {
-				dbUntil = noteIds[noteIds.length - 1];
+				dbUntil = ps.untilId ?? noteIds[noteIds.length - 1];
 				dbSince = ps.sinceId;
 			}
 			const gotFromDb = await ps.dbFallback(dbUntil, dbSince, remainingToRead);
