@@ -5320,6 +5320,9 @@ export type components = {
             canManageAvatarDecorations: boolean;
             canSearchNotes: boolean;
             canSearchUsers: boolean;
+            canUseTimemachine: boolean;
+            timemachineReachableFrom: number;
+            timemachineTravelableMaxDays: number;
             canUseTranslator: boolean;
             canHideAds: boolean;
             driveCapacityMb: number;
