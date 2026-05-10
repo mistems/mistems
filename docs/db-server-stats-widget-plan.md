@@ -91,9 +91,15 @@ CREATE INDEX "IDX_db_server_stats_ts" ON "db_server_stats" ("ts" DESC);
 
 ### 4.2 本体スクリプト（DB サーバー側で実行される収集コード）
 
+> **ディレクトリ命名規則**: 配布物の置き場所として新たに `ops-sub/` を切る（既存の `scripts/` は pnpm から呼ばれる Node 製ビルドスクリプト専用なので混在させない）。
+> - **ops** = 運用・非定常実行系
+> - **sub** = ホスト（アプリケーションサーバー）以外のマシンで動かすもの
+>
+> 将来 Redis サーバー側の collector など同類の補助物を足すときは `ops-sub/redis-server-stats/` のように並べる。
+
 「実際に統計を取って INSERT する」コア部分。**スケジューラ非依存**で、単発実行できる前提で書く。systemd / cron / 手動のいずれから呼ばれても `bash collect-stats.sh` で動く。
 
-**新規ファイル**: `scripts/db-server-stats/bin/collect-stats.sh`（POSIX shell + `psql`）
+**新規ファイル**: `ops-sub/db-server-stats/bin/collect-stats.sh`（POSIX shell + `psql`）
 
 要件：
 - 環境変数で接続情報を受け取る（`PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`、`MISSKEY_HOST_ID`）
@@ -102,7 +108,7 @@ CREATE INDEX "IDX_db_server_stats_ts" ON "db_server_stats" ("ts" DESC);
 - 失敗時は stderr に出して非ゼロで終了（`set -eu`）
 - 1 回の実行で 1 行 INSERT して終わる。常駐しない
 
-**新規ファイル**: `scripts/db-server-stats/bin/purge-stats.sh`
+**新規ファイル**: `ops-sub/db-server-stats/bin/purge-stats.sh`
 
 ```sh
 psql -c "DELETE FROM db_server_stats WHERE ts < now() - interval '24 hours'"
@@ -114,7 +120,7 @@ psql -c "DELETE FROM db_server_stats WHERE ts < now() - interval '24 hours'"
 
 **§4.2 本体とは独立**に提供する補助物。定期実行の登録方法と権限設定のサンプルで、ユーザーは好みの方式（systemd / cron / その他）を選べる。本体側はスケジューラを知らない。
 
-**新規ディレクトリ**: `scripts/db-server-stats/setup/`
+**新規ディレクトリ**: `ops-sub/db-server-stats/setup/`
 
 - `systemd/misskey-db-stats.service` および `.timer`（オプション A：systemd 環境向け）
   ```ini
@@ -134,7 +140,7 @@ psql -c "DELETE FROM db_server_stats WHERE ts < now() - interval '24 hours'"
 
 - `install.sh`（任意）：`bin/*.sh` を `/usr/local/bin/` にコピーする小さなインストーラ。複雑にしない。
 
-**新規ファイル**: `scripts/db-server-stats/README.md`
+**新規ファイル**: `ops-sub/db-server-stats/README.md`
 
 §6 のセットアップ手順を清書した運用ドキュメント。systemd と cron 両方の例を併記する。
 
@@ -220,13 +226,13 @@ psql -c "GRANT INSERT ON db_server_stats TO misskey_stats;"
 psql -c "GRANT pg_monitor TO misskey_stats;"  # pg_stat_activity 等の閲覧用
 
 # 3. 本体スクリプトを配置（§4.2）
-sudo cp scripts/db-server-stats/bin/*.sh /usr/local/bin/
+sudo cp ops-sub/db-server-stats/bin/*.sh /usr/local/bin/
 ```
 
 **オプション A：systemd timer で動かす**（30 秒間隔も可）
 
 ```sh
-sudo cp scripts/db-server-stats/setup/systemd/* /etc/systemd/system/
+sudo cp ops-sub/db-server-stats/setup/systemd/* /etc/systemd/system/
 sudo systemctl enable --now misskey-db-stats.timer
 # パージは cron で（systemd timer をもう一本作っても可）
 echo "0 4 * * * /usr/local/bin/purge-stats.sh" | sudo crontab -u postgres -
@@ -236,7 +242,7 @@ echo "0 4 * * * /usr/local/bin/purge-stats.sh" | sudo crontab -u postgres -
 
 ```sh
 sudo crontab -u postgres -e
-# scripts/db-server-stats/setup/crontab.example の内容を貼り付け：
+# ops-sub/db-server-stats/setup/crontab.example の内容を貼り付け：
 # * * * * * /usr/local/bin/collect-stats.sh
 # 0 4 * * * /usr/local/bin/purge-stats.sh
 ```
@@ -290,9 +296,9 @@ sudo crontab -u postgres -e
 - `packages/backend/src/daemons/DbServerStatsService.ts`
 - `packages/backend/src/server/api/stream/channels/db-server-stats.ts`
 - `packages/frontend/src/widgets/db-server-metric/`（5 ファイル）
-- `scripts/db-server-stats/bin/`（**本体**：`collect-stats.sh` / `purge-stats.sh`）
-- `scripts/db-server-stats/setup/`（**セットアップツール**：systemd unit + timer / `crontab.example` / 任意で `install.sh`）
-- `scripts/db-server-stats/README.md`
+- `ops-sub/db-server-stats/bin/`（**本体**：`collect-stats.sh` / `purge-stats.sh`）
+- `ops-sub/db-server-stats/setup/`（**セットアップツール**：systemd unit + timer / `crontab.example` / 任意で `install.sh`）
+- `ops-sub/db-server-stats/README.md`
 
 **変更ファイル**
 - `packages/backend/src/models/Meta.ts`
