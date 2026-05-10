@@ -151,6 +151,7 @@ export const paramDef = {
 		enableChartsForFederatedInstances: { type: 'boolean' },
 		enableStatsForFederatedInstances: { type: 'boolean' },
 		enableServerMachineStats: { type: 'boolean' },
+		enableDbServerStats: { type: 'boolean' },
 		enableIdenticonGeneration: { type: 'boolean' },
 		serverRules: { type: 'array', items: { type: 'string' } },
 		bannedEmailDomains: { type: 'array', items: { type: 'string' } },
@@ -656,6 +657,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.enableServerMachineStats !== undefined) {
 				set.enableServerMachineStats = ps.enableServerMachineStats;
+			}
+
+			if (ps.enableDbServerStats !== undefined) {
+				set.enableDbServerStats = ps.enableDbServerStats;
 			}
 
 			if (ps.enableIdenticonGeneration !== undefined) {

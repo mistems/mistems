@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: syuilo and misskey-project
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# crontab だけで完結させる場合の例。
+# `crontab -u postgres -e` で開いて貼り付ける。
+#
+# 環境変数は `crontab -e` で行頭に書くか、スクリプト側で
+# `. /etc/misskey-db-stats.env` のように読み込ませる。
+
+PGHOST=127.0.0.1
+PGUSER=misskey_stats
+PGPASSWORD=...
+PGDATABASE=misskey
+MISSKEY_HOST_ID=primary
+
+# 60 秒間隔で収集（cron は 1 分粒度。30 秒間隔にしたい場合は systemd を使う）
+* * * * * /usr/local/bin/collect-stats.sh
+
+# 日次 retention（毎日 04:00 に古い行を削除）
+0 4 * * * /usr/local/bin/purge-stats.sh

@@ -25,6 +25,7 @@ export default function(app: App) {
 	app.component('WidgetPostForm', defineAsyncComponent(() => import('./WidgetPostForm.vue')));
 	app.component('WidgetSlideshow', defineAsyncComponent(() => import('./WidgetSlideshow.vue')));
 	app.component('WidgetServerMetric', defineAsyncComponent(() => import('./server-metric/index.vue')));
+	app.component('WidgetDbServerMetric', defineAsyncComponent(() => import('./db-server-metric/index.vue')));
 	app.component('WidgetOnlineUsers', defineAsyncComponent(() => import('./WidgetOnlineUsers.vue')));
 	app.component('WidgetJobQueue', defineAsyncComponent(() => import('./WidgetJobQueue.vue')));
 	app.component('WidgetInstanceCloud', defineAsyncComponent(() => import('./WidgetInstanceCloud.vue')));
@@ -62,6 +63,7 @@ export const widgets = [
 	'postForm',
 	'slideshow',
 	'serverMetric',
+	'dbServerMetric',
 	'onlineUsers',
 	'jobQueue',
 	'button',

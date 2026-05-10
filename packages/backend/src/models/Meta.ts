@@ -560,6 +560,11 @@ export class MiMeta {
 	public enableServerMachineStats: boolean;
 
 	@Column('boolean', {
+		default: false,
+	})
+	public enableDbServerStats: boolean;
+
+	@Column('boolean', {
 		default: true,
 	})
 	public enableIdenticonGeneration: boolean;
