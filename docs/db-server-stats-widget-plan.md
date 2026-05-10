@@ -89,37 +89,56 @@ CREATE INDEX "IDX_db_server_stats_ts" ON "db_server_stats" ("ts" DESC);
 
 `down()` では `DROP TABLE db_server_stats`。
 
-### 4.2 収集スクリプト
+### 4.2 本体スクリプト（DB サーバー側で実行される収集コード）
 
-**新規ファイル**: `scripts/db-server-stats/collect-stats.sh`（POSIX shell + `psql`）
+「実際に統計を取って INSERT する」コア部分。**スケジューラ非依存**で、単発実行できる前提で書く。systemd / cron / 手動のいずれから呼ばれても `bash collect-stats.sh` で動く。
+
+**新規ファイル**: `scripts/db-server-stats/bin/collect-stats.sh`（POSIX shell + `psql`）
 
 要件：
 - 環境変数で接続情報を受け取る（`PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`、`MISSKEY_HOST_ID`）
 - I/O 取得は前回値ファイル（`/var/lib/misskey-stats/last-diskstats`）との差分
-- DB 接続用ロールは **INSERT 専用の最小権限**（後述「セットアップ」参照）
-- 失敗時は stderr に出して終了（`set -eu`）
+- DB 接続用ロールは **INSERT 専用の最小権限**（§6 参照）
+- 失敗時は stderr に出して非ゼロで終了（`set -eu`）
+- 1 回の実行で 1 行 INSERT して終わる。常駐しない
 
-**新規ファイル**: `scripts/db-server-stats/purge-stats.sh`
+**新規ファイル**: `scripts/db-server-stats/bin/purge-stats.sh`
 
 ```sh
 psql -c "DELETE FROM db_server_stats WHERE ts < now() - interval '24 hours'"
 ```
 
-**新規ファイル**: `scripts/db-server-stats/systemd/misskey-db-stats.service` および `.timer`
+これも単発実行スクリプト。1 日 1 回呼ばれることを想定。
 
-```ini
-# misskey-db-stats.timer
-[Timer]
-OnBootSec=30s
-OnUnitActiveSec=60s
-```
+### 4.3 セットアップツール（配布物）
 
-`.service` 側は `ExecStart=/path/to/collect-stats.sh`、`User=postgres`（または専用ユーザー）。
+**§4.2 本体とは独立**に提供する補助物。定期実行の登録方法と権限設定のサンプルで、ユーザーは好みの方式（systemd / cron / その他）を選べる。本体側はスケジューラを知らない。
+
+**新規ディレクトリ**: `scripts/db-server-stats/setup/`
+
+- `systemd/misskey-db-stats.service` および `.timer`（オプション A：systemd 環境向け）
+  ```ini
+  # misskey-db-stats.timer
+  [Timer]
+  OnBootSec=30s
+  OnUnitActiveSec=60s
+  ```
+  `.service` は `ExecStart=/usr/local/bin/collect-stats.sh`、`User=postgres` または専用ユーザー。
+
+- `crontab.example`（オプション B：cron で済ませたい場合）
+  ```cron
+  * * * * * /usr/local/bin/collect-stats.sh   # 60 秒間隔
+  0 4 * * * /usr/local/bin/purge-stats.sh     # 日次 retention
+  ```
+  cron は最小粒度が 1 分なので、30 秒間隔にしたい場合は systemd を選ぶ。粒度に拘らないならこれで十分。
+
+- `install.sh`（任意）：`bin/*.sh` を `/usr/local/bin/` にコピーする小さなインストーラ。複雑にしない。
 
 **新規ファイル**: `scripts/db-server-stats/README.md`
-セットアップ手順（テーブル作成・ロール作成・systemd 配置・cron purge）を記載。
 
-### 4.3 バックエンド：収集サービス
+§6 のセットアップ手順を清書した運用ドキュメント。systemd と cron 両方の例を併記する。
+
+### 4.4 バックエンド：収集サービス
 
 **新規ファイル**: `packages/backend/src/daemons/DbServerStatsService.ts`
 
@@ -132,7 +151,7 @@ OnUnitActiveSec=60s
 
 クエリは TypeORM の DataSource を DI で受け取り、生 SQL で叩く（軽量）。
 
-### 4.4 バックエンド：WebSocket チャンネル
+### 4.5 バックエンド：WebSocket チャンネル
 
 **新規ファイル**: `packages/backend/src/server/api/stream/channels/db-server-stats.ts`
 
@@ -145,7 +164,7 @@ OnUnitActiveSec=60s
 **変更ファイル**: `packages/backend/src/server/api/stream/ChannelsService.ts`（新チャンネルを登録）
 **変更ファイル**: `packages/backend/src/boot/common.ts`（`DbServerStatsService.start()` を呼び出し）
 
-### 4.5 バックエンド：meta 拡張
+### 4.6 バックエンド：meta 拡張
 
 **変更ファイル**: `packages/backend/src/models/Meta.ts`
 
@@ -158,7 +177,7 @@ public enableDbServerStats: boolean;
 
 **変更ファイル**: 管理 API（`admin/update-meta` 等）に `enableDbServerStats` 受付を追加
 
-### 4.6 フロントエンド：ウィジェット
+### 4.7 フロントエンド：ウィジェット
 
 **新規ディレクトリ**: `packages/frontend/src/widgets/db-server-metric/`
 
@@ -177,12 +196,12 @@ public enableDbServerStats: boolean;
 ## 5. 実装ステップ（推奨順）
 
 1. **マイグレーション + meta 拡張** — テーブルと `enableDbServerStats` フラグを先に通す
-2. **収集スクリプト + README** — DB 単体で stats が溜まる状態を作る（手動確認可能）
-3. **DbServerStatsService** — アプリ側で SELECT して Xev に流す
-4. **WebSocket チャンネル + ChannelsService 登録** — 開発者ツールで購読確認
-5. **フロントウィジェット** — disk から先に実装（今回の主目的）、その後 cpu-mem / conn
-6. **動作確認** — `enableDbServerStats=true` で起動、ウィジェット追加して値が更新されることを確認
-7. **README 整備** — セットアップ手順を最終化
+2. **本体スクリプト**（§4.2）— `collect-stats.sh` / `purge-stats.sh` を書き、手動実行で INSERT が通ることを確認
+3. **セットアップツール**（§4.3）— systemd unit / crontab.example / README を整備（本体動作確認後でよい）
+4. **DbServerStatsService** — アプリ側で SELECT して Xev に流す
+5. **WebSocket チャンネル + ChannelsService 登録** — 開発者ツールで購読確認
+6. **フロントウィジェット** — disk から先に実装（今回の主目的）、その後 cpu-mem / conn
+7. **動作確認** — `enableDbServerStats=true` で起動、ウィジェット追加して値が更新されることを確認
 
 各ステップで commit を切る。
 
@@ -190,7 +209,7 @@ public enableDbServerStats: boolean;
 
 ## 6. セットアップ手順（README に書く想定の内容）
 
-DB サーバー側（postgres ユーザー想定）：
+DB サーバー側（postgres ユーザー想定）。本体スクリプト（§4.2）の配置までは共通で、定期実行の仕組みだけ A / B から選ぶ：
 
 ```sh
 # 1. テーブルは Misskey マイグレーションで自動作成される（アプリ側を先に起動）
@@ -200,13 +219,26 @@ psql -c "CREATE ROLE misskey_stats LOGIN PASSWORD '...';"
 psql -c "GRANT INSERT ON db_server_stats TO misskey_stats;"
 psql -c "GRANT pg_monitor TO misskey_stats;"  # pg_stat_activity 等の閲覧用
 
-# 3. スクリプト配置
-sudo cp scripts/db-server-stats/collect-stats.sh /usr/local/bin/
-sudo cp scripts/db-server-stats/systemd/* /etc/systemd/system/
-sudo systemctl enable --now misskey-db-stats.timer
+# 3. 本体スクリプトを配置（§4.2）
+sudo cp scripts/db-server-stats/bin/*.sh /usr/local/bin/
+```
 
-# 4. パージ cron 登録
+**オプション A：systemd timer で動かす**（30 秒間隔も可）
+
+```sh
+sudo cp scripts/db-server-stats/setup/systemd/* /etc/systemd/system/
+sudo systemctl enable --now misskey-db-stats.timer
+# パージは cron で（systemd timer をもう一本作っても可）
 echo "0 4 * * * /usr/local/bin/purge-stats.sh" | sudo crontab -u postgres -
+```
+
+**オプション B：crontab だけで完結させる**（最小粒度 1 分）
+
+```sh
+sudo crontab -u postgres -e
+# scripts/db-server-stats/setup/crontab.example の内容を貼り付け：
+# * * * * * /usr/local/bin/collect-stats.sh
+# 0 4 * * * /usr/local/bin/purge-stats.sh
 ```
 
 アプリ側：管理画面で「DB サーバー統計を有効化」を ON にして、ウィジェットを追加。
@@ -258,7 +290,9 @@ echo "0 4 * * * /usr/local/bin/purge-stats.sh" | sudo crontab -u postgres -
 - `packages/backend/src/daemons/DbServerStatsService.ts`
 - `packages/backend/src/server/api/stream/channels/db-server-stats.ts`
 - `packages/frontend/src/widgets/db-server-metric/`（5 ファイル）
-- `scripts/db-server-stats/`（collect, purge, systemd unit, README）
+- `scripts/db-server-stats/bin/`（**本体**：`collect-stats.sh` / `purge-stats.sh`）
+- `scripts/db-server-stats/setup/`（**セットアップツール**：systemd unit + timer / `crontab.example` / 任意で `install.sh`）
+- `scripts/db-server-stats/README.md`
 
 **変更ファイル**
 - `packages/backend/src/models/Meta.ts`
