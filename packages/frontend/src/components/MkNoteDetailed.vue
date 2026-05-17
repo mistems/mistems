@@ -632,6 +632,10 @@ function blur() {
 
 const repliesLoaded = ref(false);
 
+if(note.repliesCount > 0){
+	loadReplies()
+}
+
 function loadReplies() {
 	repliesLoaded.value = true;
 	misskeyApi('notes/children', {
