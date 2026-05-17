@@ -45,6 +45,9 @@ export type RolePolicies = {
 	canManageAvatarDecorations: boolean;
 	canSearchNotes: boolean;
 	canSearchUsers: boolean;
+	canUseTimemachine: boolean;
+	timemachineReachableFrom: number;
+	timemachineTravelableMaxDays: number;
 	canUseTranslator: boolean;
 	canHideAds: boolean;
 	canCreateChannel: boolean;
@@ -87,6 +90,9 @@ export const DEFAULT_POLICIES: RolePolicies = {
 	canManageAvatarDecorations: false,
 	canSearchNotes: false,
 	canSearchUsers: true,
+	canUseTimemachine: false,
+	timemachineReachableFrom: 0,
+	timemachineTravelableMaxDays: 0,
 	canUseTranslator: true,
 	canHideAds: false,
 	canCreateChannel: true,
@@ -410,6 +416,9 @@ export class RoleService implements OnApplicationShutdown, OnModuleInit {
 			canManageAvatarDecorations: calc('canManageAvatarDecorations', vs => vs.some(v => v === true)),
 			canSearchNotes: calc('canSearchNotes', vs => vs.some(v => v === true)),
 			canSearchUsers: calc('canSearchUsers', vs => vs.some(v => v === true)),
+			canUseTimemachine: calc('canUseTimemachine', vs => vs.some(v => v === true)),
+			timemachineReachableFrom: calc('timemachineReachableFrom', vs => Math.max(...vs)),
+			timemachineTravelableMaxDays: calc('timemachineTravelableMaxDays', vs => Math.max(...vs)),
 			canUseTranslator: calc('canUseTranslator', vs => vs.some(v => v === true)),
 			canHideAds: calc('canHideAds', vs => vs.some(v => v === true)),
 			canCreateChannel: calc('canCreateChannel', vs => vs.some(v => v === true)),
