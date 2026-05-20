@@ -15,13 +15,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 		>
 			<template #prefix><i class="ti ti-search"></i></template>
 		</MkInput>
-		<MkFoldableSection expanded>
-			<template #header>{{ i18n.ts.options }}</template>
+		<div >
+			<div >{{ i18n.ts.options }}</div>
 
 			<div class="_gaps_m">
 				<MkRadios
 					v-model="searchScope"
 					:options="searchScopeDef"
+				>
+				</MkRadios>
+
+				<MkRadios
+					v-model="searchFrom"
+					:options="searchFromDef"
 				>
 				</MkRadios>
 
@@ -85,31 +91,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 			</div>
-		</MkFoldableSection>
+		</div>
 		<div>
 			<MkButton
 				large
 				primary
 				gradate
 				rounded
-				:disabled="searchParams == null"
+				:disabled="
+				searchParams == null 
+				|| !(componentBlockSearchUntil  && now? componentBlockSearchUntil < now : true) // disableの条件なので逆をとる
+				"
 				style="margin: 0 auto;"
+				
 				@click="search"
 			>
 				{{ i18n.ts.search }}
+				 <MkTime v-if="componentBlockSearchUntil && now && componentBlockSearchUntil > now" :time="componentBlockSearchUntil" />
 			</MkButton>
+			
 		</div>
 	</div>
 
-	<MkFoldableSection v-if="paginator">
-		<template #header>{{ i18n.ts.searchResult }}</template>
+	<div v-if="paginator">
+		<div >{{ i18n.ts.searchResult }}</div>
 		<MkNotesTimeline :key="`searchNotes:${key}`" :paginator="paginator"/>
-	</MkFoldableSection>
+	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, markRaw, ref, shallowRef, toRef } from 'vue';
+import { computed, markRaw, ref, shallowRef, toRef} from 'vue';
 import { host as localHost } from '@@/js/config.js';
 import type * as Misskey from 'misskey-js';
 import { $i } from '@/i.js';
@@ -120,7 +132,6 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { apLookup } from '@/utility/lookup.js';
 import { useRouter } from '@/router.js';
 import MkButton from '@/components/MkButton.vue';
-import MkFoldableSection from '@/components/MkFoldableSection.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
 import MkRadios from '@/components/MkRadios.vue';
@@ -178,9 +189,8 @@ if (fetchedUser != null) {
 
 const searchScope = ref<'all' | 'local' | 'server' | 'user'>((() => {
 	if (user.value != null) return 'user';
-	if (noteSearchableScope === 'local') return 'local';
 	if (hostInput.value) return 'server';
-	return 'all';
+	return 'local';
 })());
 
 const searchScopeDef = computed<MkRadiosOption[]>(() => {
@@ -201,10 +211,18 @@ const searchScopeDef = computed<MkRadiosOption[]>(() => {
 	return options;
 });
 
+const searchFrom = ref<'text' | 'textWithCw'>('textWithCw');
+
+const searchFromDef: MkRadiosOption[] = [
+	{ value: 'text', label: '本文' },
+	{ value: 'textWithCw', label: '本文+CW' },
+];
+
 type SearchParams = {
 	readonly query: string;
 	readonly host?: string;
 	readonly userId?: string;
+	readonly searchFrom?: string;
 };
 
 const fixHostIfLocal = (target: string | null | undefined) => {
@@ -222,6 +240,7 @@ const searchParams = computed<SearchParams | null>(() => {
 			query: trimmedQuery,
 			host: fixHostIfLocal(user.value.host),
 			userId: user.value.id,
+			searchFrom: searchFrom.value,
 		};
 	}
 
@@ -236,6 +255,7 @@ const searchParams = computed<SearchParams | null>(() => {
 		return {
 			query: trimmedQuery,
 			host: fixHostIfLocal(trimmedHost),
+			searchFrom: searchFrom.value
 		};
 	}
 
@@ -243,11 +263,13 @@ const searchParams = computed<SearchParams | null>(() => {
 		return {
 			query: trimmedQuery,
 			host: '.',
+			searchFrom: searchFrom.value
 		};
 	}
 
 	return {
 		query: trimmedQuery,
+		searchFrom: searchFrom.value
 	};
 });
 
@@ -268,8 +290,27 @@ function removeUser() {
 	user.value = null;
 }
 
+const localBlockSearchUntil = localStorage.getItem('noteSearchedAt')
+const componentBlockSearchUntil =  ref(localBlockSearchUntil ? new Date(parseInt(localBlockSearchUntil)): null)
+const now = ref<Date | null >(new Date())
+
+
 async function search() {
 	if (searchParams.value == null) return;
+
+	// バブリング防止チェック
+	const noteSearchedAt = localStorage.getItem('noteSearchedAt');
+	const now = Date.now();
+	if (noteSearchedAt && now < parseInt(noteSearchedAt)) {
+		return;
+	}
+	localStorage.setItem('noteSearchedAt', now.toString());
+	componentBlockSearchUntil.value = new Date(now + 6 * 1000)
+	console.log(componentBlockSearchUntil.value)
+	setTimeout(() => {
+		localStorage.removeItem('noteSearchedAt')
+		componentBlockSearchUntil.value = null
+	}, 6 * 1000)
 
 	//#region AP lookup
 	if (searchParams.value.query.startsWith('https://') && !searchParams.value.query.includes(' ')) {
