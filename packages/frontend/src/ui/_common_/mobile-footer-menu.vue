@@ -32,9 +32,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</button>
 
-	<button :class="[$style.item, $style.post]" class="_button" @click="os.post()">
+	<button v-if="isChannel" :class="[$style.item, $style.post,$style.postButton, 'postButtonFloat']" class="_button" @click="os.post()">
 		<div :class="$style.itemInner">
-			<i :class="$style.itemIcon" class="ti ti-pencil"></i>
+			<i :class="$style.itemIcon" class="ti ti-device-tv"></i>
+		</div>
+	</button>
+	<button v-if="!isChannel || showLocalTimelinePostButtonInChannel" :class="[$style.item, $style.post, $style.postButton, isChannel ? $style.postButtonFloat : undefined ]" class="_button" @click="os.post({},{forceTimeline: true})">
+		<div :class="$style.itemInner">
+			<i :class="$style.navButtonIcon" class="ti ti-pencil"></i>
 		</div>
 	</button>
 </div>
@@ -46,11 +51,14 @@ import { $i } from '@/i.js';
 import * as os from '@/os.js';
 import { mainRouter } from '@/router.js';
 import { navbarItemDef } from '@/navbar.js';
+import { prefer } from '@/preferences.js';
 
 const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
 const widgetsShowing = defineModel<boolean>('widgetsShowing');
 
 const rootEl = useTemplateRef('rootEl');
+const isChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
+const showLocalTimelinePostButtonInChannel = computed(() => prefer.r.showLocalTimelinePostButtonInChannel.value);
 
 const menuIndicated = computed(() => {
 	for (const def in navbarItemDef) {
@@ -87,6 +95,13 @@ watch(rootEl, () => {
 	background: var(--MI_THEME-navBg);
 	color: var(--MI_THEME-navFg);
 	border-top: solid 0.5px var(--MI_THEME-divider);
+}
+
+.postButtonFloat {
+	position: absolute;
+	top: -40px;
+	width: 40px;
+	right: 16px;
 }
 
 .item {
