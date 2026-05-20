@@ -18,10 +18,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="$style.info">
 		<div v-if="mock">
-			<MkTime :time="note.createdAt" colored/>
+			<MkTime :time="note.createdAt" :mode="timeMode" colored/>
 		</div>
-		<MkA v-else :to="notePage(note)">
-			<MkTime :time="note.createdAt" colored/>
+		<MkA v-else :to="notePage(note)" @contextmenu="showTimeMenu">
+			<MkTime :time="note.createdAt" :mode="timeMode" colored/>
 		</MkA>
 		<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 			<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
@@ -35,18 +35,67 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject } from 'vue';
+import { inject, computed } from 'vue';
 import * as Misskey from 'misskey-js';
 import { i18n } from '@/i18n.js';
 import { notePage } from '@/filters/note.js';
 import { userPage } from '@/filters/user.js';
 import { DI } from '@/di.js';
+import * as os from '@/os.js';
+import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
+import { timemachineAvailable } from '@/utility/check-permissions.js';
+import { formatTimestamp } from '@/utility/timemachine-format.js';
 
-defineProps<{
+const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
-}>();
+	isRealtime?: boolean;
+}>(), {
+	isRealtime: false,
+});
 
 const mock = inject(DI.mock, false);
+const forceAbsoluteTime = inject<boolean>('forceAbsoluteTime', false);
+
+// リアルタイムノートの場合は常に相対時刻を使用
+const timeMode = computed(() => props.isRealtime ? 'relative' : (forceAbsoluteTime ? 'absolute' : 'relative'));
+
+function showTimeMenu(ev: MouseEvent) {
+	ev.preventDefault();
+	ev.stopPropagation();
+
+	// ノートの作成時刻に1分加算してタイムマシンへのジャンプ時刻を生成
+	const noteTimestamp = new Date(props.note.createdAt).getTime() + 60000;
+	const gotoParam = formatTimestamp(noteTimestamp, 'goto');
+
+	const menuItems = [];
+
+	if (timemachineAvailable) {
+		menuItems.push({
+			icon: 'ti ti-clock-bolt',
+			text: i18n.ts.jumpToTimemachine,
+			action: () => {
+				os.pageWindow(`/timemachine?goto=${gotoParam}`);
+			},
+		});
+	}
+
+	menuItems.push({
+		icon: 'ti ti-external-link',
+		text: i18n.ts.openInWindow,
+		action: () => {
+			os.pageWindow(notePage(props.note));
+		},
+	}, {
+		icon: 'ti ti-link',
+		text: i18n.ts.copyLink,
+		action: () => {
+			const url = `${location.protocol}//${location.host}${notePage(props.note)}`;
+			copyToClipboard(url);
+		},
+	});
+
+	os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
+}
 </script>
 
 <style lang="scss" module>
