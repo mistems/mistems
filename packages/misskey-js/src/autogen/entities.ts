@@ -147,6 +147,7 @@ export type AnnouncementsShowResponse = operations['announcements___show']['resp
 export type AntennasCreateRequest = operations['antennas___create']['requestBody']['content']['application/json'];
 export type AntennasCreateResponse = operations['antennas___create']['responses']['200']['content']['application/json'];
 export type AntennasDeleteRequest = operations['antennas___delete']['requestBody']['content']['application/json'];
+export type AntennasDeleteNoteRequest = operations['antennas___delete-note']['requestBody']['content']['application/json'];
 export type AntennasListResponse = operations['antennas___list']['responses']['200']['content']['application/json'];
 export type AntennasNotesRequest = operations['antennas___notes']['requestBody']['content']['application/json'];
 export type AntennasNotesResponse = operations['antennas___notes']['responses']['200']['content']['application/json'];

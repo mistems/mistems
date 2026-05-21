@@ -19,7 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, ref, useTemplateRef } from 'vue';
+import { computed, watch, ref, useTemplateRef, provide } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
 import * as os from '@/os.js';
@@ -44,6 +44,8 @@ function settings() {
 		},
 	});
 }
+
+provide('currentAntenna', antenna);
 
 watch(() => props.antennaId, async () => {
 	antenna.value = await misskeyApi('antennas/show', {

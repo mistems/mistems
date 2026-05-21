@@ -182,6 +182,7 @@ export function getNoteMenu(props: {
 	translation: Ref<Misskey.entities.NotesTranslateResponse | null>;
 	translating: Ref<boolean>;
 	currentClip?: Misskey.entities.Clip;
+	currentAntenna?: Misskey.entities.Antenna;
 }) {
 	const appearNote = getAppearNote(props.note) ?? props.note;
 	const link = appearNote.url ?? appearNote.uri;
@@ -260,6 +261,14 @@ export function getNoteMenu(props: {
 	async function unclip(): Promise<void> {
 		if (!props.currentClip) return;
 		os.apiWithDialog('clips/remove-note', { clipId: props.currentClip.id, noteId: appearNote.id });
+	}
+
+	async function removeNoteFromAntenna(): Promise<void> {
+		if (props.currentAntenna == null) return;
+		os.apiWithDialog('antennas/delete-note', {
+			antennaId: props.currentAntenna.id,
+			noteId: appearNote.id,
+		});
 	}
 
 	async function _promote(): Promise<void> {
@@ -346,6 +355,15 @@ export function getNoteMenu(props: {
 				text: i18n.ts.unclip,
 				danger: true,
 				action: unclip,
+			}, { type: 'divider' });
+		}
+
+		if (props.currentAntenna != null) {
+			menuItems.push({
+				icon: 'ti ti-backspace',
+				text: i18n.ts.removeNoteFromAntenna,
+				danger: true,
+				action: removeNoteFromAntenna,
 			}, { type: 'divider' });
 		}
 

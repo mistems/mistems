@@ -1592,6 +1592,7 @@ _preferencesBackup:
   autoPreferencesBackupIsNotEnabledForThisDevice: "このデバイスで設定の自動バックアップは有効になっていません。"
   backupFound: "設定のバックアップが見つかりました"
   forceBackup: "設定の強制バックアップ"
+removeNoteFromAntenna: "アンテナからノートを消す"
 
 _accountSettings:
   requireSigninToViewContents: "コンテンツの表示にログインを必須にする"

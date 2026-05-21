@@ -110,6 +110,10 @@ export class AntennaService implements OnApplicationShutdown {
 		redisPipeline.exec();
 	}
 
+	@bindThis async removeNoteFromAntenna(antena: MiAntenna, note: MiNote): Promise<void> {
+		this.fanoutTimelineService.remove(`antennaTimeline:${antena.id}`, note.id);
+	}
+
 	// NOTE: フォローしているユーザーのノート、リストのユーザーのノート、グループのユーザーのノート指定はパフォーマンス上の理由で無効になっている
 
 	@bindThis

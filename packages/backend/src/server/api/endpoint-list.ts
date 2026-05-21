@@ -117,6 +117,7 @@ export * as 'antennas/list' from './endpoints/antennas/list.js';
 export * as 'antennas/notes' from './endpoints/antennas/notes.js';
 export * as 'antennas/show' from './endpoints/antennas/show.js';
 export * as 'antennas/update' from './endpoints/antennas/update.js';
+export * as 'antennas/delete-note' from './endpoints/antennas/delete-note.js';
 export * as 'ap/get' from './endpoints/ap/get.js';
 export * as 'ap/show' from './endpoints/ap/show.js';
 export * as 'app/create' from './endpoints/app/create.js';
