@@ -189,9 +189,6 @@ git commit -a -m "メッセージ"
 【Git】同じコンフリクト解消を繰り返している人に教えたい「git rerere」 #初心者 - Qiita https://qiita.com/_ken_/items/64856e91e062b325590f
 
 ### 機能ブランチを最新に追従させる方法
-git mergeではなくgit rebaseを使わなかればならない
-（squashでのコンフリクト解決が困難になるはず）
-
-
-なにか書こうとしたけど忘れた気がする
+feature ブランチを rebase してコンフリクトを解除したのち、mainでsquashする
+featureブランチが複数のコミットからなっていて繰り返しコンフリクトする場合、コミットを1つに圧縮する
 
