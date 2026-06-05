@@ -27,7 +27,13 @@ if (providedAt > cachedAt) {
 
 // TODO: instanceをリアクティブにするかは再考の余地あり
 
-export const instance: Misskey.entities.MetaDetailed = reactive(cachedMeta ?? {});
+
+type HighlightPopularityThreshold = {
+	highlightMidPopularityThreshold: number;
+	highlightHighPopularityThreshold: number;
+}
+
+export const instance: Misskey.entities.MetaDetailed & HighlightPopularityThreshold = reactive(cachedMeta ?? {});
 
 export async function fetchInstance(force = false): Promise<Misskey.entities.MetaDetailed> {
 	if (!force) {
