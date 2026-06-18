@@ -16,6 +16,13 @@ import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
 
+type HighlightExtention = {
+	highlightRateFactor: number,
+	highlightMidPopularityThreshold: number,
+	highlightHighPopularityThreshold: number,
+	highlightExcludeEmojis: string
+}
+
 @Injectable()
 export class MetaEntityService {
 	constructor(
@@ -32,7 +39,7 @@ export class MetaEntityService {
 	) { }
 
 	@bindThis
-	public async pack(meta?: MiMeta): Promise<Packed<'MetaLite'>> {
+	public async pack(meta?: MiMeta): Promise<Packed<'MetaLite'> & HighlightExtention> {
 		let instance = meta;
 
 		if (!instance) {
@@ -65,7 +72,7 @@ export class MetaEntityService {
 			}
 		}
 
-		const packed: Packed<'MetaLite'> = {
+		const packed: Packed<'MetaLite'> & HighlightExtention = {
 			maintainerName: instance.maintainerName,
 			maintainerEmail: instance.maintainerEmail,
 
@@ -135,6 +142,11 @@ export class MetaEntityService {
 			noteSearchableScope: (this.config.fulltextSearch?.provider === 'meilisearch' && this.config.meilisearch?.scope === 'local') ? 'local' : 'global',
 			maxFileSize: this.config.maxFileSize,
 			federation: this.meta.federation,
+
+			highlightRateFactor: instance.highlightRateFactor,
+			highlightMidPopularityThreshold: instance.highlightMidPopularityThreshold,
+			highlightHighPopularityThreshold: instance.highlightHighPopularityThreshold,
+			highlightExcludeEmojis: instance.highlightExcludeEmojis,
 		};
 
 		return packed;
