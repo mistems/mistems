@@ -153,6 +153,14 @@ export interface Locale extends ILocale {
      */
     "logout": string;
     /**
+     * このアカウントからログアウト
+     */
+    "logoutFromThisAccount": string;
+    /**
+     * すべてのアカウントからログアウト
+     */
+    "logoutFromAll": string;
+    /**
      * 新規登録
      */
     "signup": string;
@@ -3992,6 +4000,10 @@ export interface Locale extends ILocale {
      * ログアウトするとクライアントの設定情報がブラウザから消去されます。再ログイン時に設定情報を復元できるようにするためには、設定の自動バックアップを有効にしてください。
      */
     "logoutWillClearClientData": string;
+    /**
+     * {username}からログアウトしますか？
+     */
+    "logoutFromOtherAccountConfirm": ParameterizedString<"username">;
     /**
      * 最終利用日時
      */
