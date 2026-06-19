@@ -143,12 +143,126 @@ function applyDrop(draggedItem: T, sourceGroup: string, targetItemId: T['id'], b
 	return true;
 }
 
+// ---------- auto-scroll ----------
+// Pointer Events では HTML5 D&D のネイティブオートスクロールが効かないため、
+// ポインタがスクロール可能な祖先要素の端に近いとき rAF ループで自動スクロールする。
+
+const AUTOSCROLL_EDGE_PX = 40;
+const AUTOSCROLL_MAX_SPEED_PX = 15;
+
+let autoScrollTarget: Element | null = null;
+let autoScrollRafId: number | null = null;
+let autoScrollSpeedX = 0;
+let autoScrollSpeedY = 0;
+let autoScrollStickyTopPx = 0;
+let autoScrollStickyBottomPx = 0;
+
+function findScrollableAncestor(el: Element): Element | null {
+	let current = el.parentElement;
+	while (current != null) {
+		if (current === window.document.documentElement || current === window.document.body) break;
+		const style = window.getComputedStyle(current);
+		const canScrollY = (style.overflowY === 'auto' || style.overflowY === 'scroll') && current.scrollHeight > current.clientHeight;
+		const canScrollX = (style.overflowX === 'auto' || style.overflowX === 'scroll') && current.scrollWidth > current.clientWidth;
+		if (canScrollY || canScrollX) return current;
+		current = current.parentElement;
+	}
+	const scrollEl = window.document.scrollingElement;
+	if (scrollEl != null && scrollEl.scrollHeight > scrollEl.clientHeight) return scrollEl;
+	return null;
+}
+
+// スクロールコンテナの端を覆う sticky/fixed 要素の厚みを検出する。
+// probeY 付近を elementFromPoint で探り、sticky/fixed な祖先があればその厚みを返す。
+function detectStickyOffset(target: Element, probeY: number, edge: 'top' | 'bottom'): number {
+	const rect = target.getBoundingClientRect();
+	const probeX = rect.left + rect.width / 2;
+	const clampedY = Math.max(0, Math.min(window.innerHeight - 1, probeY));
+	const hit = window.document.elementFromPoint(probeX, clampedY);
+	if (hit == null) return 0;
+
+	let el: Element | null = hit;
+	while (el != null && el !== target) {
+		const pos = window.getComputedStyle(el).position;
+		if (pos === 'sticky' || pos === 'fixed') {
+			const elRect = el.getBoundingClientRect();
+			return Math.max(0, edge === 'top'
+				? elRect.bottom - rect.top
+				: rect.bottom - elRect.top);
+		}
+		el = el.parentElement;
+	}
+	return 0;
+}
+
+function detectStickyOffsets(target: Element): { top: number; bottom: number } {
+	const rect = target.getBoundingClientRect();
+	return {
+		top: detectStickyOffset(target, Math.max(0, rect.top) + 2, 'top'),
+		bottom: detectStickyOffset(target, Math.min(window.innerHeight - 1, rect.bottom) - 2, 'bottom'),
+	};
+}
+
+function autoScrollTick() {
+	if (autoScrollTarget == null) return;
+	if (autoScrollSpeedX !== 0) autoScrollTarget.scrollLeft += autoScrollSpeedX;
+	if (autoScrollSpeedY !== 0) autoScrollTarget.scrollTop += autoScrollSpeedY;
+	autoScrollRafId = window.requestAnimationFrame(autoScrollTick);
+}
+
+function updateAutoScroll(clientX: number, clientY: number) {
+	if (autoScrollTarget == null) return;
+
+	const rect = (autoScrollTarget === window.document.scrollingElement || autoScrollTarget === window.document.documentElement)
+		? new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+		: autoScrollTarget.getBoundingClientRect();
+
+	autoScrollSpeedY = 0;
+	autoScrollSpeedX = 0;
+
+	const effectiveTop = rect.top + autoScrollStickyTopPx;
+	const effectiveBottom = rect.bottom - autoScrollStickyBottomPx;
+	const distTop = clientY - effectiveTop;
+	const distBottom = effectiveBottom - clientY;
+
+	if (distTop < AUTOSCROLL_EDGE_PX) {
+		autoScrollSpeedY = -AUTOSCROLL_MAX_SPEED_PX * Math.min(1, 1 - distTop / AUTOSCROLL_EDGE_PX);
+	} else if (distBottom < AUTOSCROLL_EDGE_PX) {
+		autoScrollSpeedY = AUTOSCROLL_MAX_SPEED_PX * Math.min(1, 1 - distBottom / AUTOSCROLL_EDGE_PX);
+	}
+
+	const distLeft = clientX - rect.left;
+	const distRight = rect.right - clientX;
+	if (distLeft < AUTOSCROLL_EDGE_PX) {
+		autoScrollSpeedX = -AUTOSCROLL_MAX_SPEED_PX * Math.min(1, 1 - distLeft / AUTOSCROLL_EDGE_PX);
+	} else if (distRight < AUTOSCROLL_EDGE_PX) {
+		autoScrollSpeedX = AUTOSCROLL_MAX_SPEED_PX * Math.min(1, 1 - distRight / AUTOSCROLL_EDGE_PX);
+	}
+
+	if ((autoScrollSpeedX !== 0 || autoScrollSpeedY !== 0) && autoScrollRafId == null) {
+		autoScrollRafId = window.requestAnimationFrame(autoScrollTick);
+	} else if (autoScrollSpeedX === 0 && autoScrollSpeedY === 0 && autoScrollRafId != null) {
+		stopAutoScroll();
+	}
+}
+
+function stopAutoScroll() {
+	if (autoScrollRafId != null) {
+		window.cancelAnimationFrame(autoScrollRafId);
+		autoScrollRafId = null;
+	}
+	autoScrollSpeedX = 0;
+	autoScrollSpeedY = 0;
+}
+
+function teardownAutoScroll() {
+	stopAutoScroll();
+	autoScrollTarget = null;
+	autoScrollStickyTopPx = 0;
+	autoScrollStickyBottomPx = 0;
+}
+
 // ---------- pointer events ----------
-// TODO: オートスクロール (別 PR)
-//   HTML5 D&D ではブラウザがネイティブにスクロールしていたが、Pointer Events 化で消失。
-//   onPointerMove 内でポインタ位置が最近接スクロール可能祖先の端 (EDGE_PX ≈ 40px) 以内かを
-//   判定し、rAF ループで scrollTop/scrollLeft を端距離に比例した速度で加算する。
-//   cleanup() でループ停止を保証すること。
 
 const LONG_PRESS_MS = 400;
 const MOVE_THRESHOLD_PX = 8;
@@ -173,6 +287,8 @@ const draggingItemForGhost = ref<T | null>(null);
 const ghostBaseStyle = ref<Record<string, string>>({});
 let removeSourceCallback: (() => void) | null = null;
 let lastReorderTime = 0;
+
+// --- /DEBUG ---
 
 function noop() {}
 
@@ -213,6 +329,7 @@ function cleanup() {
 	detachPointerListeners();
 	releaseCapture();
 	clearLongPress();
+	teardownAutoScroll();
 	const wasTouch = pending?.pointerType === 'touch';
 	dragActive = false;
 	dragSession = null;
@@ -349,6 +466,12 @@ function startDrag() {
 		emit('update:modelValue', newValue);
 	};
 
+	autoScrollTarget = findScrollableAncestor(pending.captureTarget);
+	if (autoScrollTarget != null) {
+		const offsets = detectStickyOffsets(autoScrollTarget);
+		autoScrollStickyTopPx = offsets.top;
+		autoScrollStickyBottomPx = offsets.bottom;
+	}
 	if (pending.pointerType === 'touch' && 'vibrate' in navigator) {
 		try {
 			navigator.vibrate(30);
@@ -423,10 +546,49 @@ function onPointerMove(ev: PointerEvent) {
 		ghostRef.value.style.transform = `translate(${dx}px, ${dy}px)`;
 	}
 
+	updateAutoScroll(ev.clientX, ev.clientY);
+
 	// elementFromPoint で実際のドロップターゲットを判定 (ghostは一時的に隠す)
+	const ghostRect = ghostRef.value?.getBoundingClientRect() ?? null;
 	const prevDisplay = ghostRef.value?.style.display ?? '';
 	if (ghostRef.value != null) ghostRef.value.style.display = 'none';
-	const el = window.document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+
+	// ポインタ位置で検索し、自アイテムにヒットした場合はゴーストの進行方向端でも検索する。
+	// ゴースト端が隣のアイテムに到達していればそちらをターゲットにする。
+	let el = window.document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+	if (el != null && dragSession != null) {
+		// area だけでなく item ルート内のコンテンツ（ボタン等）にヒットした場合も self と判定する
+		const hitItemRoot = el.closest<HTMLElement>(`[data-mk-draggable-item-root="${CSS.escape(dragSession.item.id)}"]`);
+		if (hitItemRoot != null) {
+			if (ghostRect != null) {
+				const edgeX = props.direction === 'horizontal'
+					? (ev.clientX > pending.x ? ghostRect.right : ghostRect.left)
+					: ev.clientX;
+				const edgeY = props.direction === 'vertical'
+					? (ev.clientY > pending.y ? ghostRect.bottom : ghostRect.top)
+					: ev.clientY;
+				const edgeEl = window.document.elementFromPoint(edgeX, edgeY) as HTMLElement | null;
+				if (edgeEl != null) {
+					// area でなくコンテンツにヒットしても、別アイテムの item-root 内なら有効
+					const edgeItemRoot = edgeEl.closest<HTMLElement>('[data-mk-draggable-item-root]');
+					if (edgeItemRoot != null && edgeItemRoot.dataset.mkDraggableItemRoot !== dragSession.item.id) {
+						// 対象アイテムの進行方向側 area を直接取得する
+						const targetArea = props.direction === 'vertical'
+							? (ev.clientY > pending.y
+								? edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="forward"]')
+								: edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="backward"]'))
+							: (ev.clientX > pending.x
+								? edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="forward"]')
+								: edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="backward"]'));
+						if (targetArea != null) {
+							el = targetArea;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if (ghostRef.value != null) ghostRef.value.style.display = prevDisplay;
 
 	if (el == null) {
@@ -448,16 +610,23 @@ function onPointerMove(ev: PointerEvent) {
 					if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
 						const targetRoot = areaEl.closest<HTMLElement>('[data-mk-draggable-item-root]');
 						let shouldSwap = true;
-						if (targetRoot != null) {
+						if (targetRoot != null && ghostRect != null) {
 							const targetRect = targetRoot.getBoundingClientRect();
+							const OVERLAP_RATIO = 0.3;
+							let overlap: number;
+							let threshold: number;
 							if (props.direction === 'horizontal') {
-								const center = targetRect.left + targetRect.width / 2;
-								if (fromIndex < toIndex && ev.clientX < center) shouldSwap = false;
-								if (fromIndex > toIndex && ev.clientX > center) shouldSwap = false;
+								threshold = Math.min(ghostRect.width, targetRect.width) * OVERLAP_RATIO;
+								overlap = fromIndex < toIndex
+									? ghostRect.right - targetRect.left
+									: targetRect.right - ghostRect.left;
+								if (overlap < threshold) shouldSwap = false;
 							} else {
-								const center = targetRect.top + targetRect.height / 2;
-								if (fromIndex < toIndex && ev.clientY < center) shouldSwap = false;
-								if (fromIndex > toIndex && ev.clientY > center) shouldSwap = false;
+								threshold = Math.min(ghostRect.height, targetRect.height) * OVERLAP_RATIO;
+								overlap = fromIndex < toIndex
+									? ghostRect.bottom - targetRect.top
+									: targetRect.bottom - ghostRect.top;
+								if (overlap < threshold) shouldSwap = false;
 							}
 						}
 						if (shouldSwap && performance.now() - lastReorderTime > REORDER_COOLDOWN_MS) {
