@@ -6905,6 +6905,10 @@ export interface Locale extends ILocale {
          */
         "fanoutTimelineDescription": string;
         /**
+         * 切り替えを適用中です。完了するまでこのトグルは操作できません。適用中、タイムラインは一時的にデータベースから取得されます。
+         */
+        "fanoutTimelineTransitionInProgress": string;
+        /**
          * データベースへのフォールバック
          */
         "fanoutTimelineDbFallback": string;
