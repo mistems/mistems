@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 
-import { onMounted, ref } from 'vue';
+import { inject, onMounted, ref, type Ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import XContainer from '../page-editor.container.vue';
 import MkDriveFileThumbnail from '@/components/MkDriveFileThumbnail.vue';
@@ -39,11 +39,20 @@ const emit = defineEmits<{
 	(ev: 'remove'): void;
 }>();
 
+const pageEditorFiles = inject<Ref<Record<string, Misskey.entities.DriveFile>>>('pageEditorFiles');
+
 const file = ref<Misskey.entities.DriveFile | null>(null);
+
+function registerFile(driveFile: Misskey.entities.DriveFile) {
+	if (pageEditorFiles) {
+		pageEditorFiles.value[driveFile.id] = driveFile;
+	}
+}
 
 async function choose() {
 	chooseDriveFile({ multiple: false }).then((fileResponse) => {
 		file.value = fileResponse[0];
+		registerFile(file.value);
 		emit('update:modelValue', {
 			...props.modelValue,
 			fileId: file.value.id,
@@ -55,11 +64,17 @@ onMounted(async () => {
 	if (props.modelValue.fileId == null) {
 		await choose();
 	} else {
-		misskeyApi('drive/files/show', {
-			fileId: props.modelValue.fileId,
-		}).then(fileResponse => {
-			file.value = fileResponse;
-		});
+		const cached = pageEditorFiles?.value[props.modelValue.fileId];
+		if (cached) {
+			file.value = cached;
+		} else {
+			misskeyApi('drive/files/show', {
+				fileId: props.modelValue.fileId,
+			}).then(fileResponse => {
+				file.value = fileResponse;
+				registerFile(fileResponse);
+			});
+		}
 	}
 });
 </script>
