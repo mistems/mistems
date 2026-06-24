@@ -34,6 +34,7 @@ import { pleaseLogin } from '@/utility/please-login.js';
 import { showMovedDialog } from '@/utility/show-moved-dialog.js';
 import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 import { focusParent } from '@/utility/focus.js';
+import { mainRouter } from '@/router.js';
 
 export const openingWindowsCount = ref(0);
 
@@ -678,7 +679,10 @@ export function contextMenu(items: MenuItem[], ev: PointerEvent): Promise<void> 
 	}));
 }
 
-export async function post(props: PostFormProps = {}): Promise<void> {
+type PostFormOption = {
+	forceTimeline: boolean
+};
+export async function post(props: PostFormProps = {}, options?: PostFormOption): Promise<void> {
 	const isLoggedIn = await pleaseLogin({
 		openOnRemote: (props.initialText || props.initialNote ? {
 			type: 'share',
@@ -692,13 +696,30 @@ export async function post(props: PostFormProps = {}): Promise<void> {
 	if (!isLoggedIn) return;
 
 	showMovedDialog();
-	return new Promise(resolve => {
-		// NOTE: MkPostFormDialogをdynamic importするとiOSでテキストエリアに自動フォーカスできない
-		// NOTE: ただ、dynamic importしない場合、MkPostFormDialogインスタンスが使いまわされ、
-		//       Vueが渡されたコンポーネントに内部的に__propsというプロパティを生やす影響で、
-		//       複数のpost formを開いたときに場合によってはエラーになる
-		//       もちろん複数のpost formを開けること自体Misskeyサイドのバグなのだが
-		const { dispose } = popup(MkPostFormDialog, props, {
+
+	// URLがチャンネルなら宛先をチャンネルへ
+	// TODO: DMのときとか困るかも
+	const channelId = mainRouter.current.props.get('channelId');
+	let postProps = { ...props };
+	if (!options?.forceTimeline && mainRouter.current.route.name === 'channel') {
+		await misskeyApi('channels/show', {
+			channelId: channelId,
+		}).then(channel => {
+			postProps = {
+				...postProps,
+				// 本当はチャンネル名や色もほしいけどどっからとってこよう
+				channel,
+			};
+		});
+	}
+
+	// NOTE: MkPostFormDialogをdynamic importするとiOSでテキストエリアに自動フォーカスできない
+	// NOTE: ただ、dynamic importしない場合、MkPostFormDialogインスタンスが使いまわされ、
+	//       Vueが渡されたコンポーネントに内部的に__propsというプロパティを生やす影響で、
+	//       複数のpost formを開いたときに場合によってはエラーになる
+	//       もちろん複数のpost formを開けること自体Misskeyサイドのバグなのだが
+	return new Promise<void>((resolve) => {
+		const { dispose } = popup(MkPostFormDialog, postProps, {
 			closed: () => {
 				resolve();
 				dispose();

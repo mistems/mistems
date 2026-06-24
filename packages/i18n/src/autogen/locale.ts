@@ -2013,6 +2013,14 @@ export interface Locale extends ILocale {
      */
     "attachAsFileQuestion": string;
     /**
+     * テキストファイルとして添付
+     */
+    "attachAsFileOk": string;
+    /**
+     * そのまま貼り付ける
+     */
+    "attachAsFileCancel": string;
+    /**
      * メッセージに添付できるファイルはひとつです
      */
     "onlyOneFileCanBeAttached": string;
@@ -2344,6 +2352,14 @@ export interface Locale extends ILocale {
      * タイムライン上部に投稿フォームを表示する(チャンネル)
      */
     "showFixedPostFormInChannel": string;
+    /**
+     * チャンネルページでローカルタイムラインへの投稿ボタンを表示する
+     */
+    "showLocalTimelinePostButtonInChannel": string;
+    /**
+     * オフの場合、チャンネルページではチャンネル投稿ボタンのみを表示します。
+     */
+    "showLocalTimelinePostButtonInChannelDescription": string;
     /**
      * フォローする際、デフォルトで返信をTLに含むようにする
      */
@@ -10236,6 +10252,18 @@ export interface Locale extends ILocale {
          * 指定したユーザーのみに公開
          */
         "specifiedDescription": string;
+        /**
+         * チャンネル
+         */
+        "channel": string;
+        /**
+         * 選択したチャンネルに公開
+         */
+        "channelDescription": string;
+        /**
+         * 選択中:{name}
+         */
+        "channelSelected": ParameterizedString<"name">;
         /**
          * 連合なし
          */
