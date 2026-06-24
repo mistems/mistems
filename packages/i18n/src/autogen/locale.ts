@@ -12570,6 +12570,10 @@ export interface Locale extends ILocale {
          */
         "searchScopeUser": string;
         /**
+         * チャンネル指定
+         */
+        "searchScopeChannel": string;
+        /**
          * サーバーのホストを入力してください
          */
         "pleaseEnterServerHost": string;
@@ -12578,15 +12582,23 @@ export interface Locale extends ILocale {
          */
         "pleaseSelectUser": string;
         /**
+         * チャンネルを選択してください
+         */
+        "pleaseSelectChannel": string;
+        /**
+         * お気に入りに登録したチャンネルがありません
+         */
+        "noFavoritedChannels": string;
+        /**
          * 例: misskey.example.com
          */
         "serverHostPlaceholder": string;
         /**
-         * 投稿日時from
+         * この時刻から
          */
         "postFrom": string;
         /**
-         * 投稿日時to
+         * この時刻まで
          */
         "postTo": string;
     };
