@@ -9503,6 +9503,7 @@ export interface operations {
                         manifestJsonOverride: string;
                         policies: Record<string, never>;
                         enableFanoutTimeline: boolean;
+                        fanoutTimelineActive: boolean;
                         enableFanoutTimelineDbFallback: boolean;
                         perLocalUserUserTimelineCacheMax: number;
                         perRemoteUserUserTimelineCacheMax: number;
@@ -9561,6 +9562,10 @@ export interface operations {
                         remoteNotesCleaningExpiryDaysForEachNotes: number;
                         remoteNotesCleaningMaxProcessingDurationInMinutes: number;
                         showRoleBadgesOfRemoteUsers: boolean;
+                        highlightRateFactor: number;
+                        highlightMidPopularityThreshold: number;
+                        highlightHighPopularityThreashold: number;
+                        highlightExcludeEmojis: string;
                     };
                 };
             };
@@ -13013,6 +13018,10 @@ export interface operations {
                     remoteNotesCleaningExpiryDaysForEachNotes?: number;
                     remoteNotesCleaningMaxProcessingDurationInMinutes?: number;
                     showRoleBadgesOfRemoteUsers?: boolean;
+                    highlightRateFactor?: number;
+                    highlightMidPopularityThreshold?: number;
+                    highlightHighPopularityThreashold?: number;
+                    highlightExcludeEmojis?: string;
                 };
             };
         };
@@ -20865,7 +20874,7 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
-                        emojis: components['schemas']['EmojiSimple'][];
+                        emojis: components['schemas']['EmojiDetailed'][];
                     };
                 };
             };
