@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<MkError v-else-if="paginator.error.value" @retry="paginator.init()"/>
 
-			<div v-else-if="paginator.items.value.length === 0" key="_empty_">
+			<div v-else-if="displayItems.length === 0" key="_empty_">
 				<slot name="empty"><MkResult type="empty"/></slot>
 			</div>
 
@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</MkButton>
 					<MkLoading v-else/>
 				</div>
-				<slot :items="getValue(paginator.items)" :fetching="paginator.fetching.value || paginator.fetchingOlder.value"></slot>
+				<slot :items="displayItems" :fetching="paginator.fetching.value || paginator.fetchingOlder.value"></slot>
 				<div v-if="direction === 'down' || direction === 'both'" v-show="downButtonVisible">
 					<MkButton v-if="!downButtonLoading" v-appear="shouldEnableInfiniteScroll ? downButtonClick : null" :class="$style.more" primary rounded @click="downButtonClick">
 						{{ i18n.ts.loadMore }}
@@ -64,7 +64,7 @@ export type MkPaginationOptions = {
 
 <script lang="ts" setup generic="T extends IPaginator">
 import { isLink } from '@@/js/is-link.js';
-import { onMounted, computed, watch, unref } from 'vue';
+import { onMounted, computed, watch, unref, nextTick } from 'vue';
 import type { UnwrapRef } from 'vue';
 import type { IPaginator } from '@/utility/paginator.js';
 import MkButton from '@/components/MkButton.vue';
@@ -74,8 +74,27 @@ import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import MkPaginationControl from '@/components/MkPaginationControl.vue';
 import * as os from '@/os.js';
 
+// スクロールコンテナを見つける関数
+function getScrollContainer(el: Element | null): Element | null {
+	if (!el) return null;
+
+	let current: Element | null = el;
+	while (current && current !== document.body && current !== document.documentElement) {
+		const style = window.getComputedStyle(current);
+		if (style.overflowY === 'scroll' || style.overflowY === 'auto') {
+			return current;
+		}
+		current = current.parentElement;
+	}
+
+	// フォールバック: document.documentElementを返す
+	return document.documentElement;
+}
+
 const props = withDefaults(defineProps<MkPaginationOptions & {
 	paginator: T;
+	// 外部から表示アイテムを指定可能（タイムマシン機能など用）
+	customItems?: UnwrapRef<T['items']>;
 }>(), {
 	autoLoad: true,
 	direction: 'down',
@@ -86,6 +105,14 @@ const props = withDefaults(defineProps<MkPaginationOptions & {
 
 const shouldEnableInfiniteScroll = computed(() => {
 	return prefer.r.enableInfiniteScroll.value && !props.forceDisableInfiniteScroll;
+});
+
+// 表示に使うアイテムを決定（customItemsが指定されていればそれを使用）
+const displayItems = computed(() => {
+	if (props.customItems !== undefined) {
+		return props.customItems;
+	}
+	return getValue(props.paginator.items);
 });
 
 function onContextmenu(ev: PointerEvent) {
@@ -118,6 +145,51 @@ if (props.paginator.computedParams) {
 	}, { immediate: false, deep: true });
 }
 
+// スクロール位置を復元しながらデータを取得する共通関数
+async function fetchWithScrollRestore(fetchFn: () => Promise<void>): Promise<void> {
+	// スクロール位置復元の準備
+	let anchorElement: Element | null = null;
+	let anchorOffsetTop = 0;
+
+	// 現在可視範囲にある最初のアンカー要素を記録
+	const scrollContainer = getScrollContainer(document.activeElement ?? document.body);
+	if (scrollContainer) {
+		const anchors = Array.from(document.querySelectorAll('[data-scroll-anchor]'));
+		const scrollerRect = scrollContainer.getBoundingClientRect();
+
+		for (const anchor of anchors) {
+			const rect = anchor.getBoundingClientRect();
+			// 可視範囲内にあるか確認
+			if (rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom) {
+				anchorElement = anchor;
+				anchorOffsetTop = anchor.getBoundingClientRect().top - scrollerRect.top;
+				break;
+			}
+		}
+	}
+
+	// データ取得
+	await fetchFn();
+
+	// DOM更新を待つ
+	await nextTick();
+
+	// スクロール位置を復元
+	if (anchorElement && scrollContainer) {
+		const anchorId = anchorElement.getAttribute('data-scroll-anchor');
+
+		// 同じIDのアンカー要素を再度探す
+		const newAnchor = document.querySelector(`[data-scroll-anchor="${anchorId}"]`);
+		if (newAnchor) {
+			const scrollerRect = scrollContainer.getBoundingClientRect();
+			const newAnchorTop = newAnchor.getBoundingClientRect().top;
+			const targetScrollTop = scrollContainer.scrollTop + (newAnchorTop - scrollerRect.top - anchorOffsetTop);
+
+			scrollContainer.scrollTop = targetScrollTop;
+		}
+	}
+}
+
 const upButtonVisible = computed(() => {
 	return props.paginator.order.value === 'oldest' ? props.paginator.canFetchOlder.value : props.paginator.canFetchNewer.value;
 });
@@ -125,12 +197,12 @@ const upButtonLoading = computed(() => {
 	return props.paginator.order.value === 'oldest' ? props.paginator.fetchingOlder.value : props.paginator.fetchingNewer.value;
 });
 
-function upButtonClick() {
-	if (props.paginator.order.value === 'oldest') {
-		props.paginator.fetchOlder();
-	} else {
-		props.paginator.fetchNewer();
-	}
+async function upButtonClick() {
+	await fetchWithScrollRestore(() =>
+		props.paginator.order.value === 'oldest'
+			? props.paginator.fetchOlder()
+			: props.paginator.fetchNewer()
+	);
 }
 
 const downButtonVisible = computed(() => {
@@ -140,12 +212,12 @@ const downButtonLoading = computed(() => {
 	return props.paginator.order.value === 'oldest' ? props.paginator.fetchingNewer.value : props.paginator.fetchingOlder.value;
 });
 
-function downButtonClick() {
-	if (props.paginator.order.value === 'oldest') {
-		props.paginator.fetchNewer();
-	} else {
-		props.paginator.fetchOlder();
-	}
+async function downButtonClick() {
+	await fetchWithScrollRestore(() =>
+		props.paginator.order.value === 'oldest'
+			? props.paginator.fetchNewer()
+			: props.paginator.fetchOlder()
+	);
 }
 
 defineSlots<{

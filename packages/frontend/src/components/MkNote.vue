@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	v-if="!hardMuted && !hideByPlugin && muted === false"
 	ref="rootEl"
 	v-hotkey="keymap"
-	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: prefer.s.skipNoteRender }]"
+	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: !props.disableSkipRender && prefer.s.skipNoteRender }]"
 	tabindex="0"
 >
 	<MkNoteSub v-if="appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
@@ -42,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.renoteInfo">
 			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
 				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
-				<MkTime :time="note.createdAt"/>
+				<MkTime :time="note.createdAt" :mode="forceAbsoluteTime ? 'absolute' : 'relative'"/>
 			</button>
 			<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 				<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
@@ -79,7 +79,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 		<div :class="$style.main">
-			<MkNoteHeader :note="appearNote" :mini="true"/>
+			<MkNoteHeader :note="appearNote" :mini="true" :isRealtime="isRealtimeNote"/>
 			<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 			<div style="container-type: inline-size;">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
@@ -94,7 +94,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkCwButton v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll" style="margin: 4px 0;"/>
 				</p>
 				<div v-show="appearNote.cw == null || showContent" :class="[{ [$style.contentCollapsed]: collapsed }]">
-					<div :class="$style.text">
+					<div :class="[$style.text, {[$style.akafav]:(featured && prefer.r.enableFavstar.value && note.reactionCount >= highlightPopularityThreshold.highPopularity ), [$style.aofav]: featured && prefer.r.enableFavstar.value && note.reactionCount >= highlightPopularityThreshold.midPopularity && note.reactionCount < highlightPopularityThreshold.highPopularity }]" :style="favstarColorVars">
 						<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 						<MkA v-if="appearNote.replyId" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 						<Mfm
@@ -271,17 +271,24 @@ import { isEnabledUrlPreview } from '@/utility/url-preview.js';
 import { focusPrev, focusNext } from '@/utility/focus.js';
 import { getAppearNote } from '@/utility/get-appear-note.js';
 import { prefer } from '@/preferences.js';
+import { store } from '@/store.js';
 import { getPluginHandlers } from '@/plugin.js';
 import { DI } from '@/di.js';
 import { globalEvents } from '@/events.js';
+import { isFusionNote } from '@/utility/timeshiftPaginator.js';
+import { instance } from '@/instance.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
 	pinned?: boolean;
 	mock?: boolean;
 	withHardMute?: boolean;
+	disableSkipRender?: boolean;
+	featured?: boolean;
 }>(), {
 	mock: false,
+	disableSkipRender: false,
+	featured: false,
 });
 
 provide(DI.mock, props.mock);
@@ -294,11 +301,26 @@ const emit = defineEmits<{
 const inTimeline = inject<boolean>('inTimeline', false);
 const tl_withSensitive = inject<Ref<boolean>>('tl_withSensitive', ref(true));
 const inChannel = inject(DI.inChannel, null);
+const forceAbsoluteTime = inject<boolean>('forceAbsoluteTime', false);
 const currentClip = inject<Ref<Misskey.entities.Clip> | null>('currentClip', null);
 const currentAntenna = inject<Ref<Misskey.entities.Antenna | null> | null>('currentAntenna', null);
 
 let note = deepClone(props.note);
 
+const highlightPopularityThreshold = computed(() => {
+	return {
+		highPopularity: instance.highlightHighPopularityThreshold,
+		midPopularity: instance.highlightMidPopularityThreshold,
+	};
+});
+
+const favstarColorVars = computed(() => {
+	if (!props.featured || !prefer.r.enableFavstar.value) return undefined;
+	return {
+		'--MI-favstarAka': store.r.darkMode.value ? prefer.r.favstarDarkAka.value : prefer.r.favstarLightAka.value,
+		'--MI-favstarAo': store.r.darkMode.value ? prefer.r.favstarDarkAo.value : prefer.r.favstarLightAo.value,
+	};
+});
 // plugin
 const noteViewInterruptors = getPluginHandlers('note_view_interruptor');
 const hideByPlugin = ref(false);
@@ -324,6 +346,11 @@ const { $note: $appearNote, subscribe: subscribeManuallyToNoteCapture } = useNot
 	note: appearNote,
 	parentNote: note,
 	mock: props.mock,
+});
+
+// リアルタイムノートかどうかをチェック（型安全）
+const isRealtimeNote = computed(() => {
+	return isFusionNote(appearNote) && appearNote._isRealtime === true;
 });
 
 const rootEl = useTemplateRef('rootEl');
@@ -757,6 +784,15 @@ function emitUpdReaction(emoji: string, delta: number) {
 	overflow: clip;
 	contain: content;
 
+	.akafav {
+		font-size: 2rem;
+		color: var(--MI-favstarAka, #f7796c);
+	}
+	.aofav {
+		font-size: 1.5rem;
+		color: var(--MI-favstarAo, #44a4c1);
+	}
+
 	&:focus-visible {
 		outline: none;
 
@@ -1048,7 +1084,7 @@ function emitUpdReaction(emoji: string, delta: number) {
 	padding: 8px 0;
 }
 
-.quoteNote {
+.root .quoteNote, .quoteNote {
 	padding: 16px;
 	border: dashed 1px var(--MI_THEME-renote);
 	border-radius: 8px;
