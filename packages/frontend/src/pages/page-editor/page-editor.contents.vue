@@ -4,25 +4,36 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="$style.editorWithPreview">
-	<div :class="$style.editorColumn">
-		<XBlocks v-model="content"/>
-		<MkButton v-if="!readonly" rounded :class="$style.addButton" @click="add()"><i class="ti ti-plus"></i></MkButton>
+<div ref="rootEl">
+	<div v-if="narrow" :class="$style.viewTabs">
+		<button class="_button" :class="[$style.viewTab, { [$style.viewTabActive]: contentsView === 'editor' }]" @click="contentsView = 'editor'">
+			<i class="ti ti-pencil"></i> {{ i18n.ts.edit }}
+		</button>
+		<button class="_button" :class="[$style.viewTab, { [$style.viewTabActive]: contentsView === 'preview' }]" @click="contentsView = 'preview'">
+			<i class="ti ti-eye"></i> {{ i18n.ts.preview }}
+		</button>
 	</div>
 
-	<div :class="$style.previewColumn">
-		<div :class="$style.previewHeader">
-			<i class="ti ti-eye"></i> {{ i18n.ts.preview }}
+	<div :class="$style.editorWithPreview">
+		<div v-show="!narrow || contentsView === 'editor'" :class="$style.editorColumn">
+			<XBlocks v-model="content"/>
+			<MkButton v-if="!readonly" rounded :class="$style.addButton" @click="add()"><i class="ti ti-plus"></i></MkButton>
 		</div>
-		<div :class="$style.previewBody">
-			<XPage :page="previewPage"/>
+
+		<div v-show="!narrow || contentsView === 'preview'" :class="$style.previewColumn">
+			<div v-if="!narrow" :class="$style.previewHeader">
+				<i class="ti ti-eye"></i> {{ i18n.ts.preview }}
+			</div>
+			<div :class="$style.previewBody">
+				<XPage :page="previewPage"/>
+			</div>
 		</div>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { inject } from 'vue';
+import { inject, onMounted, onUnmounted, ref, useTemplateRef } from 'vue';
 import XBlocks from './page-editor.blocks.vue';
 import XPage from '@/components/page/page.vue';
 import { genId } from '@/utility/id.js';
@@ -36,6 +47,24 @@ const {
 	content,
 	previewPage,
 } = inject(pageEditorInjectionKey)!;
+
+const NARROW_THRESHOLD = 850;
+const rootEl = useTemplateRef('rootEl');
+const narrow = ref(false);
+const contentsView = ref<'editor' | 'preview'>('editor');
+
+const ro = new ResizeObserver((entries) => {
+	if (entries.length === 0) return;
+	narrow.value = entries[0].borderBoxSize[0].inlineSize < NARROW_THRESHOLD;
+});
+
+onMounted(() => {
+	if (rootEl.value) ro.observe(rootEl.value);
+});
+
+onUnmounted(() => {
+	ro.disconnect();
+});
 
 async function add() {
 	const { canceled, result: type } = await os.select({
@@ -59,14 +88,34 @@ async function add() {
 </script>
 
 <style lang="scss" module>
+.viewTabs {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.viewTab {
+	flex: 1;
+	padding: 10px;
+	text-align: center;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-panel);
+	font-weight: 600;
+
+	> i {
+		margin-right: 4px;
+	}
+}
+
+.viewTabActive {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+}
+
 .editorWithPreview {
 	display: flex;
 	gap: 16px;
 	align-items: flex-start;
-
-	@media (max-width: 850px) {
-		flex-direction: column;
-	}
 }
 
 .editorColumn {
@@ -85,10 +134,6 @@ async function add() {
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	overflow: hidden;
-
-	@media (max-width: 850px) {
-		width: 100%;
-	}
 }
 
 .previewHeader {
