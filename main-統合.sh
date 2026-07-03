@@ -32,6 +32,10 @@ git switch mistems-main
 git reset origin/develop --hard
 
 
+squash_merge riin/add-claude-github-actions-1762310148415
+git commit -a -m "Add Claude Code GitHub Workflow(Issue, PRでClaudeが反応), mistems skill"
+
+
 squash_merge riin/channelIndex
 git commit -a -m "チャンネルだいたいぜんぶみる" # フォローとお気に入りの説明を統合
 
@@ -58,6 +62,10 @@ git commit -a -m "ハッシュタグでミュートできるようにする"
 # 検索を本文のみと 本文+CWにできるように
 squash_merge riin/search-enhance
 git commit -a -m "ノート検索の強化"
+
+squash_merge riin/index-optimize
+git commit -a -m "ノート検索のインデックス大改造"
+
 
 squash_merge riin/MkNoteDetailed-loadReplies
 git commit -a -m "MkNoteDetailedで返信を読み込む"
@@ -86,14 +94,12 @@ git commit -a -m "MkPagesエディター拡張/ドラッグアンドドロップ
 # --------------------------------------
 
 
-squash_merge riin/add-claude-github-actions-1762310148415
-git commit -a -m "Add Claude Code GitHub Workflow(Issue, PRでClaudeが反応), mistems skill"
-
 
 squash_merge riin/fix/fanout-timeline
 git commit -a -m "FTTLの歯抜けバグ修正"
 
 
+# riin/favstar (favstar-rebased を採用・リネーム済) + riin/timemachine
 squash_merge riin/release/FavstarAndTimemachine
 git commit -a -m "タイムマシンとふぁぼった"
 
@@ -161,7 +167,7 @@ git commit -a -m "fix(frontend): ドライブの選択状態持ち越しバグ�
 # pnpm run build-misskey-js-with-types
 # git commit -a -m "mistems-main.build-misskey-js-with-types 再生成"
 
-set MISVER 96
+set MISVER 97
 set file_path "package.json"
 # JSONからversionを取得 -MISTEMS.XX を追加した新しいバージョンを作成
 set current_version (jq -r '.version' $file_path)
@@ -170,6 +176,9 @@ set new_version "$current_version-MISTEMS.$MISVER"
 # package.jsonのversionを新しいものに書き換え
 jq --arg new_version "$new_version" '.version = $new_version' $file_path > tmp.json && mv tmp.json $file_path
 npx prettier -w $file_path
+
+# mistems-readme ブランチから README.md をコピー
+git show riin/mistems-readme:README.md > README.md
 
 echo "Version updated to: $new_version"
 git commit -a -m "Version updated to: $new_version"
@@ -181,13 +190,23 @@ git tag -a "$new_version" -m "MISTEMS.$MISVER"
 # 本家の方に入ったのでもう不要
 # --------
 
+# CHANGELOG 97
+# - 検索のINDEX最適化
+# - ドラッグアンドドロップでウィジェットが設定・削除できなくなったデグレを修正
+
+
 # CHAGELOG 96
 # - クリップボードからのテキスト添付のエンコードがutf-8になったが表示のときにエンコード指定がない問題の修正
 # - パスワードレス+TOTP併用時のサインインをパスワード経由ではTOTPに統一
 # -  絵文字ピッカーを開いた後に背景更新で動かないようにする
-# - 接続切断Tipがモーダル表示中にクリックできない問題を修正
+# - 接続切断Tipをクリックすると後ろに判定が抜けるのを修正
 # - 投稿フォームでセンシティブワードを警告・ハイライト表示
-# - ドライブの選択状態持ち越しバグの修正
+# - ドライブの選択状態をフォルダを越えて持ち越してしまうバグの修正（たぶん）
 # - MkPagesのプレビューが横幅が足りないとき段落ちするのを修正（タブ化）
 # - 検索のUIが読みにくかったのが改善
 # - 検索のUIに期間指定今日と直近３日のショートカットを追加
+#
+# MISTEMS は個人開発です。現在支援によって生計を支えています
+# より長く活発な改善を続けるため、よろしければOFUSE等で支援お願いします
+# https://ofuse.me/memberships/4681 https://ofuse.me/memberships/2610
+

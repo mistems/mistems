@@ -31,6 +31,7 @@ https://github.com/mistems/mistems/pulls
 - 検索
   - 検索を本文のみと本文+CWで切り替えられるように
   - 検索UIの改善、期間指定ショートカット（今日・直近3日）追加
+  - ノート検索のインデックス最適化
 
 - ノート周辺
   - リノート先/元のチャンネル名を表示
@@ -119,6 +120,10 @@ git switch mistems-main
 git reset origin/develop --hard
 
 
+squash_merge riin/add-claude-github-actions-1762310148415
+git commit -a -m "Add Claude Code GitHub Workflow(Issue, PRでClaudeが反応), mistems skill"
+
+
 squash_merge riin/channelIndex
 git commit -a -m "チャンネルだいたいぜんぶみる" # フォローとお気に入りの説明を統合
 
@@ -146,6 +151,10 @@ git commit -a -m "ハッシュタグでミュートできるようにする"
 squash_merge riin/search-enhance
 git commit -a -m "ノート検索の強化"
 
+squash_merge riin/index-optimize
+git commit -a -m "ノート検索のインデックス大改造"
+
+
 squash_merge riin/MkNoteDetailed-loadReplies
 git commit -a -m "MkNoteDetailedで返信を読み込む"
 
@@ -166,14 +175,12 @@ squash_merge riin/release/mkPages-mkDraggable
 git commit -a -m "MkPagesエディター拡張/ドラッグアンドドロップのスマホ拡張とアニメーション"
 
 
-squash_merge riin/add-claude-github-actions-1762310148415
-git commit -a -m "Add Claude Code GitHub Workflow(Issue, PRでClaudeが反応), mistems skill"
-
 
 squash_merge riin/fix/fanout-timeline
 git commit -a -m "FTTLの歯抜けバグ修正"
 
 
+# riin/favstar (favstar-rebased を採用・リネーム済) + riin/timemachine
 squash_merge riin/release/FavstarAndTimemachine
 git commit -a -m "タイムマシンとふぁぼった"
 
@@ -221,7 +228,10 @@ squash_merge riin/drive
 git commit -a -m "fix(frontend): ドライブの選択状態持ち越しバグの修正"
 
 
-set MISVER 96
+# pnpm run build-misskey-js-with-types
+# git commit -a -m "mistems-main.build-misskey-js-with-types 再生成"
+
+set MISVER 97
 set file_path "package.json"
 # JSONからversionを取得 -MISTEMS.XX を追加した新しいバージョンを作成
 set current_version (jq -r '.version' $file_path)
@@ -230,6 +240,9 @@ set new_version "$current_version-MISTEMS.$MISVER"
 # package.jsonのversionを新しいものに書き換え
 jq --arg new_version "$new_version" '.version = $new_version' $file_path > tmp.json && mv tmp.json $file_path
 npx prettier -w $file_path
+
+# mistems-readme ブランチから README.md をコピー
+git show riin/mistems-readme:README.md > README.md
 
 echo "Version updated to: $new_version"
 git commit -a -m "Version updated to: $new_version"
