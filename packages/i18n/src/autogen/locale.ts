@@ -137,6 +137,42 @@ export interface Locale extends ILocale {
      */
     "timeline": string;
     /**
+     * タイムマシン
+     */
+    "timeMachine": string;
+    /**
+     * 日時を選択
+     */
+    "timeMachineSelectDateTime": string;
+    /**
+     * タイムマシンで移動
+     */
+    "timeMachineGo": string;
+    /**
+     * 現在に戻る
+     */
+    "timeMachineBackToNow": string;
+    /**
+     * 現在位置: {datetime}
+     */
+    "timeMachineCurrentPosition": ParameterizedString<"datetime">;
+    /**
+     * 日時を選択して、その時点のソーシャルタイムラインを表示します。
+     */
+    "timeMachineDescription": string;
+    /**
+     * この時刻にタイムマシンで移動
+     */
+    "jumpToTimemachine": string;
+    /**
+     * 日付
+     */
+    "date": string;
+    /**
+     * 時刻
+     */
+    "time": string;
+    /**
      * 自己紹介はありません
      */
     "noAccountDescription": string;
@@ -4453,6 +4489,14 @@ export interface Locale extends ILocale {
      */
     "usersSearchNotAvailable": string;
     /**
+     * タイムマシン機能を使用する権限がありません。
+     */
+    "timemachineNotAvailable": string;
+    /**
+     * タイムマシンの到達可能な範囲の制限に達しました。時刻が調整されました。
+     */
+    "timemachineReachedLimit": string;
+    /**
      * ライセンス
      */
     "license": string;
@@ -8226,6 +8270,34 @@ export interface Locale extends ILocale {
              */
             "canSearchUsers": string;
             /**
+             * タイムマシンの利用
+             */
+            "canUseTimemachine": string;
+            /**
+             * タイムマシンの到達可能な開始時刻
+             */
+            "timemachineReachableFrom": string;
+            /**
+             * タイムスタンプ (ミリ秒、0で無制限)
+             */
+            "timemachineReachableFromDescription": string;
+            /**
+             * 例: 1609459200000 (2021-01-01 00:00:00 UTC)
+             */
+            "timemachineReachableFromHint": string;
+            /**
+             * タイムマシンで遡れる最大日数
+             */
+            "timemachineTravelableMaxDays": string;
+            /**
+             * 日数 (0で無制限)
+             */
+            "timemachineTravelableMaxDaysDescription": string;
+            /**
+             * 例: 30で30日前まで
+             */
+            "timemachineTravelableMaxDaysHint": string;
+            /**
              * 翻訳機能の利用
              */
             "canUseTranslator": string;
@@ -11273,6 +11345,10 @@ export interface Locale extends ILocale {
              * ダイレクトメッセージ
              */
             "chat": string;
+            /**
+             * タイムマシン
+             */
+            "timemachine": string;
         };
     };
     "_dialog": {
