@@ -109,6 +109,8 @@
 
 ### Server
 - Enhance: ノート検索 (`notes/search`) に statement_timeout 15s を適用し、長時間クエリで DB を専有しないように
+- Enhance: ノート検索の CW 込み検索 (PGroonga) を連結式から OR 条件に変更し、cw / text の列単独インデックスが使われるように (検索が大幅に高速化)
+- Enhance: ノート検索クエリで JIT コンパイルを無効化し、インデックスが使えない場合のオーバーヘッドを削減
 - Enhance: リモートノートクリーニングジョブのスキップ処理のパフォーマンス改善
 - Enhance: リモートノートクリーニングジョブの削除対象検索処理のパフォーマンス改善
 - Enhance: ActivityPub の画像添付に width/height を含めるように

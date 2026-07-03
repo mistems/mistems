@@ -211,6 +211,8 @@ export class SearchService {
 		// 重い全文検索が DB を専有しないよう、トランザクション内で statement_timeout を 15s に縛る。
 		return this.notesRepository.manager.transaction(async (em) => {
 			await em.query('SET LOCAL statement_timeout = \'15s\'');
+			// 索引が使えずフォールバックした場合、LIMIT 付きクエリでも JIT コンパイルだけで数百 ms 溶けるため無効化する
+			await em.query('SET LOCAL jit = off');
 			const noteRepo = em.getRepository(MiNote);
 			const query = this.queryService.makePaginationQuery(noteRepo.createQueryBuilder('note'), pagination.sinceId, pagination.untilId);
 
@@ -230,8 +232,11 @@ export class SearchService {
 			if (this.config.fulltextSearch?.provider === 'sqlPgroonga') {
 				// pgroonga
 				if (opts.searchFrom === 'textWithCw') {
-					// textWithCwオプション (note.text が NULL でも CW にマッチさせるため双方 coalesce する)
-					query.andWhere('(coalesce(note.cw, \'\') || coalesce(note.text, \'\')) &@~ :q', { q });
+					// textWithCwオプション
+					// 連結式 (coalesce(cw,'') || coalesce(text,'')) だと cw/text の列単独 pgroonga 索引が
+					// 使われない (式インデックスは式の完全一致が必要) ため、OR で両列の索引を BitmapOr させる。
+					// NULL &@~ :q は false になるだけなので coalesce は不要。
+					query.andWhere('(note.cw &@~ :q OR note.text &@~ :q)', { q });
 				} else {
 					// 通常検索
 					query.andWhere('note.text &@~ :q', { q });
