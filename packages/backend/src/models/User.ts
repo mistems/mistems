@@ -42,7 +42,7 @@ export class MiUser {
 	})
 	public username: string;
 
-	@Index()
+	// Covered by the composite unique index (usernameLower, host).
 	@Column('varchar', {
 		length: 128, select: false,
 		comment: 'The username (lowercased) of the User.',
