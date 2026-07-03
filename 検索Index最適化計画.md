@@ -14,6 +14,7 @@
   - 構造上、**文字列辞書順 = 時系列順** が成立する。
   - したがって本書では「id 順ソート」と「時系列ソート」を同義に扱う。
   - aidx / meid / meidg / ulid も時刻先頭の単調増加なので同様に成立する。**objectid** だけは順序保証が弱いので本書の前提から外す。
+- **2026-07 実測反映済み**: 実環境 (note 約 4500 万行) に text / cw の列単独索引を投入して `EXPLAIN (ANALYZE, BUFFERS)` を取得した知見 (9.1 節) を反映。最大の教訓は「**列単独の pgroonga 索引は連結式クエリには使われない**」こと。これに伴い当初の「cw+text 連結式索引」案は廃し、**OR 検索 + 列単独索引 2 本** 方式へ転換した (2.3 節)。
 
 ## 1. 現状の検索クエリ整理
 
@@ -22,7 +23,7 @@
 | 列 / 式 | 条件 | 由来 | 出現頻度 |
 | --- | --- | --- | --- |
 | `note.text` | `&@~ :q` | 通常検索 (`searchFrom !== 'textWithCw'`) | 必 |
-| `coalesce(cw,'') \|\| coalesce(text,'')` | `&@~ :q` | textWithCw オプション | 必 (片方) |
+| `note.cw` / `note.text` | `(cw &@~ :q OR text &@~ :q)` | textWithCw オプション (連結式 `coalesce(cw,'') \|\| coalesce(text,'')` から OR 形式へ変更 — 2.3 節) | 必 (片方) |
 | `note.id` | `BETWEEN` + `ORDER BY DESC LIMIT n` | レンジ + ページネーション | 必 |
 | `note.userHost` | `=` / `IS NULL` | host 指定 / ローカル限定 | 高 (デフォルトがローカル限定) |
 | `note.userId` | `=` | userId 指定 | 中 |
@@ -44,7 +45,8 @@ Note エンティティに既存の索引のうち検索で関連するもの:
 
 | 方式 | サイズ | INSERT コスト | 検索性能 | 柔軟性 |
 | --- | --- | --- | --- | --- |
-| 単独索引 (`text` のみ) × 2 (text / cw+text) | 中 | 中 | 検索ワード次第。userHost 等の絞り込みは別索引と bitmap AND | 高 |
+| 列単独索引 × 2 (`text` / `cw`) + OR 検索 | 中 (cw 側は極小) | 中 | 検索ワード次第。2 本の BitmapOr。userHost 等の絞り込みは別索引と bitmap AND | 高 |
+| 連結式索引 (`coalesce(cw,'') \|\| coalesce(text,'')`) | 中 | 中 | 1 本で textWithCw を賄えるが、**クエリ式と 1 文字でも違うと使われない** (9.1 節で実証) | 低 |
 | 複合 pgroonga 索引 (`text` + `userHost` 等) | 大 | 大 | 1 回の索引アクセスで複数条件を絞れる | カラム追加で索引爆発 |
 | 部分索引 (ローカル/添付あり等の WHERE 条件付き) | 小 | 小 | 該当条件に完全特化 | 条件外検索はカバーできない |
 
@@ -61,56 +63,81 @@ note 4500 万件、平均 text 長を仮に 80〜120 文字とすると:
 
 ### 2.3. 採用方針
 
-**「単独索引 2 本 (text / cw+text)」をベースに、デフォルトケースである "ローカル限定検索" を部分索引で別に持つ** を推奨する。
+**「列単独索引 2 本 (text / cw) + OR 検索」をベースに、デフォルトケースである "ローカル限定検索" を部分索引で別に持つ** を推奨する。
 
-理由:
-- 複合 `(text, userHost)` は textWithCw 経路と組み合わせるとさらに増える (2 本 → 2 本)。式索引の式評価コストも乗るため、INSERT への影響が読みづらい。
+当初は textWithCw 用に `coalesce(cw,'') || coalesce(text,'')` の連結式索引を張る計画だったが、**実測 (9.1 節) を踏まえて OR 形式へ転換した**:
+
+- PostgreSQL が式索引を使うのは **クエリ側の式が索引定義の式と完全一致するときだけ**。実環境で text / cw の列単独索引を張った状態で連結式クエリを投げたところ索引は一切使われず、`&@~` が Filter に落ちて 6 秒超 (ヒットわずか 8 件) という事故が実際に起きた (9.1 節)。
+- クエリ側を `(note.cw &@~ :q OR note.text &@~ :q)` に書き換えれば、列単独索引 2 本の BitmapOr で解決する。`NULL &@~ :q` は false になるだけなので coalesce も不要。
+- cw は大半のノートで NULL なので cw 索引は極小。text 索引は通常検索と textWithCw で**共有**でき、連結式方式 (通常用 text + textWithCw 用連結の 2 本を別々に維持) より索引の総本数・総サイズ・INSERT コストすべてで軽い。
+- 連結方式特有の「CW 末尾 + 本文先頭が繋がってフレーズ一致する」偽マッチも構造的に消える。
+- 式索引は「DDL 側の式とコード側の式が 1 文字でもズレる (キャストの書き方含む) と索引が**黙って**使われなくなる」恒久的な地雷を抱える。気づきにくいのが最も厄介 (今回も EXPLAIN を取るまで発覚しなかった)。列単独索引ならこのリスク自体が存在しない。
+
+複合索引を採らない理由・部分索引を持つ理由は従来どおり:
+- 複合 `(text, userHost)` は searchFrom 経路ごとに増殖し、INSERT への影響が読みづらい。
 - Misskey の検索 UI は **ローカル限定がデフォルト** で、利用の大半を占める。ここを部分索引で軽くしておけば検索体験の伸びとストレージ消費のバランスが取れる。
 - 残りのフィルタ (userId / channelId / fileIds) は既存索引 + pgroonga の bitmap AND で十分高速化できると見込む (要計測)。
 
 ## 3. 採用する pgroonga 索引
 
-### A. `text` 単体 (通常検索用 / 全件)
+> **DDL の正は本節と [PGroonga検索Indexブラッシュアップ計画.md](PGroonga検索Indexブラッシュアップ計画.md) 3.2 / 3.3 節の 2 箇所に存在する**。normalizers / tokenizer を変更するときは必ず両ファイルを同時に更新すること (4.4 節の不一致事故の温床になる)。
+
+**前提となるコード変更**: `SearchService.searchNoteByLike` の textWithCw 経路を連結式から OR 形式へ変更する。これをやらない限り下記 A / B は textWithCw 検索に使われない (9.1 節で実証済)。
+
+```ts
+// 変更前
+query.andWhere('(coalesce(note.cw, \'\') || coalesce(note.text, \'\')) &@~ :q', { q });
+// 変更後 (NULL &@~ :q は false になるだけなので coalesce 不要)
+query.andWhere('(note.cw &@~ :q OR note.text &@~ :q)', { q });
+```
+
+### A. `text` 単体 (通常検索 + textWithCw の text 側 / 全件)
 
 ```sql
-CREATE INDEX CONCURRENTLY pgroonga_note_text_idx
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_text_idx
   ON note USING pgroonga (text)
   WITH (
     tokenizer  = 'TokenMecab',
-    normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+    normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
   );
 ```
 
-### B. `coalesce(cw,'') || coalesce(text,'')` 式 (textWithCw 用 / 全件)
+### B. `cw` 単体 (textWithCw の cw 側 / 全件)
 
 ```sql
-CREATE INDEX CONCURRENTLY pgroonga_note_text_cw_idx
-  ON note USING pgroonga ((coalesce(cw, '') || coalesce(text, '')))
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_cw_idx
+  ON note USING pgroonga (cw)
   WITH (
     tokenizer  = 'TokenMecab',
-    normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+    normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
   );
 ```
+
+cw は大半のノートで NULL のため、索引サイズ・構築時間・INSERT コストとも text 索引と比べて誤差レベル。**normalizers は必ず A と同一にする** (4.4 節 — 実環境で不一致が起きた)。
+
+> **不採用 (旧 B 案): `coalesce(cw,'') || coalesce(text,'')` 連結式索引** — 式完全一致縛りにより、コード側の式と 1 文字でもズレると索引が黙って使われなくなる (9.1 節で実際に発生)。通常検索用の text 索引と別に維持する分ストレージ・INSERT コストも純増し、CW/本文の連結境界をまたぐ偽マッチも生む。OR 形式で機能的に等価以上が実現できるため採用しない。
 
 ### C. ローカル限定の部分索引 (デフォルト検索の軽量化)
 
 ```sql
-CREATE INDEX CONCURRENTLY pgroonga_note_local_text_idx
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_text_idx
   ON note USING pgroonga (text)
-  WHERE "userHost" IS NULL
   WITH (
     tokenizer  = 'TokenMecab',
-    normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
-  );
+    normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
+  )
+  WHERE "userHost" IS NULL;
 
-CREATE INDEX CONCURRENTLY pgroonga_note_local_text_cw_idx
-  ON note USING pgroonga ((coalesce(cw, '') || coalesce(text, '')))
-  WHERE "userHost" IS NULL
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_cw_idx
+  ON note USING pgroonga (cw)
   WITH (
     tokenizer  = 'TokenMecab',
-    normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
-  );
+    normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
+  )
+  WHERE "userHost" IS NULL;
 ```
+
+> 構文注意: `WHERE` 句は `WITH` 句の **後** に書く (`CREATE INDEX ... WITH (...) WHERE ...`)。逆順は構文エラー。
 
 > 部分索引はローカルノートが note 全体の何 % かに応じて効果が変わる。ローカル少数 / リモート多数のインスタンスでは特に効く (大半を占めるリモートの分を索引対象から外せる)。
 
@@ -124,7 +151,7 @@ CREATE INDEX ... ON note USING pgroonga (text, id) WITH (...);
 
 aid 採番前提なので **id の辞書順 = 時系列順**。pgroonga 索引の 2 カラム目として id を持たせれば、`untilId / sinceId` の範囲フィルタが索引段階で効くことが期待できる (= 検索→ソート→ページ切り出しの取得行数が大幅に減る)。
 
-ただし pgroonga 索引内で 2 カラム目の **string 比較条件** がどの程度効率的に評価されるかはバージョン依存があるので、A 単独索引と並行ベンチ (9 節) で実証する。効果が確認できれば A / B / C / C' すべてを `(text, id)` / `((coalesce(cw,'')||coalesce(text,'')), id)` 形式に張り直す。
+ただし pgroonga 索引内で 2 カラム目の **string 比較条件** がどの程度効率的に評価されるかはバージョン依存があるので、A 単独索引と並行ベンチ (9 節) で実証する。効果が確認できれば A / B / C / C' すべてを `(text, id)` / `(cw, id)` 形式に張り直す。
 
 ## 4. ノーマライザ深掘り (本計画の山場)
 
@@ -132,33 +159,38 @@ aid 採番前提なので **id の辞書順 = 時系列順**。pgroonga 索引�
 
 ### 4.1. 入れたいもの
 
-- **`NormalizerNFKC130`** — Unicode 13.0 ベースの NFKC 正規化
+- **`NormalizerNFKC150`** — Unicode 15.0 ベースの NFKC 正規化 (当初 NFKC130 を予定していたが、Groonga 16.0.5 で NFKC150 が利用可能なため採用)
   - 全角/半角英数字の同一視 (`Ａ` ⇔ `A`、`１` ⇔ `1`)
   - 互換等価 (`㌧` ⇔ `トン`、`㎏` ⇔ `kg`)
   - ASCII 大文字小文字の同一視 (CI 動作)
   - 結合文字の正規化 (濁点合成等)
   - 「黒文字」(英数字・記号) 系の正規化はここで吸収される
-- **`NormalizerRemoveBlank`** — 検索インデックスへの空白の混入を除去
-  - 日本語テキスト中の意図しない半角空白の影響を消す
+  - **`"unify_kana", true`** — ひらがな⇔カタカナの同一視。SNS 投稿はカナ表記揺れが多く、ヒット率を優先して有効化する
+  - **`"unify_hyphen_and_prolonged_sound_mark", true`** — ハイフン・長音記号っぽい文字をハイフンへ統一 (`ー` `—` `‐` `─` 等)。「コーヒー」「コーヒ─」等の表記揺れを吸収する
+  - **`"unify_middle_dot", true`** — 中黒類 (`・` `･` `•` 等) の統一。「ぼっち・ざ・ろっく」等、中黒の字種揺れを吸収する (実環境で採用済)
+  - **`"unify_katakana_bu_sound", true`** — 「ヴァ/ヴィ/ヴ/ヴェ/ヴォ」を**すべて「ブ」へ**統一 (実環境で採用済)。「ラヴ」⇔「ラブ」は拾えるが、「ヴァイオリン」⇔「バイオリン」は拾えない (ヴァ→ブ となり「バ」と一致しないため)。母音を保って「バ/ビ/ブ/ベ/ボ」へ寄せる **`unify_katakana_v_sounds`** の方が意図 (ヴ音の表記揺れ吸収) に合う可能性が高く、次回 REINDEX 時に切り替えを検討する (要検証)
 
 ### 4.2. 入れないもの
 
-- **`NormalizerMySQLUnicode520CIExceptKanaCIKanaWithVoicedSoundMark`** や `NormalizerAuto` の **ひらがな ⇔ カタカナ同一視** は **入れない**
-  - 単語一致の精度を落とす副作用がある (例: 「コーヒー」検索で「こーひー」も拾うと、固有名詞検索が崩れる)
-  - PDF の参考実装 (Mroonga 例) でも触れられているが「便利だが副作用あり」というトレードオフ
-- **濁音記号合成系** (`KanaWithVoicedSoundMark`) も同様の理由で見送り
-- 上記をオフにする指定として `NormalizerNFKC130("unify_kana", false)` を採用 (NFKC のかな統一を無効化)
+- **`NormalizerRemoveBlank`** — 当初「空白除去」として入れたかったが、**Groonga 16.0.5 に存在しないことが判明** (`plugin_register normalizers/remove_blank` → `.so` 不在エラー)。TokenMecab がトークン化時に空白を処理するため、実用上の問題はない
+- **濁音記号合成系** (`unify_sound_mark` / `KanaWithVoicedSoundMark`) — 「はな」「ばな」「ぱな」を同一視するのはノイズが多すぎるため見送り
+- **`NormalizerMySQLUnicode520CIExceptKanaCIKanaWithVoicedSoundMark`** — PGroonga 固有のノーマライザで設定が複雑。NFKC150 のオプションで十分カバーできる
 
 ### 4.3. あいまい検索系の扱い
 
 - 例: 「ノーマライザで類似漢字を同一視する」「読みあいまい」系
 - 単語一致が崩れるリスクと、ヒット率の伸びがトレードオフになる
-- **デフォルトは厳しめ (上記 4.1) でリリース**し、運用者が用途に応じて緩める方針が安全
-- example.yml では「厳しめ版」「ゆるめ版」の SQL 例を併記する
+- 本計画では `unify_kana: true` + `unify_hyphen_and_prolonged_sound_mark: true` まで踏み込むが、`unify_sound_mark` (濁点無視) は採用しない。**カナ統一と長音統一は SNS 文脈で実用的なヒット率向上が見込める一方、濁点無視はノイズが多すぎる** という線引き
+- example.yml では「推奨版 (上記)」「厳しめ版 (`unify_kana: false`)」の SQL 例を併記する
 
 ### 4.4. A・B・C 索引でノーマライザを揃える
 
-ノーマライザは必ず A・B・C で揃える。揃わないと「通常検索でヒットするのに textWithCw でヒットしない」「全件検索ではヒットするのにローカル限定検索でヒットしない」が起きる。
+ノーマライザ (と tokenizer) は必ず A (text)・B (cw)・C/C' (部分索引) で同一指定に揃える。揃わないと「本文でヒットするのに CW でヒットしない」「全件検索ではヒットするのにローカル限定検索でヒットしない」が起きる。
+
+**実環境で実際に不一致が起きた**: text 側には `unify_middle_dot` + `unify_katakana_bu_sound` を指定したのに cw 側には指定し忘れており、OR 検索にした際 CW と本文で正規化挙動がズレる状態だった。手で 2 本の DDL を書くと高確率でズレる。対策:
+
+- example.yml / docs には **A〜C' の DDL をコピペ可能な一式** として載せ、normalizers 文字列を個別に編集させない
+- 投入後に `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'note' AND indexdef ILIKE '%pgroonga%';` で全索引の定義 (WITH 句の tokenizer / normalizers 含む) を突き合わせる確認手順をドキュメントに含める
 
 ### 4.5. MeCab 辞書: NEologd 採用検討
 
@@ -387,26 +419,26 @@ mistems-mecab-dic/                # private リポジトリ
 | 索引 | 推定サイズ |
 | --- | --- |
 | A. `text` 全件 | 6〜12 GB |
-| B. `cw+text` 式・全件 | 6〜12 GB |
-| C. ローカル限定 (A の何 %) | A の `ローカル比率` 倍 |
-| C'. ローカル限定 cw+text | B の `ローカル比率` 倍 |
+| B. `cw` 全件 | 数十〜数百 MB (cw 非 NULL 率依存。text 比で誤差レベル) |
+| C. ローカル限定 text | A の `ローカル比率` 倍 |
+| C'. ローカル限定 cw | B の `ローカル比率` 倍 |
 
-**ローカル比率 30% 仮定で合計**: A + B + C + C' ≒ 12〜24 GB + 4〜8 GB = **約 16〜32 GB**
+**実測ローカル比率 ≒0.8% (35 万 / 4554 万) では**: C / C' は A / B の 1% 未満で誤差レベル。合計は実質 **A + B ≒ 6〜12 GB**。旧計画 (cw+text 連結式索引を text と別に持つ方式) の約半分で済む — OR 方式転換の副次的メリット。
 
-note テーブル本体が仮に 100GB なら +16〜32% 増。許容範囲だが、SSD 容量計画には組み込む必要あり。
+note テーブル本体が仮に 100GB なら +6〜12% 増。許容範囲だが、SSD 容量計画には組み込む必要あり。
 
-ローカル比率が高いインスタンス (90% 以上) では、**A・B を作らず C・C' のみ採用** という選択もあり (全件検索ができなくなる代わりにストレージ半減)。
+ローカル比率が高いインスタンス (90% 以上) では部分索引の削減幅そのものが小さくなるため、**C / C' を作らず A・B のみ** が正解になる。逆にローカル比率が低いインスタンス (本書の実測 0.8% など) では C / C' がデフォルト検索の保険として効く ([PGroonga検索Indexブラッシュアップ計画.md](PGroonga検索Indexブラッシュアップ計画.md) 3.3 節)。なお OR 方式では A が通常検索の唯一の索引なので、**「A を作らない」構成はどのローカル比率でも成立しない** (9.1 節の事故モードに直行する)。
 
 ### 7.2. 索引構築時間 (`CREATE INDEX CONCURRENTLY`)
 
-- 4500 万行 × 1 列 で **約 5〜10 時間 / 索引** (SSD、メモリ十分、運用負荷低)
-- 4 索引並行はせず、**1 本ずつシリアルに**構築する (CPU/IO 競合回避)
-- 合計 **20〜40 時間** の見積もり → メンテナンスウィンドウとして 1 週間程度を確保
+- 4500 万行 × text 列で **約 5〜10 時間 / 索引** (SSD、メモリ十分、運用負荷低)。cw 系 (B / C') は対象データが極小なので**分オーダー**
+- 索引の並行構築はせず、**1 本ずつシリアルに**構築する (CPU/IO 競合回避)
+- 支配的なのは text 系 2 本 (A, C) で合計 **10〜20 時間** の見積もり → メンテナンスウィンドウとして数日を確保
 
 ### 7.3. INSERT への影響
 
 - pgroonga 索引 1 本につき、INSERT 時に **トークン化 + posting list 更新** が走る
-- 本計画では最大 4 本 (A, B, C, C') が note テーブルに乗る
+- 本計画では最大 4 本 (A, B, C, C') が note テーブルに乗るが、cw 系 2 本はほぼ NULL 列なので実質 **text 系 2 本分** のコスト
 - 投稿ピーク時 (秒間 N 投稿) 影響目安:
   - N ≦ 100: 体感影響なし
   - 100 < N ≦ 1000: `work_mem` チューニングで対応可、INSERT レイテンシ +10〜30ms 程度
@@ -416,22 +448,45 @@ note テーブル本体が仮に 100GB なら +16〜32% 増。許容範囲だが
 ### 7.4. 索引追加順の推奨
 
 1. **A (text 全件)** を最初に投入 → 一番効くので動作確認しやすい
-2. その後 **B (cw+text 全件)**
+2. その後 **B (cw 全件)** — 構築は分オーダーなので A とセットで済ませてよい
 3. 様子を見て **C / C' (ローカル限定 部分索引)** を追加
 4. 不要だと判断したら DROP 可能 (B-tree ほど依存箇所が多くない)
+5. **各段階で必ず代表クエリの `EXPLAIN (ANALYZE, BUFFERS)` を取り、pgroonga 索引が実際に使われていることを確認する** — 「張ったのに使われていない」は静かに起きる (9.1 節)
 
 ## 8. ロールアウト手順
 
 1. ~~`SearchService` の coalesce バグ修正~~ (本ブランチで完了済)
-2. `.config/example.yml` / `docker_example.yml` の `sqlPgroonga` セクションに **A + B** の SQL を追記 (今回追記済 — ノーマライザ指定を 4.1 に合わせて改訂が必要)
-3. `docs/search-index-tuning.md` (新規) に詳細案内
+2. **`SearchService` の textWithCw 経路を `(note.cw &@~ :q OR note.text &@~ :q)` へ変更** (3 節冒頭)。あわせて `SET LOCAL statement_timeout` の隣に `SET LOCAL jit = off` の追加を検討 (9.1 節 — 索引が効かないフォールバック時に JIT だけで 0.7 秒溶けた実測あり)
+3. `.config/example.yml` / `docker_example.yml` の `sqlPgroonga` セクションに **A + B** の SQL を追記 (今回追記済 — OR 方式 + 4.1 のノーマライザ指定に合わせて改訂が必要)
+4. `docs/search-index-tuning.md` (新規) に詳細案内
    - C / C' (ローカル限定部分索引) の SQL とローカル比率の見極め方
-   - ノーマライザの「厳しめ版 / ゆるめ版」併記
+   - ノーマライザの「推奨版 (`unify_kana: true`) / 厳しめ版 (`unify_kana: false`)」併記
+   - 索引投入後の EXPLAIN / `pg_indexes` での「本当に使われているか」確認手順 (4.4 / 9.1 節)
+   - PGroonga セットアップ時の libgroonga バージョン競合の解消手順 (10 節参照)
    - 4500 万件級でのストレージ / 構築時間 / INSERT 影響の見積もり (本書 7 節を移植)
-4. CHANGELOG に「textWithCw 検索対応 + 推奨索引の案内追加」
-5. (別 PR) 6 節の発展案 (ハイライト・キーワード抽出・スニペット) の実装
+5. CHANGELOG に「textWithCw 検索対応 + 推奨索引の案内追加」
+6. (別 PR) 6 節の発展案 (ハイライト・キーワード抽出・スニペット) の実装
 
 ## 9. 計測 / 検証
+
+### 9.1. 実測ベースライン (2026-07 — 索引ミスマッチ事故の記録)
+
+実環境で text / cw の列単独 pgroonga 索引 (TokenMecab + NFKC150) を張った状態のまま、**旧・連結式クエリ** (textWithCw + ローカル限定 + 検索語「ふぁぼすき」+ id レンジ + LIMIT 10) を `EXPLAIN (ANALYZE, BUFFERS)` した記録。**式が一致しないため pgroonga 索引は一切使われなかった**。
+
+- **Execution Time: 6238 ms、ヒットわずか 8 件**
+- 実際のアクセスパス: `BitmapAnd("userHost" IS NULL 索引 ≒35 万行 × PK の id レンジ ≒198 万行)` → Parallel Bitmap Heap Scan
+- `&@~ 'ふぁぼすき'` は **Recheck / Filter として全行逐次評価** (可視性・ミュート・ブロック条件と一緒くた)
+- ビットマップが work_mem に収まらず **lossy 化** (`Heap Blocks: exact=297 lossy=20475`)、`Rows Removed by Index Recheck: 162299` — lossy ブロックの recheck は coalesce + `&@~` の式評価を全行やり直すため特に高くつく
+- `Buffers: shared read=76186` ≒ **600MB のディスク読み** (LIMIT 10 のクエリで)
+- `JIT: Total 694 ms` — **LIMIT 10 のクエリに対して JIT コンパイルだけで約 0.7 秒**。索引が効けばコスト見積もりが下がって発動しなくなる見込みだが、フォールバック時の保険として `SET LOCAL jit = off` を検討 (8 節)
+
+教訓:
+
+1. **列単独索引は連結式クエリに使われない** (式完全一致縛り)。OR 形式への転換 (2.3 節) の直接の根拠。
+2. pgroonga が効かないときのフォールバックは「id レンジ全走査 + Filter」で、レンジが広いと数百 MB 級の IO になる。`SET LOCAL statement_timeout = 15s` (SearchService 実装済) はこの事故モードへの保険として妥当。
+3. 「索引を張ったのに使われていない」は**エラーにならず静かに起きる**。投入時の EXPLAIN 確認 (7.4 節) と `pg_stat_user_indexes.idx_scan` の継続監視 (下記) の両方が必要。
+
+### 9.2. 投入前後で取る計測
 
 A・B・C・C' 投入前後で取る:
 
@@ -448,22 +503,26 @@ A・B・C・C' 投入前後で取る:
 
 ## 10. リスク / 注意点
 
-- ノーマライザ A・B・C 不一致は実害が大きいのでドキュメントで強く釘を刺す。
-- 部分索引 C / C' の WHERE 条件は SearchService の WHERE 条件と完全一致させる必要がある。SearchService 側で `userHost` 判定の書き方を変えると索引が引かれなくなる → **コード側の責務として明記**。
+- **libgroonga バージョン競合**: Ubuntu 24.04 では `libgroonga0t64` (13.1.1, Ubuntu 同梱版) と `libgroonga0` (16.0.5, Groonga 公式リポジトリ版) が共存し得る。古い方が `/lib/x86_64-linux-gnu/` に配置され先にロードされると `undefined symbol: grn_language_model_get_n_embedding_dimensions` エラーで `CREATE EXTENSION pgroonga` が失敗する。**`sudo apt remove libgroonga0t64` で古い方を削除し `sudo ldconfig` で解消**する。PGroonga セットアップ手順に明記すること。
+- ノーマライザ A・B・C 不一致は実害が大きいのでドキュメントで強く釘を刺す (**実環境で発生済** — 4.4 節)。
+- **btree 側の索引最適化 migration (1783062429920) の本番適用は `MISSKEY_MIGRATION_CREATE_INDEX_CONCURRENTLY=1` がほぼ必須**。素の `pnpm migrate` では note への CREATE INDEX が ACCESS EXCLUSIVE ロックを保持し、完了まで読み書きが全断する。入れ替え中は新旧索引が併存するため、対象索引サイズぶんのディスク余裕 (数 GB) も見込むこと。
+- **索引が使われない事故は静かに起きる** (9.1 節で実証)。クエリ側の式変更 (連結⇔OR、coalesce の有無、キャスト) や部分索引の WHERE 条件と SearchService の条件のズレは、エラーではなく「遅くなるだけ」で現れる。SearchService 側でこれらの書き方を変えるときは EXPLAIN 確認をセットにする → **コード側の責務として明記**。
+- 全文検索が索引フォールバックした場合、work_mem 不足で bitmap が lossy 化し recheck コストが跳ね上がる (9.1 節)。検索用コネクションの `work_mem` 設定もドキュメントで触れる。
 - `CREATE INDEX CONCURRENTLY` は途中失敗すると `INVALID` 索引が残るので、`pg_index.indisvalid = false` のレコードを定期的にチェックして DROP する運用が必要。
 - pgroonga バージョンアップ時に索引フォーマットが変わる場合がある (`REINDEX` 推奨)。MISTEMS 運用としてバージョン固定 or アップグレード手順を整備する。
 
 ## 11. TODO
 
-- [ ] example.yml / docker_example.yml のノーマライザ指定を 4.1 (厳しめ版) に合わせて改訂
+- [ ] **SearchService の textWithCw 経路を OR 形式へ変更** (3 節冒頭のコード変更。これをしないと索引が使われないことは実測で確認済 — 9.1 節)
+- [ ] **実環境の cw 索引を text と同一ノーマライザで張り直す** (4.4 節の不一致解消。cw は極小なので再構築は分オーダー)
+- [ ] `unify_katakana_bu_sound` → `unify_katakana_v_sounds` 切り替えの検証 (4.1 節 — 「ヴァイオリン⇔バイオリン」を拾うなら v_sounds)
+- [ ] `SET LOCAL jit = off` の効果検証 (9.1 節で JIT 694ms を実測。索引が効く状態でも発動するか確認)
+- [ ] example.yml / docker_example.yml の索引 SQL を OR 方式 + 4.1 のノーマライザ指定に合わせて改訂
 - [ ] `docs/search-index-tuning.md` 草稿 (本計画 7 / 9 節を中核に)
 - [ ] ベンチスクリプト `scripts/bench-search.ts` 方針決め
-- [ ] D 案 (`pgroonga (text, id)`) の実測 — aid 採番前提なら効果期待大、ベンチで効果を確認したら A / B / C / C' すべてを `(text, id)` 形式に張り直す
+- [ ] D 案 (`pgroonga (text, id)`) の実測 — aid 採番前提なら効果期待大、ベンチで効果を確認したら A / B / C / C' すべてを `(text, id)` / `(cw, id)` 形式に張り直す
 - [ ] 6 節発展案 (ハイライト・キーワード抽出・スニペット) を別 issue 化
-- [ ] (別タスク検討) 通常検索を `(coalesce(cw,'') || coalesce(text,''))` ベースに統一し索引を B 1 本に集約する案
-   - 利点: 索引サイズ半減・INSERT コスト半減
-   - 欠点: searchFrom オプションの「本文のみ」が実質的に cw 含む挙動になる UX 変化
-   - 採否は別途判断
+- [x] ~~(別タスク検討) 通常検索を `(coalesce(cw,'') || coalesce(text,''))` ベースに統一し索引を B 1 本に集約する案~~ → **廃案**。連結式索引そのものを不採用にしたため前提が消滅 (3 節)。式完全一致縛りの地雷と連結境界の偽マッチが理由。
 - [ ] ローカル比率の実測 (`SELECT COUNT(*) WHERE userHost IS NULL / COUNT(*)`)。部分索引採用判断材料。
 - [ ] PGroonga バージョン固定方針 / REINDEX タイミングの整備
 - [ ] **NEologd 導入評価** (4.5 節)
