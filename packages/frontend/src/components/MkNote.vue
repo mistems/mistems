@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	v-if="!hardMuted && !hideByPlugin && muted === false"
 	ref="rootEl"
 	v-hotkey="keymap"
-	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: prefer.s.skipNoteRender }]"
+	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: !props.disableSkipRender && prefer.s.skipNoteRender }]"
 	tabindex="0"
 >
 	<MkNoteSub v-if="appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.renoteInfo">
 			<button ref="renoteTime" :class="$style.renoteTime" class="_button" @mousedown.prevent="showRenoteMenu()">
 				<i class="ti ti-dots" :class="$style.renoteMenu"></i>
-				<MkTime :time="note.createdAt"/>
+				<MkTime :time="note.createdAt" :mode="forceAbsoluteTime ? 'absolute' : 'relative'"/>
 			</button>
 			<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 				<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
@@ -49,7 +49,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 		<div :class="$style.main">
-			<MkNoteHeader :note="appearNote" :mini="true"/>
+			<MkNoteHeader :note="appearNote" :mini="true" :isRealtime="isRealtimeNote"/>
 			<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 			<div style="container-type: inline-size;">
 				<p v-if="appearNote.cw != null" :class="$style.cw">
@@ -222,6 +222,7 @@ import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
 import { instance } from '@/instance.js';
 import { store } from '@/store.js';
+import { isFusionNote } from '@/utility/timeshiftPaginator.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -229,9 +230,11 @@ const props = withDefaults(defineProps<{
 	mock?: boolean;
 	withHardMute?: boolean;
 	featured?: boolean;
+	disableSkipRender?: boolean;
 }>(), {
 	mock: false,
 	featured: false,
+	disableSkipRender: false,
 });
 
 const emit = defineEmits<{
@@ -245,6 +248,7 @@ provide(DI.mock, props.mock);
 const inTimeline = inject<boolean>('inTimeline', false);
 const tl_withSensitive = inject<Ref<boolean>>('tl_withSensitive', ref(true));
 const inChannel = inject(DI.inChannel, null);
+const forceAbsoluteTime = inject<boolean>('forceAbsoluteTime', false);
 const currentClip = inject<Ref<Misskey.entities.Clip> | null>('currentClip', null);
 const currentAntenna = inject<Ref<Misskey.entities.Antenna | null> | null>('currentAntenna', null);
 
@@ -261,6 +265,11 @@ const favstarColorVars = computed(() => {
 		'--MI-favstarAka': store.r.darkMode.value ? prefer.r.favstarDarkAka.value : prefer.r.favstarLightAka.value,
 		'--MI-favstarAo': store.r.darkMode.value ? prefer.r.favstarDarkAo.value : prefer.r.favstarLightAo.value,
 	};
+});
+
+// リアルタイムノートかどうかをチェック（型安全）
+const isRealtimeNote = computed(() => {
+	return isFusionNote(appearNote) && appearNote._isRealtime === true;
 });
 
 // Template Refsの定義
@@ -694,7 +703,7 @@ const keymap = {
 	padding: 8px 0;
 }
 
-.quoteNote {
+.root .quoteNote, .quoteNote {
 	padding: 16px;
 	border: dashed 1px var(--MI_THEME-renote);
 	border-radius: 8px;
