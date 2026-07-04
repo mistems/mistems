@@ -9581,6 +9581,10 @@ export interface operations {
                         remoteNotesCleaningExpiryDaysForEachNotes: number;
                         remoteNotesCleaningMaxProcessingDurationInMinutes: number;
                         showRoleBadgesOfRemoteUsers: boolean;
+                        highlightRateFactor: number;
+                        highlightMidPopularityThreshold: number;
+                        highlightHighPopularityThreshold: number;
+                        highlightExcludeEmojis: string;
                     };
                 };
             };
@@ -13101,6 +13105,10 @@ export interface operations {
                     remoteNotesCleaningExpiryDaysForEachNotes?: number;
                     remoteNotesCleaningMaxProcessingDurationInMinutes?: number;
                     showRoleBadgesOfRemoteUsers?: boolean;
+                    highlightRateFactor?: number;
+                    highlightMidPopularityThreshold?: number;
+                    highlightHighPopularityThreshold?: number;
+                    highlightExcludeEmojis?: string;
                 };
             };
         };

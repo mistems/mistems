@@ -620,6 +620,24 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+
+			highlightRateFactor: {
+				type: 'number',
+				optinal: false, nullable: false,
+			},
+
+			highlightMidPopularityThreshold: {
+				type: 'number',
+				optinal: false, nullable: false,
+			},
+			highlightHighPopularityThreshold: {
+				type: 'number',
+				optinal: false, nullable: false,
+			},
+			highlightExcludeEmojis: {
+				type: 'string',
+				optinal: false, nullable: false,
+			},
 		},
 	},
 } as const;
@@ -781,6 +799,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				remoteNotesCleaningExpiryDaysForEachNotes: instance.remoteNotesCleaningExpiryDaysForEachNotes,
 				remoteNotesCleaningMaxProcessingDurationInMinutes: instance.remoteNotesCleaningMaxProcessingDurationInMinutes,
 				showRoleBadgesOfRemoteUsers: instance.showRoleBadgesOfRemoteUsers,
+				highlightRateFactor: instance.highlightRateFactor,
+				highlightMidPopularityThreshold: instance.highlightMidPopularityThreshold,
+				highlightHighPopularityThreshold: instance.highlightHighPopularityThreshold,
+				highlightExcludeEmojis: instance.highlightExcludeEmojis,
 			};
 		});
 	}

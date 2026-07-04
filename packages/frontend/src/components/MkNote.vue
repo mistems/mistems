@@ -64,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkCwButton v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll" style="margin: 4px 0;"/>
 				</p>
 				<div v-show="appearNote.cw == null || showContent" :class="[{ [$style.contentCollapsed]: collapsed }]">
-					<div :class="$style.text">
+					<div :class="[$style.text, {[$style.akafav]:(featured && prefer.r.enableFavstar.value && note.reactionCount >= highlightPopularityThreshold.highPopularity ), [$style.aofav]: featured && prefer.r.enableFavstar.value && note.reactionCount >= highlightPopularityThreshold.midPopularity && note.reactionCount < highlightPopularityThreshold.highPopularity }]" :style="favstarColorVars">
 						<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 						<MkA v-if="appearNote.replyId" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 						<Mfm
@@ -220,14 +220,18 @@ import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
+import { instance } from '@/instance.js';
+import { store } from '@/store.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
 	pinned?: boolean;
 	mock?: boolean;
 	withHardMute?: boolean;
+	featured?: boolean;
 }>(), {
 	mock: false,
+	featured: false,
 });
 
 const emit = defineEmits<{
@@ -243,6 +247,21 @@ const tl_withSensitive = inject<Ref<boolean>>('tl_withSensitive', ref(true));
 const inChannel = inject(DI.inChannel, null);
 const currentClip = inject<Ref<Misskey.entities.Clip> | null>('currentClip', null);
 const currentAntenna = inject<Ref<Misskey.entities.Antenna | null> | null>('currentAntenna', null);
+
+const highlightPopularityThreshold = computed(() => {
+	return {
+		highPopularity: instance.highlightHighPopularityThreshold,
+		midPopularity: instance.highlightMidPopularityThreshold,
+	};
+});
+
+const favstarColorVars = computed(() => {
+	if (!props.featured || !prefer.r.enableFavstar.value) return undefined;
+	return {
+		'--MI-favstarAka': store.r.darkMode.value ? prefer.r.favstarDarkAka.value : prefer.r.favstarLightAka.value,
+		'--MI-favstarAo': store.r.darkMode.value ? prefer.r.favstarDarkAo.value : prefer.r.favstarLightAo.value,
+	};
+});
 
 // Template Refsの定義
 const rootEl = useTemplateRef('rootEl');
@@ -382,6 +401,15 @@ const keymap = {
 	font-size: 1.05em;
 	overflow: clip;
 	contain: content;
+
+	.akafav {
+		font-size: 2rem;
+		color: var(--MI-favstarAka, #f7796c);
+	}
+	.aofav {
+		font-size: 1.5rem;
+		color: var(--MI-favstarAo, #44a4c1);
+	}
 
 	&:focus-visible {
 		outline: none;
