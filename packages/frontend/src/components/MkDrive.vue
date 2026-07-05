@@ -267,7 +267,13 @@ async function fetchMoreFiles() {
 const filesTimeline = makeDateGroupedTimelineComputedRef(filesPaginator.items, 'month');
 const shouldBeGroupedByDate = computed(() => ['+createdAt', '-createdAt'].includes(sortModeSelect.value));
 
-watch(folder, () => emit('cd', folder.value));
+watch(folder, () => {
+	// フォルダ切替時は前フォルダで選択した項目を持ち越さない
+	selectedFiles.value = [];
+	selectedFolders.value = [];
+	isRootSelected.value = false;
+	emit('cd', folder.value);
+});
 watch(sortModeSelect, () => {
 	initialize();
 });
