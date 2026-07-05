@@ -20947,7 +20947,7 @@ export interface operations {
                 };
                 content: {
                     'application/json': {
-                        emojis: components['schemas']['EmojiSimple'][];
+                        emojis: components['schemas']['EmojiDetailed'][];
                     };
                 };
             };
