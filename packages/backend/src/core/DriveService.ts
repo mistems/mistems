@@ -186,7 +186,7 @@ export class DriveService {
 			//#endregion
 
 			//#region Uploads
-			this.registerLogger.info(`uploading original: ${key}`);
+			this.registerLogger.debug(`uploading original: ${key}`);
 			const uploads = [
 				this.upload(key, fs.createReadStream(path), type, null, name),
 			];
@@ -195,7 +195,7 @@ export class DriveService {
 				webpublicKey = `${prefix}webpublic-${randomUUID()}.${alts.webpublic.ext}`;
 				webpublicUrl = `${ baseUrl }/${ webpublicKey }`;
 
-				this.registerLogger.info(`uploading webpublic: ${webpublicKey}`);
+				this.registerLogger.debug(`uploading webpublic: ${webpublicKey}`);
 				uploads.push(this.upload(webpublicKey, alts.webpublic.data, alts.webpublic.type, alts.webpublic.ext, name));
 			}
 
@@ -203,7 +203,7 @@ export class DriveService {
 				thumbnailKey = `${prefix}thumbnail-${randomUUID()}.${alts.thumbnail.ext}`;
 				thumbnailUrl = `${ baseUrl }/${ thumbnailKey }`;
 
-				this.registerLogger.info(`uploading thumbnail: ${thumbnailKey}`);
+				this.registerLogger.debug(`uploading thumbnail: ${thumbnailKey}`);
 				uploads.push(this.upload(thumbnailKey, alts.thumbnail.data, alts.thumbnail.type, alts.thumbnail.ext, `${name}.thumbnail`));
 			}
 
@@ -236,12 +236,12 @@ export class DriveService {
 
 			if (alts.thumbnail) {
 				thumbnailUrl = this.internalStorageService.saveFromBuffer(thumbnailAccessKey, alts.thumbnail.data);
-				this.registerLogger.info(`thumbnail stored: ${thumbnailAccessKey}`);
+				this.registerLogger.debug(`thumbnail stored: ${thumbnailAccessKey}`);
 			}
 
 			if (alts.webpublic) {
 				webpublicUrl = this.internalStorageService.saveFromBuffer(webpublicAccessKey, alts.webpublic.data);
-				this.registerLogger.info(`web stored: ${webpublicAccessKey}`);
+				this.registerLogger.debug(`web stored: ${webpublicAccessKey}`);
 			}
 
 			file.storedInternal = true;
@@ -329,7 +329,7 @@ export class DriveService {
 		let webpublic: IImage | null = null;
 
 		if (generateWeb && !satisfyWebpublic && !isAnimated) {
-			this.registerLogger.info('creating web image');
+			this.registerLogger.debug('creating web image');
 
 			try {
 				if (['image/jpeg', 'image/webp', 'image/avif'].includes(type)) {
@@ -343,9 +343,9 @@ export class DriveService {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
 			}
 		} else {
-			if (satisfyWebpublic) this.registerLogger.info('web image not created (original satisfies webpublic)');
-			else if (isAnimated) this.registerLogger.info('web image not created (animated image)');
-			else this.registerLogger.info('web image not created (from remote)');
+			if (satisfyWebpublic) this.registerLogger.debug('web image not created (original satisfies webpublic)');
+			else if (isAnimated) this.registerLogger.debug('web image not created (animated image)');
+			else this.registerLogger.debug('web image not created (from remote)');
 		}
 		// #endregion webpublic
 
@@ -481,7 +481,7 @@ export class DriveService {
 			sensitiveThresholdForPorn: 0.75,
 			enableSensitiveMediaDetectionForVideos: this.meta.enableSensitiveMediaDetectionForVideos,
 		});
-		this.registerLogger.info(`${JSON.stringify(info)}`);
+		this.registerLogger.debug(`${JSON.stringify(info)}`);
 
 		// 現状 false positive が多すぎて実用に耐えない
 		//if (info.porn && this.meta.disallowUploadWhenPredictedAsPorn) {
@@ -504,7 +504,7 @@ export class DriveService {
 			});
 
 			if (matched) {
-				this.registerLogger.info(`file with same hash is found: ${matched.id}`);
+				this.registerLogger.debug(`file with same hash is found: ${matched.id}`);
 				if (sensitive && !matched.isSensitive) {
 					// The file is federated as sensitive for this time, but was federated as non-sensitive before.
 					// Therefore, update the file to sensitive.
@@ -643,7 +643,7 @@ export class DriveService {
 			} catch (err) {
 			// duplicate key error (when already registered)
 				if (isDuplicateKeyValueError(err)) {
-					this.registerLogger.info(`already registered ${file.uri}`);
+					this.registerLogger.debug(`already registered ${file.uri}`);
 
 					file = await this.driveFilesRepository.findOneBy({
 						uri: file.uri!,
@@ -902,7 +902,7 @@ export class DriveService {
 			}
 
 			const driveFile = await this.addFile({ user, path, name, comment, folderId, force, isLink, url, uri, sensitive, requestIp, requestHeaders });
-			this.downloaderLogger.succ(`Got: ${driveFile.id}`);
+			this.downloaderLogger.debug(`Got: ${driveFile.id}`);
 			return driveFile!;
 		} catch (err) {
 			this.downloaderLogger.error(`Failed to create drive file: ${err}`, {
