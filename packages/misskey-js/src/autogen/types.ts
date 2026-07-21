@@ -5584,6 +5584,7 @@ export type components = {
             requireSetup: boolean;
             cacheRemoteFiles: boolean;
             cacheRemoteSensitiveFiles: boolean;
+            sensitiveWords: string[];
         };
         MetaDetailed: components['schemas']['MetaLite'] & components['schemas']['MetaDetailedOnly'];
         MetaClientOptions: {
