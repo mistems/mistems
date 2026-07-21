@@ -84,14 +84,17 @@ relationship ほか）に増えていたため、全 10 箇所に適用した。
 
 行番号は rebase 後にずれるため、メッセージ文字列で grep して特定すること。
 
-## フェーズ2: 想定内エラーの条件付き debug 化（任意・後回し可）
+## フェーズ2: 想定内エラーの条件付き debug 化（実装済み・2026-07-21）
 
-`core/activitypub/ApInboxService.ts` の `Resolution failed: ${e}` ×7箇所:
+`core/activitypub/ApInboxService.ts` の `Resolution failed: ${e}`
+（rebase 後の develop では 7 → 6 箇所）:
 
 - エラーが **AbortError**（タイムアウト由来）または **StatusError の 4xx**
   （相手サーバー都合）の場合のみ `debug`
 - それ以外（バグの可能性があるもの）は `error` を維持
-- 判定ヘルパーを 1 つ作って 7 箇所で共有する
+- 判定ヘルパーを 1 つ作って全箇所で共有する
+  （実装: private `logResolutionFailed(e)` — `e.name === 'AbortError'` または
+  `StatusError.isClientError` なら debug、それ以外は error）
 
 ## 検証チェックリスト
 
