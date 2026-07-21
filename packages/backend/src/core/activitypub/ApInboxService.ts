@@ -89,6 +89,20 @@ export class ApInboxService {
 		this.logger = this.apLoggerService.logger;
 	}
 
+	// タイムアウト (AbortError) や相手サーバー都合の 4xx (StatusError) による解決失敗は
+	// 連合では日常的に起きる想定内イベントなので debug に落とし、それ以外は error を維持する
+	@bindThis
+	private logResolutionFailed(e: unknown): void {
+		const isExpected =
+			(e instanceof Error && e.name === 'AbortError') ||
+			(e instanceof StatusError && e.isClientError);
+		if (isExpected) {
+			this.logger.debug(`Resolution failed: ${e}`);
+		} else {
+			this.logger.error(`Resolution failed: ${e}`);
+		}
+	}
+
 	@bindThis
 	public async performActivity(actor: MiRemoteUser, activity: IObject, resolver?: Resolver): Promise<string | void> {
 		let result = undefined as string | void;
@@ -218,13 +232,13 @@ export class ApInboxService {
 	private async accept(actor: MiRemoteUser, activity: IAccept, resolver?: Resolver): Promise<string> {
 		const uri = activity.id ?? activity;
 
-		this.logger.info(`Accept: ${uri}`);
+		this.logger.debug(`Accept: ${uri}`);
 
 		// eslint-disable-next-line no-param-reassign
 		resolver ??= await this.apResolverService.createResolver();
 
 		const object = await resolver.resolve(activity.object).catch(err => {
-			this.logger.error(`Resolution failed: ${err}`);
+			this.logResolutionFailed(err);
 			throw err;
 		});
 
@@ -281,7 +295,7 @@ export class ApInboxService {
 	private async announce(actor: MiRemoteUser, activity: IAnnounce, resolver?: Resolver): Promise<string | void> {
 		const uri = getApId(activity);
 
-		this.logger.info(`Announce: ${uri}`);
+		this.logger.debug(`Announce: ${uri}`);
 
 		// eslint-disable-next-line no-param-reassign
 		resolver ??= await this.apResolverService.createResolver();
@@ -291,7 +305,7 @@ export class ApInboxService {
 		if (targetUri.startsWith('bear:')) return 'skip: bearcaps url not supported.';
 
 		const target = await resolver.resolve(activity.object).catch(e => {
-			this.logger.error(`Resolution failed: ${e}`);
+			this.logResolutionFailed(e);
 			throw e;
 		});
 
@@ -341,7 +355,7 @@ export class ApInboxService {
 
 			// リレーからのAnnounceはリノートを作成せず、ノートを直接公開する
 			if (fromRelay) {
-				this.logger.info(`Publishing relay-delivered note: ${uri}`);
+				this.logger.debug(`Publishing relay-delivered note: ${uri}`);
 				const noteObj = await this.noteEntityService.pack(renote, null, { skipHide: true, withReactionAndUserPairCache: true });
 				this.globalEventService.publishNotesStream(noteObj);
 				return;
@@ -351,7 +365,7 @@ export class ApInboxService {
 				return 'skip: invalid actor for this activity';
 			}
 
-			this.logger.info(`Creating the (Re)Note: ${uri}`);
+			this.logger.debug(`Creating the (Re)Note: ${uri}`);
 
 			const activityAudience = await this.apAudienceService.parseAudience(actor, activity.to, activity.cc, resolver);
 			const createdAt = activity.published ? new Date(activity.published) : null;
@@ -394,7 +408,7 @@ export class ApInboxService {
 	private async create(actor: MiRemoteUser, activity: ICreate, resolver?: Resolver): Promise<string | void> {
 		const uri = getApId(activity);
 
-		this.logger.info(`Create: ${uri}`);
+		this.logger.debug(`Create: ${uri}`);
 
 		if (!activity.object) return 'skip: activity has no object property';
 		const targetUri = getApId(activity.object);
@@ -420,7 +434,7 @@ export class ApInboxService {
 		resolver ??= await this.apResolverService.createResolver();
 
 		const object = await resolver.resolve(activity.object).catch(e => {
-			this.logger.error(`Resolution failed: ${e}`);
+			this.logResolutionFailed(e);
 			throw e;
 		});
 
@@ -531,7 +545,7 @@ export class ApInboxService {
 
 	@bindThis
 	private async deleteNote(actor: MiRemoteUser, uri: string): Promise<string> {
-		this.logger.info(`Deleting the Note: ${uri}`);
+		this.logger.debug(`Deleting the Note: ${uri}`);
 
 		const unlock = await acquireApObjectLock(this.redisClient, uri);
 
@@ -589,7 +603,7 @@ export class ApInboxService {
 		resolver ??= await this.apResolverService.createResolver();
 
 		const object = await resolver.resolve(activity.object).catch(e => {
-			this.logger.error(`Resolution failed: ${e}`);
+			this.logResolutionFailed(e);
 			throw e;
 		});
 
@@ -656,7 +670,7 @@ export class ApInboxService {
 		resolver ??= await this.apResolverService.createResolver();
 
 		const object = await resolver.resolve(activity.object).catch(e => {
-			this.logger.error(`Resolution failed: ${e}`);
+			this.logResolutionFailed(e);
 			throw e;
 		});
 
@@ -788,7 +802,7 @@ export class ApInboxService {
 		resolver ??= await this.apResolverService.createResolver();
 
 		const object = await resolver.resolve(activity.object).catch(e => {
-			this.logger.error(`Resolution failed: ${e}`);
+			this.logResolutionFailed(e);
 			throw e;
 		});
 
