@@ -66,7 +66,13 @@ rebase でこのコミットが壊れた場合の再適用ガイド。
 - ブロック済みホスト・削除済みユーザー等は `return`（正常スキップ扱い）に変換
 - `JsonLdError` import の整理
 
-## フェーズ1: 新規・機械的な debug 化
+## フェーズ1: 新規・機械的な debug 化（実装済み・2026-07-21）
+
+rebase 後の develop では #5 の `failed(...)` ダンプが 3 箇所 → 10 箇所
+（system / db / deliver / inbox / userWebhookDeliver / systemWebhookDeliver /
+relationship ほか）に増えていたため、全 10 箇所に適用した。
+エラー1行サマリは `error` のまま維持し、第2引数のダンプは
+`logger.debug('failed job detail id=…', {…})` の別呼び出しに分離。
 
 | # | ファイル:行（現時点） | 変更 |
 |---|---|---|

@@ -251,7 +251,7 @@ export class InboxProcessorService implements OnApplicationShutdown {
 			// アクティビティを処理
 			const result = await this.apInboxService.performActivity(authUser.user, activity);
 			if (result && !result.startsWith('ok')) {
-				this.logger.warn(`inbox activity ignored (maybe): id=${activity.id} reason=${result}`);
+				this.logger.debug(`inbox activity ignored (maybe): id=${activity.id} reason=${result}`);
 				return result;
 			}
 		} catch (e) {
