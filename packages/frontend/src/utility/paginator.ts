@@ -57,6 +57,7 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	noPaging: boolean;
 	searchQuery: Ref<null | string>;
 	order: Ref<'newest' | 'oldest'>;
+	allowPartial: boolean;
 
 	init(): Promise<void>;
 	reload(): Promise<void>;
@@ -105,6 +106,7 @@ export class Paginator<
 	public initialDirection: 'newer' | 'older';
 
 	private offsetMode: boolean;
+	
 	public noPaging: boolean;
 	public searchQuery = ref<null | string>('');
 	private searchParamName: keyof E['req'] | 'search';
@@ -113,6 +115,7 @@ export class Paginator<
 	private useShallowRef: SRef;
 	private itemRemovalDelay: number | false;
 	private removalTimers = new Map<string, number>();
+	public allowPartial: boolean;
 
 	// 配列内の要素をどのような順序で並べるか
 	// newest: 新しいものが先頭 (default)
@@ -143,6 +146,7 @@ export class Paginator<
 		canFetchDetection?: 'safe' | 'limit';
 
 		useShallowRef?: SRef;
+		allowPartial?: boolean;
 
 		// アイテム削除時にアニメーションを待つ時間 (ms)
 		itemRemovalDelay?: number | false;
@@ -171,6 +175,7 @@ export class Paginator<
 		this.canSearch = props.canSearch ?? false;
 		this.itemRemovalDelay = props.itemRemovalDelay ?? false;
 		this.searchParamName = props.searchParamName ?? 'search';
+		this.allowPartial = props.allowPartial ?? true;
 
 		this.getNewestId = this.getNewestId.bind(this);
 		this.getOldestId = this.getOldestId.bind(this);
@@ -212,7 +217,7 @@ export class Paginator<
 			...(this.computedParams ? this.computedParams.value : {}),
 			...(this.searchQuery.value != null && this.searchQuery.value.trim() !== '' ? { [this.searchParamName]: this.searchQuery.value } : {}),
 			limit: this.limit ?? FIRST_FETCH_LIMIT,
-			allowPartial: true,
+			allowPartial: this.allowPartial,
 			...((this.initialId == null && this.initialDate == null) && this.initialDirection === 'newer' ? {
 				sinceId: '0',
 			} : this.initialDirection === 'newer' ? {
