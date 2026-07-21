@@ -341,7 +341,7 @@ export class ApInboxService {
 
 			// リレーからのAnnounceはリノートを作成せず、ノートを直接公開する
 			if (fromRelay) {
-				this.logger.info(`Publishing relay-delivered note: ${uri}`);
+				this.logger.debug(`Publishing relay-delivered note: ${uri}`);
 				const noteObj = await this.noteEntityService.pack(renote, null, { skipHide: true, withReactionAndUserPairCache: true });
 				this.globalEventService.publishNotesStream(noteObj);
 				return;
@@ -531,7 +531,7 @@ export class ApInboxService {
 
 	@bindThis
 	private async deleteNote(actor: MiRemoteUser, uri: string): Promise<string> {
-		this.logger.info(`Deleting the Note: ${uri}`);
+		this.logger.debug(`Deleting the Note: ${uri}`);
 
 		const unlock = await acquireApObjectLock(this.redisClient, uri);
 
