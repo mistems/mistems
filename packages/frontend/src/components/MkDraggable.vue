@@ -266,7 +266,6 @@ function teardownAutoScroll() {
 
 const LONG_PRESS_MS = 400;
 const MOVE_THRESHOLD_PX = 8;
-const REORDER_COOLDOWN_MS = 150;
 
 type Pending = {
 	pointerId: number;
@@ -286,9 +285,22 @@ const ghostRef = ref<HTMLElement | null>(null);
 const draggingItemForGhost = ref<T | null>(null);
 const ghostBaseStyle = ref<Record<string, string>>({});
 let removeSourceCallback: (() => void) | null = null;
-let lastReorderTime = 0;
+let lastSwapTargetId: string | null = null;
+let lastSwapBackward: boolean | null = null;
+let lastSwapPointerX = 0;
+let lastSwapPointerY = 0;
+let lastSwapDeadZone = 0;
 
-// --- /DEBUG ---
+// DOM 変更直後はレイアウトが未確定で getBoundingClientRect() が不正確。
+// SortableJS の _silent と同様、短時間スワップ判定をスキップする。
+const SILENT_AFTER_SWAP_MS = 30;
+let silentUntil = 0;
+
+// アニメーション中のアイテム ID を保持。TransitionGroup の move アニメーション
+// (150ms) が完了するまで、そのアイテムをスワップ対象から除外する。
+const ANIMATION_DURATION_MS = 150;
+let animatingItemId: string | null = null;
+let animatingTimer: number | null = null;
 
 function noop() {}
 
@@ -338,6 +350,14 @@ function cleanup() {
 	dragging.value = false;
 	draggingItemId.value = null;
 	removeSourceCallback = null;
+	lastSwapTargetId = null;
+	lastSwapBackward = null;
+	lastSwapPointerX = 0;
+	lastSwapPointerY = 0;
+	lastSwapDeadZone = 0;
+	silentUntil = 0;
+	if (animatingTimer != null) { window.clearTimeout(animatingTimer); animatingTimer = null; }
+	animatingItemId = null;
 	draggingItemForGhost.value = null;
 	ghostBaseStyle.value = {};
 	if (wasTouch) {
@@ -402,6 +422,11 @@ function onPointerDown(ev: PointerEvent, item: T) {
 	// MkDraggable の `.item` div を選ぶ。これで指がハンドルの矩形を外れても capture が保持され、
 	// pointermove が滑らかに届き続ける。また button 固有の implicit pointer release 挙動
 	// (focus 抜け・blur 時の解放など) に左右されない。
+	//
+	// ※ setPointerCapture はここでは呼ばず startDrag() まで遅延する。Pointer Events Level 3
+	// ではキャプチャ中に合成される click がキャプチャ要素へリターゲットされるため、
+	// pointerdown 時点でキャプチャするとアイテム内のボタン等が「押して離しただけ」でも
+	// click を受け取れなくなる (Firefox / Chromium とも実装済みの挙動)。
 	const origin = ev.currentTarget as HTMLElement;
 	const itemEl = origin.closest<HTMLElement>(`[data-mk-draggable-item-root="${CSS.escape(item.id)}"]`) ?? origin;
 	const captureTarget = itemEl;
@@ -421,12 +446,6 @@ function onPointerDown(ev: PointerEvent, item: T) {
 	// (詳細は suppressContextmenuListener 付近のコメント参照)
 	if (ev.pointerType === 'touch') {
 		attachContextmenuSuppressor();
-	}
-
-	try {
-		captureTarget.setPointerCapture(ev.pointerId);
-	} catch {
-		// noop
 	}
 
 	// captureTarget ではなく document でリッスン。DOM 並び替え (TransitionGroup) で
@@ -456,6 +475,15 @@ function startDrag() {
 	dragging.value = true;
 	draggingItemId.value = item.id;
 
+	// ドラッグ確定時点でキャプチャする (pointerdown 時に呼ばない理由は onPointerDown 参照)。
+	// ウィンドウ外へのマウス移動でも pointermove が届き続け、ドラッグ終了時の click は
+	// リターゲットにより `.item` div へ飛ぶのでアイテム内ボタンの誤発火も防げる。
+	try {
+		pending.captureTarget.setPointerCapture(pending.pointerId);
+	} catch {
+		// noop
+	}
+
 	// mouse は textnode の選択が始まっていることがあるのでクリアする
 	if (pending.pointerType === 'mouse') {
 		window.getSelection()?.removeAllRanges();
@@ -480,6 +508,85 @@ function startDrag() {
 		}
 	}
 }
+
+// ---------- same-instance reorder ----------
+// ゴースト rect と各アイテムの rect を直接比較してスワップ候補を見つける。
+// elementFromPoint を使わないため、透明 overlay の z-index 問題が発生しない。
+
+const OVERLAP_RATIO = 0.3;
+
+function computeOverlap(ghostRect: DOMRect, targetRect: DOMRect, backward: boolean): number {
+	if (props.direction === 'horizontal') {
+		return backward
+			? ghostRect.right - targetRect.left
+			: targetRect.right - ghostRect.left;
+	}
+	return backward
+		? ghostRect.bottom - targetRect.top
+		: targetRect.bottom - ghostRect.top;
+}
+
+function trySameInstanceReorder(ev: PointerEvent, ghostRect: DOMRect | null): boolean {
+	if (dragSession == null || ghostRect == null || pending == null) return false;
+	const draggedId = dragSession.item.id;
+	const container = pending.captureTarget.parentElement;
+	if (container == null) return false;
+
+	const draggedIndex = props.modelValue.findIndex(x => x.id === draggedId);
+	if (draggedIndex === -1) return false;
+
+	for (let i = 0; i < props.modelValue.length; i++) {
+		if (i === draggedIndex) continue;
+		const item = props.modelValue[i];
+		if (item.id === animatingItemId) continue;
+
+		// :scope > で直下の子に限定 (canNest でネストした別インスタンスの item root を誤って拾わない)
+		const itemEl = container.querySelector<HTMLElement>(
+			`:scope > [data-mk-draggable-item-root="${CSS.escape(item.id)}"]`,
+		);
+		if (itemEl == null) continue;
+
+		const itemRect = itemEl.getBoundingClientRect();
+		const backward = draggedIndex < i;
+
+		const size = props.direction === 'horizontal'
+			? Math.min(ghostRect.width, itemRect.width)
+			: Math.min(ghostRect.height, itemRect.height);
+		const threshold = size * OVERLAP_RATIO;
+		const overlap = computeOverlap(ghostRect, itemRect, backward);
+		if (overlap < threshold) continue;
+
+		// オシレーション防止: 同じ相手への逆方向スワップはデッドゾーン内ならブロック
+		if (lastSwapTargetId === item.id && lastSwapBackward !== backward) {
+			const dist = props.direction === 'horizontal'
+				? Math.abs(ev.clientX - lastSwapPointerX)
+				: Math.abs(ev.clientY - lastSwapPointerY);
+			if (dist < lastSwapDeadZone) return true;
+		}
+
+		if (!applyDrop(dragSession.item as T, group, item.id, backward)) continue;
+
+		const now = performance.now();
+		silentUntil = now + SILENT_AFTER_SWAP_MS;
+		lastSwapTargetId = item.id;
+		lastSwapBackward = backward;
+		lastSwapPointerX = ev.clientX;
+		lastSwapPointerY = ev.clientY;
+		lastSwapDeadZone = props.direction === 'horizontal' ? itemRect.width : itemRect.height;
+
+		if (animatingTimer != null) window.clearTimeout(animatingTimer);
+		animatingItemId = item.id;
+		animatingTimer = window.setTimeout(() => {
+			animatingItemId = null;
+			animatingTimer = null;
+		}, ANIMATION_DURATION_MS);
+
+		return true;
+	}
+	return false;
+}
+
+// ---------- pointer move ----------
 
 function onPointerMove(ev: PointerEvent) {
 	if (pending == null || ev.pointerId !== pending.pointerId) return;
@@ -548,99 +655,38 @@ function onPointerMove(ev: PointerEvent) {
 
 	updateAutoScroll(ev.clientX, ev.clientY);
 
-	// elementFromPoint で実際のドロップターゲットを判定 (ghostは一時的に隠す)
-	const ghostRect = ghostRef.value?.getBoundingClientRect() ?? null;
-	const prevDisplay = ghostRef.value?.style.display ?? '';
-	if (ghostRef.value != null) ghostRef.value.style.display = 'none';
-
-	// ポインタ位置で検索し、自アイテムにヒットした場合はゴーストの進行方向端でも検索する。
-	// ゴースト端が隣のアイテムに到達していればそちらをターゲットにする。
-	let el = window.document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
-	if (el != null && dragSession != null) {
-		// area だけでなく item ルート内のコンテンツ（ボタン等）にヒットした場合も self と判定する
-		const hitItemRoot = el.closest<HTMLElement>(`[data-mk-draggable-item-root="${CSS.escape(dragSession.item.id)}"]`);
-		if (hitItemRoot != null) {
-			if (ghostRect != null) {
-				const edgeX = props.direction === 'horizontal'
-					? (ev.clientX > pending.x ? ghostRect.right : ghostRect.left)
-					: ev.clientX;
-				const edgeY = props.direction === 'vertical'
-					? (ev.clientY > pending.y ? ghostRect.bottom : ghostRect.top)
-					: ev.clientY;
-				const edgeEl = window.document.elementFromPoint(edgeX, edgeY) as HTMLElement | null;
-				if (edgeEl != null) {
-					// area でなくコンテンツにヒットしても、別アイテムの item-root 内なら有効
-					const edgeItemRoot = edgeEl.closest<HTMLElement>('[data-mk-draggable-item-root]');
-					if (edgeItemRoot != null && edgeItemRoot.dataset.mkDraggableItemRoot !== dragSession.item.id) {
-						// 対象アイテムの進行方向側 area を直接取得する
-						const targetArea = props.direction === 'vertical'
-							? (ev.clientY > pending.y
-								? edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="forward"]')
-								: edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="backward"]'))
-							: (ev.clientX > pending.x
-								? edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="forward"]')
-								: edgeItemRoot.querySelector<HTMLElement>('[data-mk-draggable-area="backward"]'));
-						if (targetArea != null) {
-							el = targetArea;
-						}
-					}
-				}
-			}
-		}
+	// DOM 変更直後は座標が不安定なためスワップ判定をスキップ (ゴースト移動・オートスクロールは実行済)
+	if (performance.now() < silentUntil) {
+		return;
 	}
 
-	if (ghostRef.value != null) ghostRef.value.style.display = prevDisplay;
+	const ghostRect = ghostRef.value?.getBoundingClientRect() ?? null;
 
-	if (el == null) {
+	// 同一インスタンス内の並べ替え: ゴースト rect と各アイテムの rect を直接比較する。
+	// elementFromPoint を使わないため、透明な overlay area の z-index 問題やコンテンツ
+	// ヒットの問題が発生しない。
+	if (trySameInstanceReorder(ev, ghostRect)) {
 		dropTarget.value = null;
 		return;
 	}
 
-	const areaEl = el.closest<HTMLElement>('[data-mk-draggable-area]');
-	if (areaEl != null) {
-		const targetInstanceId = areaEl.dataset.mkDraggableInstanceId;
-		const targetItemId = areaEl.dataset.mkDraggableItemId;
-		const area = areaEl.dataset.mkDraggableArea as 'forward' | 'backward' | undefined;
-		if (targetInstanceId != null && targetItemId != null && (area === 'forward' || area === 'backward')) {
-			if (targetInstanceId === instanceId && dragSession != null) {
-				const draggedId = dragSession.item.id;
-				if (draggedId !== targetItemId) {
-					const fromIndex = props.modelValue.findIndex(x => x.id === draggedId);
-					const toIndex = props.modelValue.findIndex(x => x.id === targetItemId);
-					if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-						const targetRoot = areaEl.closest<HTMLElement>('[data-mk-draggable-item-root]');
-						let shouldSwap = true;
-						if (targetRoot != null && ghostRect != null) {
-							const targetRect = targetRoot.getBoundingClientRect();
-							const OVERLAP_RATIO = 0.3;
-							let overlap: number;
-							let threshold: number;
-							if (props.direction === 'horizontal') {
-								threshold = Math.min(ghostRect.width, targetRect.width) * OVERLAP_RATIO;
-								overlap = fromIndex < toIndex
-									? ghostRect.right - targetRect.left
-									: targetRect.right - ghostRect.left;
-								if (overlap < threshold) shouldSwap = false;
-							} else {
-								threshold = Math.min(ghostRect.height, targetRect.height) * OVERLAP_RATIO;
-								overlap = fromIndex < toIndex
-									? ghostRect.bottom - targetRect.top
-									: targetRect.bottom - ghostRect.top;
-								if (overlap < threshold) shouldSwap = false;
-							}
-						}
-						if (shouldSwap && performance.now() - lastReorderTime > REORDER_COOLDOWN_MS) {
-							applyDrop(dragSession.item as T, group, targetItemId, fromIndex < toIndex);
-							lastReorderTime = performance.now();
-						}
-					}
-				}
-				dropTarget.value = null;
-			} else {
-				// 異なるインスタンス間: インジケーター表示
+	// 異なるインスタンス間のドロップ: elementFromPoint でターゲットを検出する。
+	// 他インスタンスのアイテムには直接アクセスできないため、ここだけ elementFromPoint を使う。
+	const prevDisplay = ghostRef.value?.style.display ?? '';
+	if (ghostRef.value != null) ghostRef.value.style.display = 'none';
+	const el = window.document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+	if (ghostRef.value != null) ghostRef.value.style.display = prevDisplay;
+
+	if (el != null) {
+		const areaEl = el.closest<HTMLElement>('[data-mk-draggable-area]');
+		if (areaEl != null) {
+			const targetInstanceId = areaEl.dataset.mkDraggableInstanceId;
+			const targetItemId = areaEl.dataset.mkDraggableItemId;
+			const area = areaEl.dataset.mkDraggableArea as 'forward' | 'backward' | undefined;
+			if (targetInstanceId != null && targetItemId != null && targetInstanceId !== instanceId && (area === 'forward' || area === 'backward')) {
 				dropTarget.value = { instanceId: targetInstanceId, itemId: targetItemId, area };
+				return;
 			}
-			return;
 		}
 	}
 	dropTarget.value = null;
