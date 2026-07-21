@@ -66,7 +66,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div><i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span></div>
 				</button>
 				<Transition>
-					<button v-if="isInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, {[$style.twoColumn]: showLocalTimelinePostButtonInChannel}]" data-cy-open-post-form @click="os.post">
+					<button v-if="isInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, {[$style.twoColumn]: showLocalTimelinePostButtonInChannel}]" data-cy-open-post-form @click="() => { os.post(); }">
 						<i class="ti ti-device-tv ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">ch</span>
 					</button>
 				</Transition>
