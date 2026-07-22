@@ -85,6 +85,30 @@ if (!res.ok && extra.throwErrorWhenResponseNotOk) {
 呼び出し経路を確定してから正確な再現テスト (RED) と本修正を書く。
 この URL 付きエラーメッセージ自体は恒久的に有益なので残してよい。
 
+## 根本原因の確定 (2026-07-23、診断パッチの戦果)
+
+診断パッチ稼働後 25 分で leak URL を 9 件回収。**すべて AP アクター URL**
+(`https://<remote>/users/<id>`、大半が応答しないインスタンス)。
+
+**真犯人: `ApInboxService.performActivity` 末尾の「ついでにリモートユーザーの
+情報が古かったら更新」ブロック** (2024 年の #15010 から存在):
+
+```ts
+setImmediate(() => {
+    this.apPersonService.updatePerson(actor.uri);   // await も catch も無し
+});
+```
+
+リモートが応答しない場合の send() タイムアウト (AbortError) を誰も受け取らず
+unhandled になる。「7/22 から発生」に見えたのは、upstream #17728 (7/17,
+構造化ログ対応) で process-error-handler が追加され、**何年も無音だった
+unhandled rejection が可視化された観測効果**だった。
+
+修正: `.catch` を追加して debug ログに変換 (ベストエフォートの
+バックグラウンド更新のため)。テスト作成時の学び:
+**vi.spyOn / mockRejectedValue は戻り値 Promise に結果記録ハンドラを付けるため
+unhandled rejection を再現できない** → 素のモンキーパッチで差し替えること。
+
 ## テスト
 
 - 再現テストを backend unit テストとして追加（mock サーバー +
