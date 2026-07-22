@@ -173,6 +173,27 @@ relationship ほか）に増えていたため、全 10 箇所に適用した。
   upstream PR: `fix/inbox-jsonld-unrecoverable` ブランチ）で解消見込み。
   頻度が低い（直近観測では未出現）ため after 計測で消えたことだけ確認。
 
+## フェーズ4: 成功ログの debug 化（未実装・2026-07-23 追加）
+
+方針決定: **「1件ごとの成功ログは debug、ジョブ1回ごとのサマリは info で残す」**。
+沈黙が「平和」なのか「動いていない」なのか区別するため、ジョブ単位の生存報告
+（例: リモートノートクリーナーの Total deleted）は消さない。
+
+実測 (MisskeySystems、30分、インスタンス別フィルタ済み) で全ログの約83%が
+1件ごと成功ログ。内訳と対象:
+
+| 件数/30分 | 出力元 | ログ | 変更 |
+|---:|---|---|---|
+| 1,579 (73%) | `core/chart/core.ts` (ChartLogger 経由) | `<chart>:<id>: Updated` / `(hour|day): New commit created` | `info` → `debug` |
+| 127 | `queue/processors/...` (drive register) | `DONE drive file has been created <id>` | `succ/info` → `debug` |
+| 72 | `[metadata]` ロガー | メタデータ取得の成功報告 | `info/succ` → `debug`（出力元は実装時に grep で特定） |
+
+### 集計時の注意（2026-07-22 の教訓）
+
+Papertrail は 3 インスタンス（MisskeySystems / gamelore / favskey）の混合。
+集計は必ず `papertrail -j` + `.events[] | select(.source_name=="...")` で
+インスタンスを分離すること。素の grep 集計は 3 台合算になる。
+
 ## 関連計画
 
 - リトライ不能な AP エラーの再試行抑止（3-c の一般化）→
