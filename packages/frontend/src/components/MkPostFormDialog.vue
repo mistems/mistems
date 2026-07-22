@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <MkModal
 	ref="modal"
 	:preferType="'dialog'"
-	@click="onBgClick()"
+	@click="onBgClick"
 	@closed="onModalClosed()"
 	@esc="onEsc"
 >
@@ -30,6 +30,7 @@ import { useTemplateRef } from 'vue';
 import type { PostFormProps } from '@/types/post-form.js';
 import MkModal from '@/components/MkModal.vue';
 import MkPostForm from '@/components/MkPostForm.vue';
+import { deviceKind } from '@/utility/device-kind.js';
 
 const props = withDefaults(defineProps<PostFormProps & {
 	instant?: boolean;
@@ -63,7 +64,16 @@ function onEsc() {
 	_close();
 }
 
-function onBgClick() {
+function onBgClick(ev?: MouseEvent) {
+	// スマホではフォーム上部・横の余白タップで閉じないようにし、下側タップ時のみ閉じる
+	// (PC ではフォームの周囲も広く、狙ってクリックできるため従来通り背景クリックで閉じる)
+	if (ev && deviceKind === 'smartphone') {
+		const formEl = (form.value as unknown as { $el?: HTMLElement } | null)?.$el;
+		if (formEl) {
+			const rect = formEl.getBoundingClientRect();
+			if (ev.clientY < rect.bottom) return;
+		}
+	}
 	_close();
 }
 
