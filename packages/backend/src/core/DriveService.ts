@@ -658,7 +658,7 @@ export class DriveService {
 			file = await (this.save(file, path, detectedName, info.type.mime, info.md5, info.size));
 		}
 
-		this.registerLogger.succ(`drive file has been created ${file.id}`);
+		this.registerLogger.debug(`drive file has been created ${file.id}`);
 
 		if (user) {
 			this.driveFileEntityService.pack(file, { self: true }).then(packedFile => {
