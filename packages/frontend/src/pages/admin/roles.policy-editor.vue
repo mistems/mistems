@@ -397,6 +397,38 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</MkSwitch>
 			</template>
 		</XFolder>
+
+		<XFolder v-if="matchQuery([i18n.ts._role._options.canUseTimemachine, 'canUseTimemachine'])" v-model:policyMeta="policyMetaModel.canUseTimemachine" :isBaseRole="isBaseRole" :readonly="readonly">
+			<template #label>{{ i18n.ts._role._options.canUseTimemachine }}</template>
+			<template #valueText>{{ valuesModel.canUseTimemachine ? i18n.ts.yes : i18n.ts.no }}</template>
+			<template #default="{ disabled }">
+				<MkSwitch v-model="valuesModel.canUseTimemachine" :disabled="disabled">
+					<template #label>{{ i18n.ts.enable }}</template>
+				</MkSwitch>
+			</template>
+		</XFolder>
+
+		<XFolder v-if="matchQuery([i18n.ts._role._options.timemachineReachableFrom, 'timemachineReachableFrom'])" v-model:policyMeta="policyMetaModel.timemachineReachableFrom" :isBaseRole="isBaseRole" :readonly="readonly">
+			<template #label>{{ i18n.ts._role._options.timemachineReachableFrom }}</template>
+			<template #valueText>{{ valuesModel.timemachineReachableFrom === 0 ? i18n.ts.unlimited : new Date(valuesModel.timemachineReachableFrom).toLocaleString() }}</template>
+			<template #default="{ disabled }">
+				<MkInput :modelValue="formatTimestampToDatetimeLocal(valuesModel.timemachineReachableFrom)" type="datetime-local" :disabled="disabled" @update:modelValue="(v) => valuesModel.timemachineReachableFrom = parseDatetimeLocalToTimestamp(v)">
+					<template #label>{{ i18n.ts._role._options.timemachineReachableFromDescription }}</template>
+					<template #caption>{{ i18n.ts._role._options.timemachineReachableFromHint }}</template>
+				</MkInput>
+			</template>
+		</XFolder>
+
+		<XFolder v-if="matchQuery([i18n.ts._role._options.timemachineTravelableMaxDays, 'timemachineTravelableMaxDays'])" v-model:policyMeta="policyMetaModel.timemachineTravelableMaxDays" :isBaseRole="isBaseRole" :readonly="readonly">
+			<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDays }}</template>
+			<template #valueText>{{ valuesModel.timemachineTravelableMaxDays === 0 ? i18n.ts.unlimited : valuesModel.timemachineTravelableMaxDays + i18n.ts._time.day }}</template>
+			<template #default="{ disabled }">
+				<MkInput v-model="valuesModel.timemachineTravelableMaxDays" type="number" :min="0" :disabled="disabled">
+					<template #label>{{ i18n.ts._role._options.timemachineTravelableMaxDaysDescription }}</template>
+					<template #caption>{{ i18n.ts._role._options.timemachineTravelableMaxDaysHint }}</template>
+				</MkInput>
+			</template>
+		</XFolder>
 	</div>
 </template>
 
@@ -479,5 +511,23 @@ const avatarDecorationLimit = computed({
 
 function updateAvatarDecorationLimit(value: string | number) {
 	avatarDecorationLimit.value = Number(value);
+}
+
+function formatTimestampToDatetimeLocal(timestamp: number): string {
+	if (timestamp === 0) return '';
+	const date = new Date(timestamp);
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	const hours = String(date.getHours()).padStart(2, '0');
+	const minutes = String(date.getMinutes()).padStart(2, '0');
+	return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseDatetimeLocalToTimestamp(datetimeLocal: string | number): number {
+	if (!datetimeLocal) return 0;
+	const timestamp = new Date(datetimeLocal).getTime();
+	if (isNaN(timestamp)) return 0;
+	return timestamp;
 }
 </script>

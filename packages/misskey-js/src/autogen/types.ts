@@ -5366,6 +5366,9 @@ export type components = {
             canManageAvatarDecorations: boolean;
             canSearchNotes: boolean;
             canSearchUsers: boolean;
+            canUseTimemachine: boolean;
+            timemachineReachableFrom: number;
+            timemachineTravelableMaxDays: number;
             canUseTranslator: boolean;
             canHideAds: boolean;
             canCreateChannel: boolean;
@@ -9577,6 +9580,10 @@ export interface operations {
                         remoteNotesCleaningExpiryDaysForEachNotes: number;
                         remoteNotesCleaningMaxProcessingDurationInMinutes: number;
                         showRoleBadgesOfRemoteUsers: boolean;
+                        highlightRateFactor: number;
+                        highlightMidPopularityThreshold: number;
+                        highlightHighPopularityThreshold: number;
+                        highlightExcludeEmojis: string;
                     };
                 };
             };
@@ -13097,6 +13104,10 @@ export interface operations {
                     remoteNotesCleaningExpiryDaysForEachNotes?: number;
                     remoteNotesCleaningMaxProcessingDurationInMinutes?: number;
                     showRoleBadgesOfRemoteUsers?: boolean;
+                    highlightRateFactor?: number;
+                    highlightMidPopularityThreshold?: number;
+                    highlightHighPopularityThreshold?: number;
+                    highlightExcludeEmojis?: string;
                 };
             };
         };
