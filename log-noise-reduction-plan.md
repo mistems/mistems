@@ -146,7 +146,22 @@ relationship ほか）に増えていたため、全 10 箇所に適用した。
   「maxSize 由来」と識別できる場合だけスキップ化する。
   一律に Premature close をスキップにしてはいけない。
 
-### 3-d. （継続観測）その他の候補
+### 3-d. `[remote ap] StatusError: 410 Gone` のスタックダンプ
+
+- **観測**: リモートアカウント削除の連鎖（misskey.io 等の大量削除）を受信するたびに
+  `ERR [remote ap] StatusError: 410 Gone { e: … スタック複数行 … }` が頻発。
+  直後に `Deleting the Actor` が続く = **削除済みアカウント検知の正常フロー**。
+- **出所**: `core/activitypub/models/ApPersonService.ts` の
+  `updateFeatured().catch(err => this.logger.error(err))`（2箇所:
+  `createPerson` 内と `updatePerson` 内）。Error オブジェクトを直接
+  `logger.error` に渡すためスタック付きダンプになる。
+- **変更**: フェーズ2の `logResolutionFailed` と同型のヘルパー
+  `logUpdateFeaturedFailed(e)` を追加。**AbortError または StatusError の 4xx**
+  （410 Gone 含む）は `debug`、それ以外は `error`（1行サマリのみ、スタックダンプなし）。
+  同ファイルの following/followers 取得 catch（`!(err instanceof StatusError) ||
+  err.isRetryable` のときだけ error）と同じ思想。
+
+### 3-e. （継続観測）その他の候補
 
 2026-07-22 の観測時点でまだ残っていた・判断保留のもの:
 

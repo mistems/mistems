@@ -472,7 +472,7 @@ export class ApPersonService implements OnModuleInit {
 		}
 		//#endregion
 
-		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
+		await this.updateFeatured(user.id, resolver).catch(err => this.logUpdateFeaturedFailed(err));
 
 		return user;
 	}
@@ -635,7 +635,7 @@ export class ApPersonService implements OnModuleInit {
 			{ followerSharedInbox: person.sharedInbox ?? person.endpoints?.sharedInbox ?? null },
 		);
 
-		await this.updateFeatured(exist.id, resolver).catch(err => this.logger.error(err));
+		await this.updateFeatured(exist.id, resolver).catch(err => this.logUpdateFeaturedFailed(err));
 
 		const updated = { ...exist, ...updates };
 
@@ -697,6 +697,18 @@ export class ApPersonService implements OnModuleInit {
 		}
 
 		return fields;
+	}
+
+	@bindThis
+	private logUpdateFeaturedFailed(e: unknown): void {
+		const isExpected =
+			(e instanceof Error && e.name === 'AbortError') ||
+			(e instanceof StatusError && e.isClientError);
+		if (isExpected) {
+			this.logger.debug(`Failed to update featured notes: ${e}`);
+		} else {
+			this.logger.error(`Failed to update featured notes: ${e}`);
+		}
 	}
 
 	@bindThis
