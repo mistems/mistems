@@ -66,3 +66,5 @@ overrides:
 engineStrict: true
 saveExact: true
 shellEmulator: true
+patchedDependencies:
+  node-fetch@3.3.2: patches/node-fetch@3.3.2.patch

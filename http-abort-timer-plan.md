@@ -67,6 +67,24 @@ if (!res.ok && extra.throwErrorWhenResponseNotOk) {
 「もう誰も body を使わない」ことが確定した時点（throw 時・呼び出し元の
 明示破棄）でストリームを畳む。再現テストで各案の効果を確認して決定する。
 
+## 調査記録 (2026-07-23): 再現失敗と診断パッチ
+
+ローカル再現は 3 シナリオ × Node 22/24 で**すべて失敗**（unhandled にならない）:
+
+- node-fetch 3.3.2 のソース精読の結果、遅延 abort のエラー経路は
+  すべて内部で握り潰される（resolve 済み promise への reject は no-op、
+  body エラーは pipeline コールバック → 同じく no-op）
+- `send()` 系の全呼び出し箇所 (12箇所) を監査 → すべて await + catch 経路あり
+- 本番の発生開始は 7/22 の新ビルド以降。本番 Node は 24.17/24.18 で
+  ローカルと同じ major → 環境差説も消えた
+
+→ 推測で修正せず、**診断パッチで本番に質問する**方針に切り替え:
+`pnpm patch node-fetch@3.3.2` で abort 時の AbortError メッセージに
+`request.url` を含める（`patches/node-fetch@3.3.2.patch`）。
+デプロイ後の unhandled rejection ログから leak した URL を特定し、
+呼び出し経路を確定してから正確な再現テスト (RED) と本修正を書く。
+この URL 付きエラーメッセージ自体は恒久的に有益なので残してよい。
+
 ## テスト
 
 - 再現テストを backend unit テストとして追加（mock サーバー +
