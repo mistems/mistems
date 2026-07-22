@@ -96,6 +96,73 @@ relationship ほか）に増えていたため、全 10 箇所に適用した。
   （実装: private `logResolutionFailed(e)` — `e.name === 'AbortError'` または
   `StatusError.isClientError` なら debug、それ以外は error）
 
+## フェーズ3: Papertrail 実測 (2026-07-22) で判明した新パターン（実装済み・2026-07-22）
+
+本番ログの直近観測で、フェーズ0〜2の対象外だったノイズ源を3つ特定した。
+
+### 3-a. `Error: Question is not registered` の生スタックトレース
+
+- **出所**: `core/activitypub/ApInboxService.ts:813`
+  ```ts
+  await this.apQuestionService.updateQuestion(object, actor, resolver).catch(err => console.error(err));
+  ```
+  Logger を通さない生の `console.error(err)` のため、スタックトレース全行が
+  そのまま syslog に流れる（レベル制御も効かない）。
+- **原因**: リモートの投票 (Question) の Update が来たが、ローカルに該当ノート/
+  poll が未登録（`ApQuestionService.ts:83,86,89` の throw）。
+  「target note not found」と同類の**想定内スキップ**。
+- **変更**: `console.error(err)` → `this.logger.debug(\`Update-Question skipped: ${err}\`)`。
+  Logger 経由に変えるだけでもレベル制御・書式が効くようになる。
+
+### 3-b. `[drive downloader] Failed to create drive file` のスタック付きダンプ
+
+- **出所**: `core/DriveService.ts:908`（`uploadFromUrl` の catch）。
+  `logger.error(msg, { url, e: err })` の第2引数ダンプがスタックトレースを複数行出力。
+- **原因の典型例**: リモートメディアが `maxFileSize` 超過 →
+  `DownloadService.ts:75-77,93-95` が `req.destroy()` → 汎用の
+  `ERR_STREAM_PREMATURE_CLOSE` になる（maxSize が原因である情報が消える）。
+- **変更**: フェーズ1 #5 と同じ分離パターン。1行サマリ
+  `Failed to create drive file: ${err}` は `error` のまま維持し、
+  `{ url, e }` ダンプは `logger.debug` の別呼び出しへ分離。
+
+### 3-c. リモートメディア取得失敗で inbox ジョブがリトライされる
+
+- **観測**: `ERR [queue inbox] failed(Error: Premature close) attempts=2/2` —
+  520MB の動画添付を持つノートの Create が、maxSize 超過のたびに
+  リトライされ、毎回 3-b のエラーダンプを再生産する。
+- **伝播経路**: `DownloadService`（destroy）→ `DriveService.uploadFromUrl`（throw）→
+  `ApImageService.createImage:72` → `ApNoteService.createNote` の attachment ループ
+  （`ApNoteService.ts:232-234`）→ `ApInboxService` → `InboxProcessorService` → Bull リトライ。
+- **変更**（2段階、実装済み）:
+  1. `DownloadService` に `DownloadSizeLimitExceededError` クラスを新設し、
+     maxSize 超過時の `req.destroy()` に渡す。
+     **注意**: got 15 は destroy に渡したエラーを `RequestError` でラップする
+     （`core/index.js` の `_destroy`）ため、`stream.pipeline` の catch で
+     `e.cause instanceof DownloadSizeLimitExceededError` を見てアンラップして投げ直す
+  2. `InboxProcessorService.process` の catch に
+     `e instanceof DownloadSizeLimitExceededError → return 'skip: remote media exceeds size limit'`
+     を追加し、リトライを止める（`completed` として debug レベルで記録される）
+- **注意**: 一時的なネットワーク断による Premature close は**リトライさせたい**ので、
+  「maxSize 由来」と識別できる場合だけスキップ化する。
+  一律に Premature close をスキップにしてはいけない。
+
+### 3-d. （継続観測）その他の候補
+
+2026-07-22 の観測時点でまだ残っていた・判断保留のもの:
+
+- `WARN [queue inbox] inbox activity ignored (maybe): reason=skip: target note not found`
+  — フェーズ1 #2 で debug 化済みのはずだが本番で残存 → **デプロイ反映待ちの可能性**。
+  after 計測時にビルド内容を確認。
+- `jsonld.ValidationError: Safe mode validation error` のスタックダンプ —
+  フェーズ0-b（LD-Signature 検証 catch の UnrecoverableError 化、
+  upstream PR: `fix/inbox-jsonld-unrecoverable` ブランチ）で解消見込み。
+  頻度が低い（直近観測では未出現）ため after 計測で消えたことだけ確認。
+
+## 関連計画
+
+- リトライ不能な AP エラーの再試行抑止（3-c の一般化）→
+  [ap-retry-suppression-plan.md](ap-retry-suppression-plan.md)
+
 ## 検証チェックリスト
 
 1. `pnpm lint`（typecheck + eslint）

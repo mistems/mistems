@@ -22,6 +22,7 @@ import { StatusError } from '@/misc/status-error.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { ApPersonService } from '@/core/activitypub/models/ApPersonService.js';
 import { JsonLdService } from '@/core/activitypub/JsonLdService.js';
+import { DownloadSizeLimitExceededError } from '@/core/DownloadService.js';
 import { ApInboxService } from '@/core/activitypub/ApInboxService.js';
 import { bindThis } from '@/decorators.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
@@ -258,6 +259,10 @@ export class InboxProcessorService implements OnApplicationShutdown {
 			// Bull.UnrecoverableError が運用上見えてもしょうがないので静かにする
 			if (e instanceof Bull.UnrecoverableError && process.env.NODE_ENV === 'production') {
 				return 'UnrecoverableError';
+			}
+			// リモートメディアがサイズ上限超過 → リトライしても結果は同じなのでスキップ
+			if (e instanceof DownloadSizeLimitExceededError) {
+				return 'skip: remote media exceeds size limit';
 			}
 			if (e instanceof IdentifiableError) {
 				switch (e.id) {
