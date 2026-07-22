@@ -10816,6 +10816,10 @@ export interface Locale extends ILocale {
          * 特殊
          */
         "specialBlocks": string;
+        /**
+         * 他MFM
+         */
+        "otherMfm": string;
         "blocks": {
             /**
              * テキスト
