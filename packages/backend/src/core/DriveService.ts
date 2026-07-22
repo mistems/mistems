@@ -905,7 +905,8 @@ export class DriveService {
 			this.downloaderLogger.debug(`Got: ${driveFile.id}`);
 			return driveFile!;
 		} catch (err) {
-			this.downloaderLogger.error(`Failed to create drive file: ${err}`, {
+			this.downloaderLogger.error(`Failed to create drive file: ${err}`);
+			this.downloaderLogger.debug(`Failed to create drive file: ${url}`, {
 				url: url,
 				e: err,
 			});

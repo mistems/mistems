@@ -19,6 +19,13 @@ import type Logger from '@/logger.js';
 
 import { bindThis } from '@/decorators.js';
 
+export class DownloadSizeLimitExceededError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'DownloadSizeLimitExceededError';
+	}
+}
+
 @Injectable()
 export class DownloadService {
 	private logger: Logger;
@@ -88,7 +95,7 @@ export class DownloadService {
 				const size = Number(contentLength);
 				if (size > maxSize) {
 					this.logger.warn(`maxSize exceeded (${size} > ${maxSize}) on response`);
-					req.destroy();
+					req.destroy(new DownloadSizeLimitExceededError(`maxSize exceeded (${size} > ${maxSize}) on response`));
 				}
 			}
 
@@ -106,7 +113,7 @@ export class DownloadService {
 		}).on('downloadProgress', (progress: Got.Progress) => {
 			if (progress.transferred > maxSize) {
 				this.logger.warn(`maxSize exceeded (${progress.transferred} > ${maxSize}) on downloadProgress`);
-				req.destroy();
+				req.destroy(new DownloadSizeLimitExceededError(`maxSize exceeded (${progress.transferred} > ${maxSize}) on downloadProgress`));
 			}
 		});
 
@@ -115,6 +122,9 @@ export class DownloadService {
 		} catch (e) {
 			if (e instanceof Got.HTTPError) {
 				throw new StatusError(`${e.response.statusCode} ${e.response.statusMessage}`, e.response.statusCode, e.response.statusMessage);
+			} else if (e instanceof Error && e.cause instanceof DownloadSizeLimitExceededError) {
+				// got は destroy() に渡したエラーを RequestError でラップするため、元のエラーを取り出して投げ直す
+				throw e.cause;
 			} else {
 				throw e;
 			}
