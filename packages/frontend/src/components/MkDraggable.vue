@@ -207,6 +207,9 @@ function autoScrollTick() {
 	if (autoScrollTarget == null) return;
 	if (autoScrollSpeedX !== 0) autoScrollTarget.scrollLeft += autoScrollSpeedX;
 	if (autoScrollSpeedY !== 0) autoScrollTarget.scrollTop += autoScrollSpeedY;
+	// スクロールで指の下のアイテム rect が動くため、指が止まっていて pointermove が
+	// 発火しなくてもスワップ判定を更新し続ける
+	if (dragActive) updateDropState(lastPointerX, lastPointerY);
 	autoScrollRafId = window.requestAnimationFrame(autoScrollTick);
 }
 
@@ -280,6 +283,9 @@ type Pending = {
 let pending: Pending | null = null;
 let longPressTimer: number | null = null;
 let dragActive = false;
+// autoScrollTick からスワップ判定を呼ぶための最終ポインタ座標 (drag 中に onPointerMove が更新)
+let lastPointerX = 0;
+let lastPointerY = 0;
 let dragSession: { item: T; instanceId: string; group: string } | null = null;
 const ghostRef = ref<HTMLElement | null>(null);
 const draggingItemForGhost = ref<T | null>(null);
@@ -319,11 +325,24 @@ function onVisibilityChange() {
 	}
 }
 
+// touch ドラッグ確定中のネイティブスクロール抑止。
+// `.item` の touch-action: pan-y は pointerdown の瞬間に確定するため、長押しでドラッグが
+// 成立した後も「縦パンして良いタッチ」のままで、指を縦に動かすとブラウザがスクロールを
+// 開始して pointercancel を投げてくる (= ドラッグが強制解除される)。
+// pointermove への preventDefault はスクロールに影響しない (Pointer Events 仕様) ので、
+// non-passive な touchmove で dragActive 中のみ preventDefault してスクロール開始自体を防ぐ。
+// 長押し成立前は素通しなので「動かせばスクロール」の挙動はそのまま。
+// オートスクロールは rAF で scrollTop を直接書くため、この抑止の影響を受けない。
+function onNativeTouchMove(ev: TouchEvent) {
+	if (dragActive) ev.preventDefault();
+}
+
 function detachPointerListeners() {
 	window.document.removeEventListener('pointermove', onPointerMove);
 	window.document.removeEventListener('pointerup', onPointerUp);
 	window.document.removeEventListener('pointercancel', onPointerCancel);
 	window.document.removeEventListener('visibilitychange', onVisibilityChange);
+	window.document.removeEventListener('touchmove', onNativeTouchMove, { capture: true });
 }
 
 function releaseCapture() {
@@ -446,6 +465,10 @@ function onPointerDown(ev: PointerEvent, item: T) {
 	// (詳細は suppressContextmenuListener 付近のコメント参照)
 	if (ev.pointerType === 'touch') {
 		attachContextmenuSuppressor();
+		// ドラッグ成立後のネイティブスクロール開始を抑止 (詳細は onNativeTouchMove のコメント参照)。
+		// pointerdown の時点から non-passive で張っておかないと、成立後の最初の touchmove に
+		// preventDefault が間に合わないブラウザがあるため、ここで登録して cleanup で外す。
+		window.document.addEventListener('touchmove', onNativeTouchMove, { passive: false, capture: true });
 	}
 
 	// captureTarget ではなく document でリッスン。DOM 並び替え (TransitionGroup) で
@@ -526,7 +549,7 @@ function computeOverlap(ghostRect: DOMRect, targetRect: DOMRect, backward: boole
 		: targetRect.bottom - ghostRect.top;
 }
 
-function trySameInstanceReorder(ev: PointerEvent, ghostRect: DOMRect | null): boolean {
+function trySameInstanceReorder(clientX: number, clientY: number, ghostRect: DOMRect | null): boolean {
 	if (dragSession == null || ghostRect == null || pending == null) return false;
 	const draggedId = dragSession.item.id;
 	const container = pending.captureTarget.parentElement;
@@ -559,8 +582,8 @@ function trySameInstanceReorder(ev: PointerEvent, ghostRect: DOMRect | null): bo
 		// オシレーション防止: 同じ相手への逆方向スワップはデッドゾーン内ならブロック
 		if (lastSwapTargetId === item.id && lastSwapBackward !== backward) {
 			const dist = props.direction === 'horizontal'
-				? Math.abs(ev.clientX - lastSwapPointerX)
-				: Math.abs(ev.clientY - lastSwapPointerY);
+				? Math.abs(clientX - lastSwapPointerX)
+				: Math.abs(clientY - lastSwapPointerY);
 			if (dist < lastSwapDeadZone) return true;
 		}
 
@@ -570,8 +593,8 @@ function trySameInstanceReorder(ev: PointerEvent, ghostRect: DOMRect | null): bo
 		silentUntil = now + SILENT_AFTER_SWAP_MS;
 		lastSwapTargetId = item.id;
 		lastSwapBackward = backward;
-		lastSwapPointerX = ev.clientX;
-		lastSwapPointerY = ev.clientY;
+		lastSwapPointerX = clientX;
+		lastSwapPointerY = clientY;
 		lastSwapDeadZone = props.direction === 'horizontal' ? itemRect.width : itemRect.height;
 
 		if (animatingTimer != null) window.clearTimeout(animatingTimer);
@@ -609,11 +632,12 @@ function onPointerMove(ev: PointerEvent) {
 	}
 
 	// drag 中
-	if (pending.pointerType === 'touch') {
-		// タッチ時のみ、スクロールへの誤伝播を防ぐため preventDefault。
-		// mouse / pen は元々スクロールジェスチャを持たないので不要。
-		ev.preventDefault();
-	}
+	// ※ touch のネイティブスクロール抑止はここでは行わない。pointermove への preventDefault は
+	// Pointer Events 仕様上スクロールに影響しないため、onNativeTouchMove (non-passive touchmove)
+	// 側で dragActive 中のみ preventDefault している。
+
+	lastPointerX = ev.clientX;
+	lastPointerY = ev.clientY;
 
 	// ゴーストは最初の pointermove で遅延初期化する。startDrag() 時点では生成しないことで、
 	// manualDragStart + touch でハンドルをタップしただけ（動かさず離す）のケースで
@@ -654,7 +678,13 @@ function onPointerMove(ev: PointerEvent) {
 	}
 
 	updateAutoScroll(ev.clientX, ev.clientY);
+	updateDropState(ev.clientX, ev.clientY);
+}
 
+// スワップ判定とインスタンス間ドロップターゲットの更新。pointermove のほか、
+// オートスクロール中 (指が止まっていてもアイテム側の rect が動く) は autoScrollTick からも
+// 毎フレーム呼ばれる。
+function updateDropState(clientX: number, clientY: number) {
 	// DOM 変更直後は座標が不安定なためスワップ判定をスキップ (ゴースト移動・オートスクロールは実行済)
 	if (performance.now() < silentUntil) {
 		return;
@@ -665,7 +695,7 @@ function onPointerMove(ev: PointerEvent) {
 	// 同一インスタンス内の並べ替え: ゴースト rect と各アイテムの rect を直接比較する。
 	// elementFromPoint を使わないため、透明な overlay area の z-index 問題やコンテンツ
 	// ヒットの問題が発生しない。
-	if (trySameInstanceReorder(ev, ghostRect)) {
+	if (trySameInstanceReorder(clientX, clientY, ghostRect)) {
 		dropTarget.value = null;
 		return;
 	}
@@ -674,7 +704,7 @@ function onPointerMove(ev: PointerEvent) {
 	// 他インスタンスのアイテムには直接アクセスできないため、ここだけ elementFromPoint を使う。
 	const prevDisplay = ghostRef.value?.style.display ?? '';
 	if (ghostRef.value != null) ghostRef.value.style.display = 'none';
-	const el = window.document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+	const el = window.document.elementFromPoint(clientX, clientY) as HTMLElement | null;
 	if (ghostRef.value != null) ghostRef.value.style.display = prevDisplay;
 
 	if (el != null) {
