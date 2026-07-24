@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkMediaList from '@/components/MkMediaList.vue';
 
@@ -19,10 +19,9 @@ const props = defineProps<{
 	page: Misskey.entities.Page,
 }>();
 
-const image = ref<Misskey.entities.DriveFile | null>(null);
-
-onMounted(() => {
-	image.value = props.page.attachedFiles.find(x => x.id === props.block.fileId) ?? null;
+const image = computed(() => {
+	if (props.block.fileId == null) return null;
+	return props.page.attachedFiles.find(x => x.id === props.block.fileId) ?? null;
 });
 </script>
 
