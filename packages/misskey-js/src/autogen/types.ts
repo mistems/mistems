@@ -35251,6 +35251,7 @@ export interface operations {
                     untilDate?: number;
                     /** @default 10 */
                     limit?: number;
+                    query?: string | null;
                 };
             };
         };
@@ -35332,7 +35333,8 @@ export interface operations {
                     limit?: number;
                     /** @description @deprecated use get-following-users-by-birthday instead. */
                     birthday?: string | null;
-                };
+                    query?: string | null;
+                });
             };
         };
         responses: {
