@@ -35405,7 +35405,7 @@ export interface operations {
                     /** @description @deprecated use get-following-users-by-birthday instead. */
                     birthday?: string | null;
                     query?: string | null;
-                });
+                };
             };
         };
         responses: {
