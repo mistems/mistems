@@ -186,7 +186,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => processer(job) as Promise<void>,
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: System: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -241,7 +242,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => processer(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: DB: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -272,7 +274,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => this.deliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Deliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -312,7 +315,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					() => this.inboxProcessorService.process(job),
 					err => {
 						const activityId = job.data.activity ? job.data.activity.id : 'none';
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} activity=${activityId}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} activity=${activityId}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Inbox: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -351,7 +355,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => this.userWebhookDeliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: UserWebhookDeliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -390,7 +395,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => this.systemWebhookDeliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: SystemWebhookDeliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -438,7 +444,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => processer(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Relationship: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -481,7 +488,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => processer(job) as Promise<void>,
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: ObjectStorage: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -513,7 +521,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => this.endedPollNotificationProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: EndedPollNotification: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -538,7 +547,8 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					job.data,
 					() => this.postScheduledNoteProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: PostScheduledNote: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },

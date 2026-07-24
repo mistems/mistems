@@ -405,7 +405,7 @@ export default abstract class Chart<T extends Schema> {
 				...columns,
 			}) as RawRecord<T>;
 
-			this.logger.info(`${this.name + (group ? `:${group}` : '')}(${span}): New commit created`);
+			this.logger.debug(`${this.name + (group ? `:${group}` : '')}(${span}): New commit created`);
 
 			return log;
 		} finally {
@@ -526,7 +526,7 @@ export default abstract class Chart<T extends Schema> {
 					.execute(),
 			]);
 
-			this.logger.info(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
+			this.logger.debug(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
 
 			// TODO: この一連の処理が始まった後に新たにbufferに入ったものは消さないようにする
 			this.buffer = this.buffer.filter(q => q.group != null && (q.group !== logHour.group));
