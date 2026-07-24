@@ -49,6 +49,7 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	canFetchNewer: Ref<boolean>;
 	canSearch: boolean;
 	error: Ref<boolean>;
+	errorDetail: Ref<{ code?: string; id?: string; status?: number } | null>;
 	computedParams: ComputedRef<Misskey.Endpoints[PaginatorCompatibleEndpointPaths]['req'] | null | undefined> | null;
 	initialId: MisskeyEntity['id'] | null;
 	initialDate: number | null;
@@ -90,6 +91,7 @@ export class Paginator<
 	public canFetchNewer = ref(false);
 	public canSearch = false;
 	public error = ref(false);
+	public errorDetail = ref<{ code?: string; id?: string; status?: number } | null>(null);
 	private endpoint: Endpoint;
 	private limit: number;
 	private params: E['req'] | (() => E['req']);
@@ -222,8 +224,15 @@ export class Paginator<
 			} : {}),
 		};
 
-		const apiRes = (await misskeyApi(this.endpoint, data).catch(_ => {
+		const apiRes = (await misskeyApi(this.endpoint, data).catch(err => {
 			this.error.value = true;
+			this.errorDetail.value = err != null && typeof err === 'object'
+				? {
+					code: (err as { code?: string }).code,
+					id: (err as { id?: string }).id,
+					status: (err as { status?: number }).status,
+				}
+				: null;
 			this.fetching.value = false;
 			return null;
 		})) as T[] | null;
@@ -259,6 +268,7 @@ export class Paginator<
 		}
 
 		this.error.value = false;
+		this.errorDetail.value = null;
 		this.fetching.value = false;
 	}
 
