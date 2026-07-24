@@ -269,11 +269,35 @@ LATERAL 化しなくてよい。**フォロー数が閾値未満なら Phase 1 �
 
 ## 未決事項（実装時に確定させる）
 
-- [ ] LATERAL 化する followees 件数の閾値（初期案: 50）
-- [ ] Phase 1 の安全マージン倍率 K（初期案: limit * 3）
-- [ ] 「チャンネルフォローのみ」「フォローなし」パターンも LATERAL 化
-      するか（恩恵が薄いため見送る可能性が高い）
-- [ ] `packages/backend/src/core/QueryService.ts` の5関数の SQL を
-      Phase 1 用に複製する際、コード生成の共通化（文字列テンプレート化）
-      をどこまでやるか。過度な抽象化は避け、素直に生SQL文字列を組み立てる
-      方針で良いか
+- [x] LATERAL 化する followees 件数の閾値 → **50** で確定（`LATERAL_FALLBACK_THRESHOLD`、`notes/timeline.ts`）
+- [x] Phase 1 の安全マージン倍率 K → **limit × 3**（`marginLimit`）で確定
+- [x] 「チャンネルフォローのみ」「フォローなし」パターンも LATERAL 化するか
+      → **見送り**。`TimelineDbFallbackService.getCandidateIds` は
+      userIds/channelIds を両方受け付ける単一実装にし、4パターンの分岐は
+      `buildQuery`（既存フィルタ）側にのみ残した。Phase1 は「フォロー数が
+      閾値を超えるかどうか」だけで LATERAL 化を判断し、チャンネル分は
+      候補抽出の対象に含めるが専用の簡略化はしていない
+- [x] `QueryService.ts` の5関数の SQL を Phase 1 用に複製するか
+      → **複製しない方針に変更**。実装時に再検討した結果、Phase1 は
+      visibility/mute/block 等のフィルタを一切行わず「userId/channelId と
+      id 範囲」のみで候補を集める最小構成にした（計画書の選択肢 (a)）。
+      正確性は Phase2（既存 `buildQuery` の完全フィルタ）と safety net が
+      担保するため、フィルタの二重実装によるメンテナンスコストを避けられた
+
+## 実装結果（2026-07-24）
+
+- 新規ファイル: `packages/backend/src/core/TimelineDbFallbackService.ts`
+  （`CoreModule.ts` に DI 登録。既存の `QueryService.ts` /
+  `FanoutTimelineEndpointService.ts` は計画どおり無変更）
+- `notes/timeline.ts` の `getFromDb` を「フォロー数 50 未満なら現行どおり
+  即実行、50 以上なら Phase1(LATERAL 候補抽出) → Phase2(候補 id に
+  現行フィルタを再適用) → 件数不足時のみ safety net(現行実装フル実行)」の
+  ディスパッチに変更。`getFromDb` 本体のみの変更で 77 行目・
+  `QueryService.ts`・`FanoutTimelineEndpointService.ts` は無変更のまま
+- テスト: `test/e2e/timelines.ts` に新規2件を追加
+  （フォロー数55人での正確性検証、うち25人凍結で safety net を誘発する
+  検証）。追加後、同ファイルの全382テストが green
+- 実装前に想定していた「Phase1 に5フィルタを複製する」設計は、実装時に
+  「最小構成 + safety net」に簡略化した（未決事項参照）。理由は
+  QueryService.ts の SQL 断片を複製するとメンテナンスコストが増える一方、
+  safety net があれば正確性は損なわれないため
