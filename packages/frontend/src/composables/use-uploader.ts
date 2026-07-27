@@ -818,10 +818,15 @@ export function useUploader(options: {
 		dispose();
 	});
 
+	function reorderItems(newItems: UploaderItem[]) {
+		items.value = newItems;
+	}
+
 	return {
 		items,
 		addFiles,
 		removeItem,
+		reorderItems,
 		abortAll,
 		reset,
 		dispose,
