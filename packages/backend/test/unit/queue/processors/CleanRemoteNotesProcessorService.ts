@@ -6,6 +6,7 @@
 import { describe, expect, test, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import ms from 'ms';
+import * as Redis from 'ioredis';
 import {
 	type MiNote,
 	type MiUser,
@@ -17,7 +18,7 @@ import {
 	type UserProfilesRepository,
 	MiMeta,
 } from '@/models/_.js';
-import { CleanRemoteNotesProcessorService } from '@/queue/processors/CleanRemoteNotesProcessorService.js';
+import { CleanRemoteNotesProcessorService, CLEAN_REMOTE_NOTES_CURSOR_KEY } from '@/queue/processors/CleanRemoteNotesProcessorService.js';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { QueueLoggerService } from '@/queue/QueueLoggerService.js';
@@ -34,6 +35,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 	let userNotePiningsRepository: UserNotePiningsRepository;
 	let usersRepository: UsersRepository;
 	let userProfilesRepository: UserProfilesRepository;
+	let redisClient: Redis.Redis;
 
 	// Local user
 	let alice: MiUser;
@@ -118,6 +120,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 		userNotePiningsRepository = app.get(DI.userNotePiningsRepository);
 		usersRepository = app.get(DI.usersRepository);
 		userProfilesRepository = app.get(DI.userProfilesRepository);
+		redisClient = app.get<Redis.Redis>(DI.redis);
 
 		alice = await createUser({ username: 'alice', host: null });
 		bob = await createUser({ username: 'bob', host: 'remote1.example.com' });
@@ -143,6 +146,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 			userNotePiningsRepository.createQueryBuilder().delete().execute(),
 			noteFavoritesRepository.createQueryBuilder().delete().execute(),
 			noteReactionsRepository.createQueryBuilder().delete().execute(),
+			redisClient.del(CLEAN_REMOTE_NOTES_CURSOR_KEY),
 		]);
 	}, 60 * 1000);
 
@@ -163,6 +167,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 				newest: null,
 				skipped: true,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			});
 		});
 
@@ -178,6 +183,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 				newest: null,
 				skipped: false,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			});
 		}, 3000);
 
@@ -208,6 +214,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 				newest: idService.parse(remoteNotes[2].id).date.getTime(),
 				skipped: false,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			});
 
 			// Check side-by-side from all notes
@@ -847,6 +854,38 @@ describe('CleanRemoteNotesProcessorService', () => {
 			expect(batchSizes.length).toBeGreaterThanOrEqual(2);
 			expect(batchSizes.reduce((a, b) => a + b, 0)).toBe(AMOUNT);
 		}, 30 * 1000);
+
+		test('resumes from persisted cursor: notes below cursor are skipped', async () => {
+			// 91日前の削除可能なリモートノートを2つ、時刻をずらして作成
+			const oldTime = Date.now() - ms('91 days');
+			const noteA = await createNote({}, bob, oldTime); // カーソルより下
+			const noteB = await createNote({}, bob, oldTime + 1000); // カーソルより上
+
+			// noteA と noteB の間にカーソルを置いて「noteA は処理済み」を偽装
+			await redisClient.set(CLEAN_REMOTE_NOTES_CURSOR_KEY, noteA.id);
+
+			const result = await service.process(createMockJob() as any);
+
+			// noteA はカーソルより下なのでスキップされ生存、noteB は削除される
+			await expect(notesRepository.findOneBy({ id: noteA.id })).resolves.not.toBeNull();
+			await expect(notesRepository.findOneBy({ id: noteB.id })).resolves.toBeNull();
+			expect(result.resumedFromCursor).toBe(noteA.id);
+		});
+
+		test('persists cursor per batch and clears it on completion', async () => {
+			const oldTime = Date.now() - ms('91 days');
+			await createNote({}, bob, oldTime);
+
+			const setSpy = vi.spyOn(redisClient, 'set');
+
+			const result = await service.process(createMockJob() as any);
+
+			// バッチ処理でカーソルが SET され、完走時に DEL されている
+			expect(setSpy.mock.calls.some(([key]) => key === CLEAN_REMOTE_NOTES_CURSOR_KEY)).toBe(true);
+			await expect(redisClient.get(CLEAN_REMOTE_NOTES_CURSOR_KEY)).resolves.toBeNull();
+			expect(result.skipped).toBe(false);
+			setSpy.mockRestore();
+		});
 	});
 
 	// region note_reaction protection (NOT EXISTS subquery with INNER JOIN on user.host IS NULL)
@@ -1131,6 +1170,7 @@ describe('CleanRemoteNotesProcessorService', () => {
 				newest: null,
 				skipped: false,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			});
 
 			const remainingNotes = await notesRepository.find();

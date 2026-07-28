@@ -6,6 +6,7 @@
 import { setTimeout } from 'node:timers/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { DataSource, IsNull, LessThan, QueryFailedError, Not } from 'typeorm';
+import * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
 import type { MiMeta, MiNote, NotesRepository } from '@/models/_.js';
 import type Logger from '@/logger.js';
@@ -13,6 +14,8 @@ import { bindThis } from '@/decorators.js';
 import { IdService } from '@/core/IdService.js';
 import { QueueLoggerService } from '../QueueLoggerService.js';
 import type * as Bull from 'bullmq';
+
+export const CLEAN_REMOTE_NOTES_CURSOR_KEY = 'cleanRemoteNotes:cursor';
 
 @Injectable()
 export class CleanRemoteNotesProcessorService {
@@ -27,6 +30,9 @@ export class CleanRemoteNotesProcessorService {
 
 		@Inject(DI.db)
 		private db: DataSource,
+
+		@Inject(DI.redis)
+		private redisClient: Redis.Redis,
 
 		private idService: IdService,
 		private queueLoggerService: QueueLoggerService,
@@ -50,6 +56,7 @@ export class CleanRemoteNotesProcessorService {
 		newest: number | null;
 		skipped: boolean;
 		transientErrors: number;
+		resumedFromCursor: string | null;
 	}> {
 		const getConfig = () => {
 			return {
@@ -70,6 +77,7 @@ export class CleanRemoteNotesProcessorService {
 				newest: null,
 				skipped: true,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			};
 		}
 
@@ -108,19 +116,26 @@ export class CleanRemoteNotesProcessorService {
 
 		if (!minId) {
 			this.logger.info('No notes can possibly be deleted, skipping...');
+			await this.redisClient.del(CLEAN_REMOTE_NOTES_CURSOR_KEY);
 			return {
 				deletedCount: 0,
 				oldest: null,
 				newest: null,
 				skipped: false,
 				transientErrors: 0,
+				resumedFromCursor: null,
 			};
 		}
 
 		// start with a conservative limit and adjust it based on the query duration
 		const minimumLimit = 10;
 		let currentLimit = 100;
-		let cursorLeft = '0';
+		const storedCursor = await this.redisClient.get(CLEAN_REMOTE_NOTES_CURSOR_KEY);
+		const resumedFromCursor = (storedCursor != null && /^[0-9a-z]+$/.test(storedCursor)) ? storedCursor : null;
+		let cursorLeft = resumedFromCursor ?? '0';
+		if (resumedFromCursor) {
+			this.logger.info(`resuming from cursor ${resumedFromCursor}`);
+		}
 
 		const candidateNotesCteName = 'candidate_notes';
 
@@ -200,6 +215,7 @@ export class CleanRemoteNotesProcessorService {
 			if (elapsed >= maxDuration) {
 				job.log(`Reached maximum duration of ${maxDuration}ms, stopping... (last cursor: ${cursorLeft}, final progress ${progress}%)`);
 				job.updateProgress(100);
+				await this.redisClient.set(CLEAN_REMOTE_NOTES_CURSOR_KEY, cursorLeft);
 				break;
 			}
 
@@ -249,6 +265,7 @@ export class CleanRemoteNotesProcessorService {
 
 						if (!lastId) {
 							job.log('No more notes to clean.');
+							await this.redisClient.del(CLEAN_REMOTE_NOTES_CURSOR_KEY);
 							break;
 						}
 
@@ -263,6 +280,7 @@ export class CleanRemoteNotesProcessorService {
 
 			if (noteIds.length === 0) {
 				job.log('No more notes to clean.');
+				await this.redisClient.del(CLEAN_REMOTE_NOTES_CURSOR_KEY);
 				break;
 			}
 
@@ -307,6 +325,8 @@ export class CleanRemoteNotesProcessorService {
 
 			cursorLeft = noteIds.filter(result => result.isBase).reduce((max, { id }) => id > max ? id : max, cursorLeft);
 
+			await this.redisClient.set(CLEAN_REMOTE_NOTES_CURSOR_KEY, cursorLeft);
+
 			job.log(`Deleted ${noteIds.length} notes; ${Date.now() - batchBeginAt}ms`);
 
 			if (process.env.NODE_ENV !== 'test') {
@@ -327,6 +347,7 @@ export class CleanRemoteNotesProcessorService {
 			newest: stats.newest,
 			skipped: false,
 			transientErrors,
+			resumedFromCursor,
 		};
 	}
 }
