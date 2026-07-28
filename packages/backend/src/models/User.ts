@@ -9,6 +9,9 @@ import { MiDriveFile } from './DriveFile.js';
 
 @Entity('user')
 @Index(['usernameLower', 'host'], { unique: true })
+// 前方一致検索用の text_pattern_ops インデックス。オペレータクラスは TypeORM で
+// 表現できないため migration (1784737840751) で管理し、ここでは同期対象外として宣言だけする
+@Index('IDX_user_usernameLower_pattern', { synchronize: false })
 export class MiUser {
 	@PrimaryColumn(id())
 	public id: string;
@@ -42,7 +45,7 @@ export class MiUser {
 	})
 	public username: string;
 
-	@Index()
+	// Covered by the composite unique index (usernameLower, host).
 	@Column('varchar', {
 		length: 128, select: false,
 		comment: 'The username (lowercased) of the User.',
