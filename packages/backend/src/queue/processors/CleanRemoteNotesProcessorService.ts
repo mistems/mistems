@@ -104,15 +104,30 @@ export class CleanRemoteNotesProcessorService {
 			'NOT EXISTS (SELECT 1 FROM note_reaction INNER JOIN "user" ON note_reaction."userId" = "user".id WHERE note_reaction."noteId" = note."id" AND "user"."host" IS NULL)',
 		].join(' AND ');
 
-		const minId = (await this.notesRepository.createQueryBuilder('note')
-			.select('MIN(note.id)', 'minId')
-			.where({
-				id: LessThan(initialConfig.newestLimit),
-				userHost: Not(IsNull()),
-				replyId: IsNull(),
-				renoteId: IsNull(),
-			})
-			.getRawOne<{ minId?: MiNote['id'] }>())?.minId;
+		let minId: MiNote['id'] | undefined;
+		try {
+			minId = (await this.notesRepository.createQueryBuilder('note')
+				.select('MIN(note.id)', 'minId')
+				.where({
+					id: LessThan(initialConfig.newestLimit),
+					userHost: Not(IsNull()),
+					replyId: IsNull(),
+					renoteId: IsNull(),
+				})
+				.getRawOne<{ minId?: MiNote['id'] }>())?.minId;
+		} catch (e) {
+			if (e instanceof QueryFailedError && e.driverError?.code === '57014') {
+				this.logger.warn('minId query timed out, skipping this run...');
+				return {
+					deletedCount: 0,
+					oldest: null,
+					newest: null,
+					skipped: false,
+					transientErrors: 0,
+				};
+			}
+			throw e;
+		}
 
 		if (!minId) {
 			this.logger.info('No notes can possibly be deleted, skipping...');
@@ -248,16 +263,25 @@ export class CleanRemoteNotesProcessorService {
 						// (user_note_pining / note_favorite / note_reaction) which would otherwise
 						// hit the same statement_timeout that triggered this fallback path (#17057).
 						// Strict removability is re-evaluated by the next iteration's CTE query.
-						const idWindow = await this.notesRepository.createQueryBuilder('note')
-							.select('id')
-							.where('note.id > :cursorLeft')
-							.andWhere('note."id" < :newestLimit')
-							.andWhere('note."userHost" IS NOT NULL')
-							.andWhere({ replyId: IsNull(), renoteId: IsNull() })
-							.orderBy('note.id', 'ASC')
-							.limit(minimumLimit + 1)
-							.setParameters({ cursorLeft, newestLimit })
-							.getRawMany<{ id?: MiNote['id'] }>();
+						let idWindow: { id?: MiNote['id'] }[];
+						try {
+							idWindow = await this.notesRepository.createQueryBuilder('note')
+								.select('id')
+								.where('note.id > :cursorLeft')
+								.andWhere('note."id" < :newestLimit')
+								.andWhere('note."userHost" IS NOT NULL')
+								.andWhere({ replyId: IsNull(), renoteId: IsNull() })
+								.orderBy('note.id', 'ASC')
+								.limit(minimumLimit + 1)
+								.setParameters({ cursorLeft, newestLimit })
+								.getRawMany<{ id?: MiNote['id'] }>();
+						} catch (e2) {
+							if (e2 instanceof QueryFailedError && e2.driverError?.code === '57014') {
+								job.log('idWindow query timed out, ending this run...');
+								break;
+							}
+							throw e2;
+						}
 
 						job.log(`Skipped note IDs: ${idWindow.slice(0, minimumLimit).map(id => id.id).join(', ')}`);
 
@@ -298,7 +322,14 @@ export class CleanRemoteNotesProcessorService {
 			const deletableNoteIds = noteIds.filter(result => result.isRemovable).map(result => result.id);
 			if (deletableNoteIds.length > 0) {
 				try {
-					await this.notesRepository.delete(deletableNoteIds);
+					// Wrap DELETE in a transaction with a longer local statement_timeout
+					// so that large remote note tree deletions can complete reliably even when
+					// the global statement_timeout is short (e.g. 10s for API protection).
+					// SET LOCAL automatically reverts when the transaction ends, so other paths are unaffected.
+					await this.db.transaction(async (manager) => {
+						await manager.query("SET LOCAL statement_timeout = '300s'");
+						await manager.getRepository(this.notesRepository.metadata.target).delete(deletableNoteIds);
+					});
 
 					for (const id of deletableNoteIds) {
 						const t = this.idService.parse(id).date.getTime();
@@ -317,6 +348,16 @@ export class CleanRemoteNotesProcessorService {
 					if (e instanceof QueryFailedError && e.driverError?.code?.startsWith('23')) {
 						transientErrors++;
 						job.log(`Error deleting notes: ${e} (transient race condition?)`);
+					} else if (e instanceof QueryFailedError && e.driverError?.code === '57014') {
+						// DELETE timeout (even with the local 300s budget). Same recovery pattern as candidateNotesQuery:
+						// shrink the batch and retry without advancing the cursor; bail out gracefully if already at the floor.
+						if (currentLimit <= minimumLimit) {
+							job.log(`DELETE query timed out at minimum batch size (${deletableNoteIds.length} notes), ending this run...`);
+							break;
+						}
+						currentLimit = Math.max(minimumLimit, Math.floor(currentLimit * 0.25));
+						job.log(`DELETE query timed out (${deletableNoteIds.length} notes), reducing limit to ${currentLimit} and retrying...`);
+						continue;
 					} else {
 						throw e;
 					}
