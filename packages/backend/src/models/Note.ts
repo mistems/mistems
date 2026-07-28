@@ -29,6 +29,10 @@ import type { MiDriveFile } from './DriveFile.js';
 @Index(['userId', 'id']) // Note: this index is ("userId", "id" DESC) in production, but not in test.
 // Partial index ("channelId", "id" DESC) WHERE "channelId" IS NOT NULL. Managed by migration (1783062429920).
 @Index('IDX_note_on_channelId_and_id_desc', { synchronize: false })
+// Partial index ("userId", "channelId") WHERE "channelId" IS NOT NULL. Managed by migration (1785227588654).
+// チャンネル内投稿数の COUNT (userId = ? AND channelId = ?) が ("userId", "id") の全ノート走査に
+// フォールバックするのを防ぐ。channelId は大半 NULL のため部分インデックスで小さく保てる
+@Index('IDX_note_on_userId_and_channelId', { synchronize: false })
 @Entity('note')
 export class MiNote {
 	@PrimaryColumn(id())
