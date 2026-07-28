@@ -40,6 +40,8 @@ export type SearchOpts = {
 	host?: string | null;
 	rangeStartAt?: number | null;
 	rangeEndAt?: number | null;
+	searchFrom?: string | null;
+	withFiles?: boolean | null;
 };
 
 export type SearchPagination = {
@@ -186,6 +188,7 @@ export class SearchService {
 			case 'sqlPgroonga': {
 				// ほとんど内容に差がないのでsqlLikeとsqlPgroongaを同じ処理にしている.
 				// 今後の拡張で差が出る用であれば関数を分ける.
+
 				return this.searchNoteByLike(q, me, opts, pagination);
 			}
 			case 'meilisearch': {
@@ -205,49 +208,77 @@ export class SearchService {
 		opts: SearchOpts,
 		pagination: SearchPagination,
 	): Promise<MiNote[]> {
-		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), pagination.sinceId, pagination.untilId);
+		// 重い全文検索が DB を専有しないよう、トランザクション内で statement_timeout を 15s に縛る。
+		return this.notesRepository.manager.transaction(async (em) => {
+			await em.query('SET LOCAL statement_timeout = \'15s\'');
+			// 索引が使えずフォールバックした場合、LIMIT 付きクエリでも JIT コンパイルだけで数百 ms 溶けるため無効化する
+			await em.query('SET LOCAL jit = off');
+			const noteRepo = em.getRepository(MiNote);
+			const query = this.queryService.makePaginationQuery(noteRepo.createQueryBuilder('note'), pagination.sinceId, pagination.untilId);
 
-		if (opts.userId) {
-			query.andWhere('note.userId = :userId', { userId: opts.userId });
-		} else if (opts.channelId) {
-			query.andWhere('note.channelId = :channelId', { channelId: opts.channelId });
-		}
-
-		query
-			.innerJoinAndSelect('note.user', 'user')
-			.leftJoinAndSelect('note.reply', 'reply')
-			.leftJoinAndSelect('note.renote', 'renote')
-			.leftJoinAndSelect('reply.user', 'replyUser')
-			.leftJoinAndSelect('renote.user', 'renoteUser');
-
-		if (this.config.fulltextSearch?.provider === 'sqlPgroonga') {
-			query.andWhere('note.text &@~ :q', { q });
-		} else {
-			query.andWhere('LOWER(note.text) LIKE :q', { q: `%${ sqlLikeEscape(q.toLowerCase()) }%` });
-		}
-
-		if (opts.host) {
-			if (opts.host === '.') {
-				query.andWhere('note.userHost IS NULL');
-			} else {
-				query.andWhere('note.userHost = :host', { host: opts.host });
+			if (opts.userId) {
+				query.andWhere('note.userId = :userId', { userId: opts.userId });
+			} else if (opts.channelId) {
+				query.andWhere('note.channelId = :channelId', { channelId: opts.channelId });
 			}
-		}
 
-		if (opts.rangeStartAt != null) {
-			const date = this.idService.gen(opts.rangeStartAt - 1);
-			query.andWhere('note.id > :rangeStartAt', { rangeStartAt: date });
-		}
+			query
+				.innerJoinAndSelect('note.user', 'user')
+				.leftJoinAndSelect('note.reply', 'reply')
+				.leftJoinAndSelect('note.renote', 'renote')
+				.leftJoinAndSelect('reply.user', 'replyUser')
+				.leftJoinAndSelect('renote.user', 'renoteUser');
 
-		if (opts.rangeEndAt != null) {
-			const date = this.idService.gen(opts.rangeEndAt + 1);
-			query.andWhere('note.id < :rangeEndAt', { rangeEndAt: date });
-		}
+			if (this.config.fulltextSearch?.provider === 'sqlPgroonga') {
+				// pgroonga
+				if (opts.searchFrom === 'textWithCw') {
+					// textWithCwオプション
+					// 連結式 (coalesce(cw,'') || coalesce(text,'')) だと cw/text の列単独 pgroonga 索引が
+					// 使われない (式インデックスは式の完全一致が必要) ため、OR で両列の索引を BitmapOr させる。
+					// NULL &@~ :q は false になるだけなので coalesce は不要。
+					query.andWhere('(note.cw &@~ :q OR note.text &@~ :q)', { q });
+				} else {
+					// 通常検索
+					query.andWhere('note.text &@~ :q', { q });
+				}
+			} else {
+				// Postgresql 標準
+				if (opts.searchFrom === 'textWithCw') {
+					// textWithCwオプション (note.text が NULL でも CW にマッチさせるため双方 coalesce する)
+					query.andWhere('LOWER((coalesce(note.cw, \'\') || coalesce(note.text, \'\'))) LIKE :q', { q: `%${ sqlLikeEscape(q.toLowerCase()) }%` });
+				} else {
+					// 通常検索
+					query.andWhere('LOWER(note.text) LIKE :q', { q: `%${ sqlLikeEscape(q.toLowerCase()) }%` });
+				}
+			}
 
-		this.queryService.generateVisibilityQuery(query, me);
-		this.queryService.generateBaseNoteFilteringQuery(query, me);
+			if (opts.host) {
+				if (opts.host === '.') {
+					query.andWhere('note.userHost IS NULL');
+				} else {
+					query.andWhere('note.userHost = :host', { host: opts.host });
+				}
+			}
 
-		return query.limit(pagination.limit).getMany();
+			if (opts.withFiles != null) {
+				query.andWhere(opts.withFiles ? 'note.fileIds != \'{}\'' : 'note.fileIds = \'{}\'');
+			}
+
+			if (opts.rangeStartAt != null) {
+				const date = this.idService.gen(opts.rangeStartAt - 1);
+				query.andWhere('note.id > :rangeStartAt', { rangeStartAt: date });
+			}
+
+			if (opts.rangeEndAt != null) {
+				const date = this.idService.gen(opts.rangeEndAt + 1);
+				query.andWhere('note.id < :rangeEndAt', { rangeEndAt: date });
+			}
+
+			this.queryService.generateVisibilityQuery(query, me);
+			this.queryService.generateBaseNoteFilteringQuery(query, me);
+
+			return query.limit(pagination.limit).getMany();
+		});
 	}
 
 	@bindThis
@@ -316,22 +347,31 @@ export class SearchService {
 			])
 			: [new Set<string>(), new Set<string>()];
 
-		const query = this.notesRepository.createQueryBuilder('note')
-			.innerJoinAndSelect('note.user', 'user')
-			.leftJoinAndSelect('note.reply', 'reply')
-			.leftJoinAndSelect('note.renote', 'renote')
-			.leftJoinAndSelect('reply.user', 'replyUser')
-			.leftJoinAndSelect('renote.user', 'renoteUser');
+		// Meilisearch から hit ID を得たあとの PostgreSQL クエリも同じ 15s ルールに揃える
+		const notes = await this.notesRepository.manager.transaction(async (em) => {
+			await em.query('SET LOCAL statement_timeout = \'15s\'');
+			const noteRepo = em.getRepository(MiNote);
+			const query = noteRepo.createQueryBuilder('note')
+				.innerJoinAndSelect('note.user', 'user')
+				.leftJoinAndSelect('note.reply', 'reply')
+				.leftJoinAndSelect('note.renote', 'renote')
+				.leftJoinAndSelect('reply.user', 'replyUser')
+				.leftJoinAndSelect('renote.user', 'renoteUser');
 
-		query.where('note.id IN (:...noteIds)', { noteIds: res.hits.map(x => x.id) });
+			query.where('note.id IN (:...noteIds)', { noteIds: res.hits.map(x => x.id) });
 
-		this.queryService.generateBlockedHostQueryForNote(query);
-		this.queryService.generateSuspendedUserQueryForNote(query);
+			if (opts.withFiles != null) {
+				query.andWhere(opts.withFiles ? 'note.fileIds != \'{}\'' : 'note.fileIds = \'{}\'');
+			}
 
-		const notes = (await query.getMany()).filter(note => {
-			if (me && isUserRelated(note, userIdsWhoBlockingMe)) return false;
-			if (me && isUserRelated(note, userIdsWhoMeMuting)) return false;
-			return true;
+			this.queryService.generateBlockedHostQueryForNote(query);
+			this.queryService.generateSuspendedUserQueryForNote(query);
+
+			return (await query.getMany()).filter(note => {
+				if (me && isUserRelated(note, userIdsWhoBlockingMe)) return false;
+				if (me && isUserRelated(note, userIdsWhoMeMuting)) return false;
+				return true;
+			});
 		});
 
 		return notes.sort((a, b) => a.id > b.id ? -1 : 1);
