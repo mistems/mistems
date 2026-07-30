@@ -233,10 +233,15 @@ export class SearchService {
 				// pgroonga
 				if (opts.searchFrom === 'textWithCw') {
 					// textWithCwオプション
-					// 連結式 (coalesce(cw,'') || coalesce(text,'')) だと cw/text の列単独 pgroonga 索引が
-					// 使われない (式インデックスは式の完全一致が必要) ため、OR で両列の索引を BitmapOr させる。
-					// NULL &@~ :q は false になるだけなので coalesce は不要。
-					query.andWhere('(note.cw &@~ :q OR note.text &@~ :q)', { q });
+					// OR 形 (cw &@~ :q OR text &@~ :q) は ORDER BY id DESC LIMIT と組み合わさると、
+					// プランナーが「PK を新しい順に歩けば LIMIT 件すぐ見つかる」と見積もって
+					// BitmapOr より PK 逆順スキャン (1行ずつ Groonga 評価) を選んでしまい、
+					// pgroonga 索引が一切使われない (本番実測: 頻出語で 23.7s、索引 idx_scan = 0)。
+					// 式インデックス idx_note_cw_and_text_with_pgroonga と完全一致する連結式なら
+					// 見積もりが下がり単一索引のビットマップスキャンが自然に選ばれる (実測 1.2s)。
+					// 式は索引定義と一字一句一致が必須。text 側に coalesce が無いのは索引に合わせたもので、
+					// text IS NULL の行 (純リノート等) は連結結果が NULL になり検索対象外 (実用上問題なし)。
+					query.andWhere('(COALESCE(note.cw, \'\')::text || note.text) &@~ :q', { q });
 				} else {
 					// 通常検索
 					query.andWhere('note.text &@~ :q', { q });
