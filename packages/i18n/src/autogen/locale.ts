@@ -12744,6 +12744,10 @@ export interface Locale extends ILocale {
          * この日まで
          */
         "postTo": string;
+        /**
+         * スペース区切りで絞り込み (AND)、「A OR B」でいずれか、「-単語」で除外、「"語句"」でフレーズ検索
+         */
+        "querySyntaxHelp": string;
     };
     "_serverSetupWizard": {
         /**

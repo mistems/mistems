@@ -14,6 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			@enter.prevent="search"
 		>
 			<template #prefix><i class="ti ti-search"></i></template>
+			<template #caption>{{ i18n.ts._search.querySyntaxHelp }}</template>
 		</MkInput>
 		<MkFolder :defaultOpen="false">
 			<template #label>検索オプション</template>
