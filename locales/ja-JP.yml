@@ -3382,6 +3382,7 @@ _search:
   serverHostPlaceholder: "例: misskey.example.com"
   postFrom: "この日から"
   postTo: "この日まで"
+  querySyntaxHelp: "スペース区切りで絞り込み (AND)、「A OR B」でいずれか、「-単語」で除外、「\"語句\"」でフレーズ検索"
 
 _serverSetupWizard:
   installCompleted: "Misskeyのインストールが完了しました！"
