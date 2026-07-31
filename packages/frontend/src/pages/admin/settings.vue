@@ -375,6 +375,41 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</MkFolder>
 				</SearchMarker>
 
+				<SearchMarker :keywords="['highlight', 'favstar']">
+					<MkFolder>
+						<template #icon><SearchIcon><i class="ti ti-ghost"></i></SearchIcon></template>
+						<template #label><SearchLabel>みつける＞ハイライトの調整</SearchLabel></template>
+
+						<div class="_gaps">
+							<MkInfo>リアクションしたときに見つける＞ハイライトの採用される確率は、大規模サーバーにおいてパフォーマンスへの影響を考慮してデフォルト30%です。（つまり、70%のリアクションはカウントに影響しません）</MkInfo>
+
+							<MkKeyValue>
+								<template #key>ハイライトに採用される確率</template>
+								<template #value><MkInput v-model.number="infoForm.state.highlightRateFactor" type="number" :min="0" :max="100" placeholder="30"/></template>
+							</MkKeyValue>
+
+							<MkKeyValue>
+								<template #key>ハイライトの青ふぁぼ</template>
+								<template #value><MkInput v-model.number="infoForm.state.highlightMidPopularityThreshold" type="number"/></template>
+							</MkKeyValue>
+
+							<MkKeyValue>
+								<template #key>ハイライトの赤ふぁぼ</template>
+								<template #value><MkInput v-model.number="infoForm.state.highlightHighPopularityThreshold" type="number"/></template>
+							</MkKeyValue>
+
+							<MkKeyValue>
+								<template #key>ハイライトのから除外する絵文字</template>
+								<template #value>
+									<MkTextarea v-model="infoForm.state.highlightExcludeEmojis" :mfmAutocomplete="['emoji']" :mfmPreview="true"/>
+								</template>
+							</MkKeyValue>
+
+							<MkFormFooter :form="infoForm"/>
+						</div>
+					</MkFolder>
+				</SearchMarker>
+
 				<MkButton primary @click="openSetupWizard">
 					Open setup wizard
 				</MkButton>
@@ -401,6 +436,7 @@ import MkFolder from '@/components/MkFolder.vue';
 import { useForm } from '@/composables/use-form.js';
 import MkFormFooter from '@/components/MkFormFooter.vue';
 import MkRadios from '@/components/MkRadios.vue';
+import MkKeyValue from '@/components/MkKeyValue.vue';
 
 const meta = await misskeyApi('admin/meta');
 
@@ -417,6 +453,10 @@ const infoForm = useForm({
 	inquiryUrl: meta.inquiryUrl ?? '',
 	repositoryUrl: meta.repositoryUrl ?? '',
 	impressumUrl: meta.impressumUrl ?? '',
+	highlightRateFactor: meta.highlightRateFactor ?? 30,
+	highlightMidPopularityThreshold: meta.highlightMidPopularityThreshold ?? 3,
+	highlightHighPopularityThreshold: meta.highlightHighPopularityThreshold ?? 5,
+	highlightExcludeEmojis: meta.highlightExcludeEmojis,
 }, async (state) => {
 	await os.apiWithDialog('admin/update-meta', {
 		name: state.name,
@@ -429,6 +469,11 @@ const infoForm = useForm({
 		inquiryUrl: state.inquiryUrl,
 		repositoryUrl: state.repositoryUrl,
 		impressumUrl: state.impressumUrl,
+		highlightRateFactor: state.highlightRateFactor,
+		highlightMidPopularityThreshold: state.highlightMidPopularityThreshold,
+		highlightHighPopularityThreshold: state.highlightHighPopularityThreshold ?? 5,
+		highlightExcludeEmojis: state.highlightExcludeEmojis,
+
 	});
 	fetchInstance(true);
 });
