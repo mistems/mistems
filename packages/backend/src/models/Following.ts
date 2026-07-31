@@ -14,7 +14,7 @@ export class MiFollowing {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Covered by the composite index (followeeId, followerHost, isFollowerHibernated).
 	@Column({
 		...id(),
 		comment: 'The followee user ID.',
@@ -27,7 +27,7 @@ export class MiFollowing {
 	@JoinColumn()
 	public followee: MiUser | null;
 
-	@Index()
+	// Covered by the composite unique index (followerId, followeeId).
 	@Column({
 		...id(),
 		comment: 'The follower user ID.',
