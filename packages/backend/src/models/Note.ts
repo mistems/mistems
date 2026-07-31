@@ -22,6 +22,9 @@ import type { MiDriveFile } from './DriveFile.js';
 // Not appending `{ concurrent: true }` to `@Index` will not cause any problem in production,
 
 @Index(['userId', 'id']) // Note: this index is ("userId", "id" DESC) in production, but not in test.
+// PGroonga 式インデックス (COALESCE(cw, '')::text || text)。ノート検索の本文+CW モードが使う。
+// PGroonga 拡張が前提のため migration (1785395964596) で管理し、ここでは同期対象外として宣言だけする
+@Index('idx_note_cw_and_text_with_pgroonga', { synchronize: false })
 @Entity('note')
 export class MiNote {
 	@PrimaryColumn(id())
