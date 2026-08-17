@@ -2856,6 +2856,7 @@ _pages:
   contentBlocks: "コンテンツ"
   inputBlocks: "入力"
   specialBlocks: "特殊"
+  otherMfm: "他MFM"
   blocks:
     text: "テキスト"
     textarea: "テキストエリア"
