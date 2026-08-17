@@ -616,7 +616,7 @@ export type paths = {
          * admin/queue/stats
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:admin:emoji*
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:queue*
          */
         post: operations['admin___queue___stats'];
     };
@@ -9516,6 +9516,7 @@ export interface operations {
                         manifestJsonOverride: string;
                         policies: Record<string, never>;
                         enableFanoutTimeline: boolean;
+                        fanoutTimelineActive: boolean;
                         enableFanoutTimelineDbFallback: boolean;
                         perLocalUserUserTimelineCacheMax: number;
                         perRemoteUserUserTimelineCacheMax: number;
@@ -21872,6 +21873,15 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -5699,6 +5699,10 @@ export interface Locale extends ILocale {
      * スペースで区切るとAND指定になり、改行で区切るとOR指定になります。スラッシュで囲むと正規表現になります。一致した場合、サムネイルが表示されなくなります。
      */
     "urlPreviewSensitiveListDescription": string;
+    /**
+     * ピクセルアート拡大モード
+     */
+    "pixelatedZoom": string;
     "_imageEditing": {
         "_vars": {
             /**
@@ -6904,6 +6908,10 @@ export interface Locale extends ILocale {
          * 有効にすると、各種タイムラインを取得する際のパフォーマンスが大幅に向上し、データベースへの負荷を軽減することが可能です。ただし、Redisのメモリ使用量は増加します。サーバーのメモリ容量が少ない場合、または動作が不安定な場合は無効にすることができます。
          */
         "fanoutTimelineDescription": string;
+        /**
+         * 切り替えを適用中です。完了するまでこのトグルは操作できません。適用中、タイムラインは一時的にデータベースから取得されます。
+         */
+        "fanoutTimelineTransitionInProgress": string;
         /**
          * データベースへのフォールバック
          */
