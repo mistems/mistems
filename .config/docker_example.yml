@@ -126,8 +126,35 @@ fulltextSearch:
   # - sqlPgroonga
   #   Use pgroonga.
   #   You need to install pgroonga and configure it as a PostgreSQL extension.
-  #   In addition to the above, you need to create a pgroonga index on the text column of the note table.
-  #   see: https://pgroonga.github.io/tutorial/
+  #   In addition to the above, you need to create two pgroonga indexes
+  #   so that both the normal text search and the "text + CW" search option use the index.
+  #   Both indexes must share the same tokenizer and normalizers; TokenMecab is recommended
+  #   for Japanese-heavy instances (requires mecab + dictionary on the PostgreSQL host).
+  #
+  #   The normalizers below normalize NFKC width / case / compatibility equivalents but
+  #   DO NOT unify hiragana<->katakana (unify_kana=false) to avoid hurting exact match
+  #   precision. Blanks are removed from the index to ignore stray spacing.
+  #
+  #     CREATE INDEX pgroonga_note_text_index
+  #       ON note USING pgroonga (text)
+  #       WITH (
+  #         tokenizer  = 'TokenMecab',
+  #         normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+  #       );
+  #     CREATE INDEX pgroonga_note_text_cw_index
+  #       ON note USING pgroonga ((coalesce(cw, '') || coalesce(text, '')))
+  #       WITH (
+  #         tokenizer  = 'TokenMecab',
+  #         normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+  #       );
+  #
+  #   When the dictionary or normalizer changes, REINDEX is required to rebuild posting
+  #   lists with the new analysis:
+  #     REINDEX INDEX CONCURRENTLY pgroonga_note_text_index;
+  #     REINDEX INDEX CONCURRENTLY pgroonga_note_text_cw_index;
+  #
+  #   For NEologd dictionary integration, see docs/search-pgroonga-neologd.md
+  #   see also: https://pgroonga.github.io/tutorial/
   # - meilisearch
   #   Use Meilisearch.
   #   You need to install Meilisearch and configure.
@@ -173,8 +200,31 @@ id: 'aidx'
 
 #sentryForBackend:
 #  enableNodeProfiling: true
+#  # Specify Sentry integration names to disable individual auto-instrumentation.
+#  # The names are integration .name values, not factory function names.
+#  # To check enabled names, set `options.debug: true` and see
+#  # "Integration installed: <name>" in the Sentry logs.
+#  #
+#  # As of 2026-07-07 / @sentry/node 10.62.0, useful names for Misskey include:
+#  #   Postgres  ... DB queries (when pg is externalized)
+#  #   Redis     ... ioredis commands
+#  #   Fastify   ... inbound HTTP routes
+#  #   Http      ... inbound/outbound HTTP; disabling this can also affect request isolation
+#  #   NodeFetch ... fetch/undici requests
+#  disabledIntegrations: ['Postgres']
 #  options:
 #    dsn: 'https://examplePublicKey@o0.ingest.sentry.io/0'
+#    # By default, Misskey prevents Sentry trace headers (`sentry-trace` and
+#    # `baggage`) from being sent to remote ActivityPub/Webhook/etc. hosts.
+#    # To intentionally propagate distributed traces to trusted internal services,
+#    # list only those internal URL patterns here.
+#    # Avoid broad patterns that match remote servers unless you intentionally
+#    # want to restore Sentry's legacy behavior of propagating traces to all
+#    # outbound HTTP requests.
+#    #tracePropagationTargets: []
+#    # Internal allowlist example:
+#    #tracePropagationTargets:
+#    #  - 'internal-service.example'
 
 #sentryForFrontend:
 #  vueIntegration:
