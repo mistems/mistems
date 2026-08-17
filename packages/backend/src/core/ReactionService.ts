@@ -123,7 +123,7 @@ export class ReactionService {
 		}
 
 		let reaction = _reaction ?? FALLBACK;
-
+		
 		if (note.reactionAcceptance === 'likeOnly' || ((note.reactionAcceptance === 'likeOnlyForRemote' || note.reactionAcceptance === 'nonSensitiveOnlyForLocalLikeOnlyForRemote') && (user.host != null))) {
 			reaction = '\u2764';
 		} else if (_reaction != null) {
@@ -209,9 +209,15 @@ export class ReactionService {
 				.execute();
 		}
 
+		const excludeEmojis = this.meta.highlightExcludeEmojis
+			.split('\n')
+			.map(v => v.trim())
+			.filter(v => v);
+
 		// 30%の確率、セルフではない、3日以内に投稿されたノートの場合ハイライト用ランキング更新
 		if (
-			Math.random() < 0.3 &&
+			!excludeEmojis.includes(reaction) &&
+			Math.random() <= (this.meta.highlightRateFactor / 100) &&
 			note.userId !== user.id &&
 			(Date.now() - this.idService.parse(note.id).date.getTime()) < 1000 * 60 * 60 * 24 * 3
 		) {
