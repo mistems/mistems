@@ -14,24 +14,46 @@ SPDX-License-Identifier: AGPL-3.0-only
 			@enter.prevent="search"
 		>
 			<template #prefix><i class="ti ti-search"></i></template>
+			<template #caption>{{ i18n.ts._search.querySyntaxHelp }}</template>
 		</MkInput>
-		<MkFoldableSection expanded>
-			<template #header>{{ i18n.ts.options }}</template>
+		<MkFolder :defaultOpen="false">
+			<template #label>検索オプション</template>
 
 			<div class="_gaps_m">
-				<div style="display: flex; gap: 8px;">
-					<MkInput v-model="rangeStartAt" type="datetime-local">
+				<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;">
+					<MkInput v-model="rangeStartAt" type="date">
 						<template #label>{{ i18n.ts._search.postFrom }}</template>
 					</MkInput>
-					<MkInput v-model="rangeEndAt" type="datetime-local">
+					<MkInput v-model="rangeEndAt" type="date">
 						<template #label>{{ i18n.ts._search.postTo }}</template>
 					</MkInput>
+					<div style="display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px;">
+						<MkButton small rounded @click="setTodayRange()">今日</MkButton>
+						<MkButton small rounded @click="setRecentRange(0, 3)">直近3日間</MkButton>
+						<MkButton small rounded @click="setRecentRange(1)">直近1か月</MkButton>
+						<MkButton small rounded @click="setRecentRange(3)">直近3か月</MkButton>
+					</div>
 				</div>
 
 				<MkRadios
 					v-model="searchScope"
 					:options="searchScopeDef"
 				>
+					<template #label>探す範囲</template>
+				</MkRadios>
+
+				<MkRadios
+					v-model="searchFrom"
+					:options="searchFromDef"
+				>
+					<template #label>検索テキスト</template>
+				</MkRadios>
+
+				<MkRadios
+					v-model="withFiles"
+					:options="withFilesDef"
+				>
+					<template #label>添付ファイル</template>
 				</MkRadios>
 
 				<div v-if="instance.federation !== 'none' && searchScope === 'server'" :class="$style.subOptionRoot">
@@ -93,27 +115,80 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</div>
 				</div>
+
+				<div v-if="searchScope === 'channel'" :class="$style.subOptionRoot">
+					<div :class="$style.userSelectLabel">{{ i18n.ts._search.pleaseSelectChannel }}</div>
+					<div class="_gaps">
+						<div v-if="channel == null" :class="$style.userSelectButtons">
+							<div style="grid-column: span 2;">
+								<MkButton
+									transparent
+									:class="$style.userSelectButton"
+									:disabled="$i == null"
+									@click="selectChannel"
+								>
+									<div :class="$style.userSelectButtonInner">
+										<span><i class="ti ti-plus"></i></span>
+										<span>{{ i18n.ts.selectChannel }}</span>
+									</div>
+								</MkButton>
+							</div>
+						</div>
+						<div v-else :class="$style.userSelectedButtons">
+							<div style="overflow: hidden; display: flex; align-items: center; gap: 8px;">
+								<i class="ti ti-device-tv"></i>
+								<span>{{ channel.name }}</span>
+							</div>
+							<div>
+								<button
+									class="_button"
+									:class="$style.userSelectedRemoveButton"
+									@click="removeChannel"
+								>
+									<i class="ti ti-x"></i>
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
-		</MkFoldableSection>
+		</MkFolder>
 		<div>
 			<MkButton
 				large
 				primary
 				gradate
 				rounded
-				:disabled="searchParams == null"
+				:disabled="
+					searchParams == null
+						|| !(componentBlockSearchUntil && now? componentBlockSearchUntil < now : true) // disableの条件なので逆をとる
+				"
 				style="margin: 0 auto;"
+
 				@click="search"
 			>
 				{{ i18n.ts.search }}
+				<MkTime v-if="componentBlockSearchUntil && now && componentBlockSearchUntil > now" :time="componentBlockSearchUntil"/>
 			</MkButton>
 		</div>
 	</div>
 
-	<MkFoldableSection v-if="paginator">
-		<template #header>{{ i18n.ts.searchResult }}</template>
+	<div v-if="paginator">
+		<div v-if="paginator.errorDetail.value?.code === 'SEARCH_TIMEOUT'" :class="$style.timeoutBanner">
+			<div :class="$style.timeoutBannerText">
+				<i class="ti ti-clock-exclamation"></i>
+				検索が時間内に完了しませんでした。期間を絞ると速くなることがあります。
+			</div>
+			<div :class="$style.timeoutBannerButtons">
+				<MkButton small rounded @click="narrowTodayAndRetry()">今日で再検索</MkButton>
+				<MkButton small rounded @click="narrowAndRetry(0, 3)">直近3日間で再検索</MkButton>
+				<MkButton small rounded @click="narrowAndRetry(1)">直近1か月で再検索</MkButton>
+				<MkButton small rounded @click="narrowAndRetry(3)">直近3か月で再検索</MkButton>
+			</div>
+		</div>
+		<div>{{ i18n.ts.searchResult }}</div>
 		<MkNotesTimeline :key="`searchNotes:${key}`" :paginator="paginator"/>
-	</MkFoldableSection>
+	</div>
 </div>
 </template>
 
@@ -121,6 +196,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, markRaw, ref, shallowRef, toRef } from 'vue';
 import { host as localHost } from '@@/js/config.js';
 import type * as Misskey from 'misskey-js';
+import type { MkRadiosOption } from '@/components/MkRadios.vue';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
@@ -129,13 +205,13 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { apLookup } from '@/utility/lookup.js';
 import { useRouter } from '@/router.js';
 import MkButton from '@/components/MkButton.vue';
-import MkFoldableSection from '@/components/MkFoldableSection.vue';
+import MkFolder from '@/components/MkFolder.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
 import MkRadios from '@/components/MkRadios.vue';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { Paginator } from '@/utility/paginator.js';
-import type { MkRadiosOption } from '@/components/MkRadios.vue';
+import { favoritedChannelsCache } from '@/cache.js';
 
 const props = withDefaults(defineProps<{
 	query?: string;
@@ -160,6 +236,7 @@ const rangeStartAt = ref<string | null>(null);
 const rangeEndAt = ref<string | null>(null);
 
 const user = shallowRef<Misskey.entities.UserDetailed | null>(null);
+const channel = shallowRef<Misskey.entities.Channel | null>(null);
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 const noteSearchableScope = instance.noteSearchableScope ?? 'local';
@@ -187,11 +264,10 @@ if (fetchedUser != null) {
 }
 //#endregion
 
-const searchScope = ref<'all' | 'local' | 'server' | 'user'>((() => {
+const searchScope = ref<'all' | 'local' | 'server' | 'user' | 'channel'>((() => {
 	if (user.value != null) return 'user';
-	if (noteSearchableScope === 'local') return 'local';
 	if (hostInput.value) return 'server';
-	return 'all';
+	return 'local';
 })());
 
 const searchScopeDef = computed<MkRadiosOption[]>(() => {
@@ -208,16 +284,35 @@ const searchScopeDef = computed<MkRadiosOption[]>(() => {
 	}
 
 	options.push({ value: 'user', label: i18n.ts._search.searchScopeUser });
+	options.push({ value: 'channel', label: i18n.ts._search.searchScopeChannel });
 
 	return options;
 });
+
+const searchFrom = ref<'text' | 'textWithCw'>('textWithCw');
+
+const searchFromDef: MkRadiosOption[] = [
+	{ value: 'text', label: '本文' },
+	{ value: 'textWithCw', label: '本文+CW' },
+];
+
+const withFiles = ref<'any' | 'with' | 'without'>('any');
+
+const withFilesDef: MkRadiosOption[] = [
+	{ value: 'any', label: '指定なし' },
+	{ value: 'with', label: 'あり限定' },
+	{ value: 'without', label: 'なし限定' },
+];
 
 type SearchParams = {
 	readonly query: string;
 	readonly host?: string;
 	readonly userId?: string;
+	readonly channelId?: string;
 	readonly rangeStartAt?: number | null;
 	readonly rangeEndAt?: number | null;
+	readonly searchFrom?: string;
+	readonly withFiles?: boolean | null;
 };
 
 const fixHostIfLocal = (target: string | null | undefined) => {
@@ -226,10 +321,47 @@ const fixHostIfLocal = (target: string | null | undefined) => {
 };
 
 const searchRange = () => {
+	// type=date は 'YYYY-MM-DD'。ローカルタイムで「その日の 0 時 / 23:59:59.999」として扱う。
 	return {
-		rangeStartAt: rangeStartAt.value ? new Date(rangeStartAt.value).getTime() : null,
-		rangeEndAt: rangeEndAt.value ? new Date(rangeEndAt.value).getTime() : null,
+		rangeStartAt: rangeStartAt.value ? new Date(`${rangeStartAt.value}T00:00:00`).getTime() : null,
+		rangeEndAt: rangeEndAt.value ? new Date(`${rangeEndAt.value}T23:59:59.999`).getTime() : null,
 	};
+};
+
+function toDateString(d: Date): string {
+	const pad = (n: number) => n.toString().padStart(2, '0');
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function setRecentRange(months: number, days = 0): void {
+	const end = new Date();
+	const start = new Date(end);
+	start.setMonth(start.getMonth() - months);
+	start.setDate(start.getDate() - days);
+	rangeStartAt.value = toDateString(start);
+	rangeEndAt.value = toDateString(end);
+}
+
+function setTodayRange(): void {
+	const today = new Date();
+	rangeStartAt.value = toDateString(today);
+	rangeEndAt.value = toDateString(today);
+}
+
+function narrowAndRetry(months: number, days = 0): void {
+	setRecentRange(months, days);
+	search();
+}
+
+function narrowTodayAndRetry(): void {
+	setTodayRange();
+	search();
+}
+
+const withFilesParam = () => {
+	if (withFiles.value === 'with') return true;
+	if (withFiles.value === 'without') return false;
+	return null;
 };
 
 const searchParams = computed<SearchParams | null>(() => {
@@ -242,6 +374,19 @@ const searchParams = computed<SearchParams | null>(() => {
 			query: trimmedQuery,
 			host: fixHostIfLocal(user.value.host),
 			userId: user.value.id,
+			searchFrom: searchFrom.value,
+			withFiles: withFilesParam(),
+			...searchRange(),
+		};
+	}
+
+	if (searchScope.value === 'channel') {
+		if (channel.value == null) return null;
+		return {
+			query: trimmedQuery,
+			channelId: channel.value.id,
+			searchFrom: searchFrom.value,
+			withFiles: withFilesParam(),
 			...searchRange(),
 		};
 	}
@@ -257,6 +402,8 @@ const searchParams = computed<SearchParams | null>(() => {
 		return {
 			query: trimmedQuery,
 			host: fixHostIfLocal(trimmedHost),
+			searchFrom: searchFrom.value,
+			withFiles: withFilesParam(),
 			...searchRange(),
 		};
 	}
@@ -265,12 +412,15 @@ const searchParams = computed<SearchParams | null>(() => {
 		return {
 			query: trimmedQuery,
 			host: '.',
+			searchFrom: searchFrom.value,
+			withFiles: withFilesParam(),
 			...searchRange(),
 		};
 	}
 
 	return {
 		query: trimmedQuery,
+		searchFrom: searchFrom.value,
 		...searchRange(),
 	};
 });
@@ -292,8 +442,50 @@ function removeUser() {
 	user.value = null;
 }
 
+async function selectChannel() {
+	const channels = await favoritedChannelsCache.fetch();
+	if (channels.length === 0) {
+		await os.alert({
+			type: 'info',
+			text: i18n.ts._search.noFavoritedChannels,
+		});
+		return;
+	}
+	const { canceled, result: chosenChannelId } = await os.select({
+		title: i18n.ts.selectChannel,
+		items: channels.map(x => ({
+			value: x.id, label: x.name,
+		})),
+		default: channel.value?.id,
+	});
+	if (canceled || chosenChannelId == null) return;
+	channel.value = channels.find(x => x.id === chosenChannelId) ?? null;
+}
+
+function removeChannel() {
+	channel.value = null;
+}
+
+const localBlockSearchUntil = localStorage.getItem('noteSearchedAt');
+const componentBlockSearchUntil = ref(localBlockSearchUntil ? new Date(parseInt(localBlockSearchUntil)) : null);
+const now = ref<Date | null >(new Date());
+
 async function search() {
 	if (searchParams.value == null) return;
+
+	// バブリング防止チェック
+	const noteSearchedAt = localStorage.getItem('noteSearchedAt');
+	const now = Date.now();
+	if (noteSearchedAt && now < parseInt(noteSearchedAt)) {
+		return;
+	}
+	localStorage.setItem('noteSearchedAt', now.toString());
+	componentBlockSearchUntil.value = new Date(now + 6 * 1000);
+	console.log(componentBlockSearchUntil.value);
+	window.setTimeout(() => {
+		localStorage.removeItem('noteSearchedAt');
+		componentBlockSearchUntil.value = null;
+	}, 6 * 1000);
 
 	//#region AP lookup
 	if (searchParams.value.query.startsWith('https://') && !searchParams.value.query.includes(' ')) {
@@ -373,6 +565,38 @@ async function search() {
 	font-size: 0.85em;
 	padding: 0 0 8px;
 	user-select: none;
+}
+
+.sectionLabel {
+	font-size: 0.85em;
+	padding: 0 0 8px;
+	user-select: none;
+}
+
+.timeoutBanner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	margin-bottom: 12px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-infoWarnBg);
+	color: var(--MI_THEME-infoWarnFg);
+}
+
+.timeoutBannerText {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 200px;
+}
+
+.timeoutBannerButtons {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
 }
 
 .userSelectButtons {
