@@ -59,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<template #footer>
-		<div :class="$style.footer">
+		<div v-if="isSubWindow" :class="$style.footer">
 			<div class="_spacer" style="--MI_SPACER-w: 700px; --MI_SPACER-min: 16px; --MI_SPACER-max: 16px;">
 				<div class="_buttonsCenter">
 					<MkButton inline rounded primary gradate @click="openPostForm()"><i class="ti ti-pencil"></i> {{ i18n.ts.postToTheChannel }}</MkButton>
@@ -73,8 +73,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, watch, ref, markRaw, shallowRef } from 'vue';
 import * as Misskey from 'misskey-js';
-import { url } from '@@/js/config.js';
-import { useInterval } from '@@/js/use-interval.js';
+import { url, ui } from '@@/js/config.js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import MkPostForm from '@/components/MkPostForm.vue';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
@@ -99,8 +98,14 @@ import { notesSearchAvailable } from '@/utility/check-permissions.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { useRouter } from '@/router.js';
 import { Paginator } from '@/utility/paginator.js';
+import { miRegistryItem } from '@/registry-item.js';
+import { mainRouter } from '@/router.js';
 
 const router = useRouter();
+
+const isSubWindow = computed(() => {
+	return router.current !== mainRouter.current || (ui === 'deck' && router.current === mainRouter.current);
+});
 
 const props = defineProps<{
 	channelId: string;
@@ -120,14 +125,6 @@ const featuredPaginator = markRaw(new Paginator('notes/featured', {
 	})),
 }));
 
-useInterval(() => {
-	if (channel.value == null) return;
-	miLocalStorage.setItemAsJson(`channelLastReadedAt:${channel.value.id}`, Date.now());
-}, 3000, {
-	immediate: true,
-	afterMounted: true,
-});
-
 watch(() => props.channelId, async () => {
 	const _channel = await misskeyApi('channels/show', {
 		channelId: props.channelId,
@@ -139,16 +136,32 @@ watch(() => props.channelId, async () => {
 	}
 
 	if ((favorited.value || _channel.isFollowing) && _channel.lastNotedAt) {
-		const lastReadedAt: number = miLocalStorage.getItemAsJson(`channelLastReadedAt:${_channel.id}`) ?? 0;
+		const lastReadedAt: number = (miLocalStorage.getItemAsJson('channelsLastReadedAt') ?? {})[_channel.id] ?? 0;
 		const lastNotedAt = Date.parse(_channel.lastNotedAt);
 
-		if (lastNotedAt > lastReadedAt) {
-			miLocalStorage.setItemAsJson(`channelLastReadedAt:${_channel.id}`, lastNotedAt);
+		if (!lastReadedAt || lastNotedAt > lastReadedAt) {
+			saveLastReadedAt();
 		}
 	}
 
 	channel.value = _channel;
 }, { immediate: true });
+
+// チャンネルを素早く行き来したときに registry の get/set が交錯して古い値で上書きしないよう直列化する
+let saveLastReadedAtQueue: Promise<void> = Promise.resolve();
+
+function saveLastReadedAt() {
+	const channelId = props.channelId;
+	if (!channelId) return;
+	saveLastReadedAtQueue = saveLastReadedAtQueue.then(async () => {
+		const tmp = await miRegistryItem.get('channelsLastReadedAt');
+		tmp[channelId] = Date.now();
+		await miRegistryItem.set('channelsLastReadedAt', tmp);
+		miLocalStorage.setItemAsJson('channelsLastReadedAt', tmp);
+	}).catch(() => {
+		// 既読時刻の保存失敗は致命的でないので無視する
+	});
+}
 
 function edit() {
 	router.push('/channels/:channelId/edit', {
