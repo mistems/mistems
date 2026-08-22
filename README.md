@@ -362,7 +362,7 @@ git tag -a "$new_version" -m "MISTEMS.$MISVER"
 - mistems-readme - READMEが置いてあるだけで何も無い
 
 ### ブランチの取り込み方
-PRのと見込みはGitHub上ではなくローカルで行う
+PRの取り込みはGitHub上ではなくローカルで行う
 ```
 git merge --squash 任意ブランチ
 git commit -a -m "メッセージ"
