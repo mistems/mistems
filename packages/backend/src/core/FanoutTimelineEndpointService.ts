@@ -14,6 +14,7 @@ import type { NotesRepository } from '@/models/_.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { FanoutTimelineName, FanoutTimelineService } from '@/core/FanoutTimelineService.js';
 import { UtilityService } from '@/core/UtilityService.js';
+import { IdService } from '@/core/IdService.js';
 import { isUserRelated } from '@/misc/is-user-related.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
 import { CacheService } from '@/core/CacheService.js';
@@ -59,6 +60,7 @@ export class FanoutTimelineEndpointService {
 		private fanoutTimelineService: FanoutTimelineService,
 		private utilityService: UtilityService,
 		private channelMutingService: ChannelMutingService,
+		private idService: IdService,
 	) {
 	}
 
@@ -77,12 +79,37 @@ export class FanoutTimelineEndpointService {
 
 		const redisResult = await this.fanoutTimelineService.getMulti(ps.redisTimelines, ps.untilId, ps.sinceId);
 
+		// 取得したredisResultのうち、2つ以上ソースがあり、1つでも空であればDBにフォールバックする
+		const trustedEmptyIndices = new Set<number>();
+		for (let i = 0; i < redisResult.length; i++) {
+			const ids = redisResult[i];
+			const dummyIdIndex = ids.findIndex(id => this.idService.parse(id).date.getTime() === 1);
+			if (dummyIdIndex !== -1) {
+				ids.splice(dummyIdIndex, 1);
+				if (ids.length === 0) {
+					trustedEmptyIndices.add(i);
+				}
+			}
+		}
+
+		let shouldFallbackToDb = ps.useDbFallback && (redisResult.length > 1 && redisResult.some((ids, i) => ids.length === 0 && !trustedEmptyIndices.has(i)));
+
+		// 取得したresultの中で最古のIDのうち、最も新しいものを取得
+		// ids自体が空配列の場合、ids[ids.length - 1]はundefinedになるため、filterでnullを除外する
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		const fttThresholdId = redisResult.map(ids => ascending ? ids[0] : ids[ids.length - 1]).filter(id => id != null).sort().pop();
+
 		// TODO: いい感じにgetMulti内でソート済だからuniqするときにredisResultが全てソート済なのを利用して再ソートを避けたい
-		const redisResultIds = Array.from(new Set(redisResult.flat(1))).sort(idCompare);
+		let redisResultIds = shouldFallbackToDb ? [] : Array.from(new Set(redisResult.flat(1)));
+		if (ps.useDbFallback && fttThresholdId != null) {
+			redisResultIds = redisResultIds.filter(id => id >= fttThresholdId);
+		}
+		redisResultIds.sort(idCompare);
 
 		let noteIds = redisResultIds.slice(0, ps.limit);
+
 		const oldestNoteId = ascending ? redisResultIds[0] : redisResultIds[redisResultIds.length - 1];
-		const shouldFallbackToDb = noteIds.length === 0 || ps.sinceId != null && ps.sinceId < oldestNoteId;
+		shouldFallbackToDb ||= ps.useDbFallback && (noteIds.length === 0 || ps.sinceId != null && ps.sinceId < oldestNoteId);
 
 		if (!shouldFallbackToDb) {
 			let filter = ps.noteFilter ?? (_note => true) as NoteFilter;
@@ -168,6 +195,13 @@ export class FanoutTimelineEndpointService {
 			let readFromRedis = 0;
 			let lastSuccessfulRate = 1; // rateをキャッシュする？
 
+			// Redis 上に「上位 limit 件範囲を満たす素材」があるか
+			// (= 歯抜けなしと見なせるか) を early return 条件に組み込む。
+			// redisResultIds.length < ps.limit の場合は歯抜けまたはキャッシュ未飽和なので、
+			// ループ内で limit 件を満たしても early return せず、最終 dbFallback で
+			// 全範囲を取り直して上位 limit 件を再構築する (歯抜け範囲のスキップを防ぐ)。
+			const hasFullRedisCache = redisResultIds.length >= ps.limit;
+
 			while ((redisResultIds.length - readFromRedis) !== 0) {
 				const remainingToRead = ps.limit - redisTimeline.length;
 
@@ -181,13 +215,14 @@ export class FanoutTimelineEndpointService {
 				redisTimeline.push(...gotFromDb);
 				lastSuccessfulRate = gotFromDb.length / noteIds.length;
 
-				if (ps.allowPartial ? redisTimeline.length !== 0 : redisTimeline.length >= ps.limit) {
+				if (ps.allowPartial ? redisTimeline.length !== 0 : (redisTimeline.length >= ps.limit && hasFullRedisCache)) {
 					// 十分Redisからとれた
 					return redisTimeline.slice(0, ps.limit);
 				}
 			}
 
 			// まだ足りない分はDBにフォールバック
+			// 1段目: Redisループの最終noteIdsを境界にbounded query (#13495 の意図に従う)
 			const remainingToRead = ps.limit - redisTimeline.length;
 			let dbUntil: string | null;
 			let dbSince: string | null;
@@ -199,10 +234,53 @@ export class FanoutTimelineEndpointService {
 				dbSince = ps.sinceId;
 			}
 			const gotFromDb = await ps.dbFallback(dbUntil, dbSince, remainingToRead);
-			return [...redisTimeline, ...gotFromDb];
+			const merged: MiNote[] = [...redisTimeline, ...gotFromDb];
+
+			// 2段目: それでも limit を満たせない場合は全範囲safety net
+			// Redis上に飛び石の歯抜け (3分ガードでpushが拒否されたノート、TTL evict、LREM等)
+			// があるとboundedクエリではその範囲のノートを取りこぼすため、
+			// ps.untilId/ps.sinceIdの全範囲を再問い合わせし重複排除して補完する。
+			if (merged.length < ps.limit) {
+				const seen = new Set(merged.map(n => n.id));
+				const gapFill = await ps.dbFallback(ps.untilId, ps.sinceId, ps.limit);
+				for (const n of gapFill) {
+					if (!seen.has(n.id)) {
+						merged.push(n);
+						seen.add(n.id);
+					}
+				}
+			}
+			merged.sort((a, b) => idCompare(a.id, b.id));
+			return merged.slice(0, ps.limit);
 		}
 
-		return await ps.dbFallback(ps.untilId, ps.sinceId, ps.limit);
+		// RedisおよびDBが空の場合、次回以降の無駄なDBアクセスを防ぐためダミーIDを保存する
+		const gotFromDb = await ps.dbFallback(ps.untilId, ps.sinceId, ps.limit);
+		const canInject = (
+			(redisResultIds.length === 0 && ps.sinceId == null && ps.untilId == null) &&
+			(gotFromDb.length < ps.limit)
+		);
+
+		if (canInject) {
+			const dummyId = this.idService.gen(1); // 1 = Detectable Dummy Timestamp
+
+			Promise.all(ps.redisTimelines.map((tl, i) => {
+				// 有効なソースかつ結果が空だった場合のみダミーを入れる
+				if (redisResult[i] && redisResult[i].length === 0) {
+					let isEmpty = true;
+					if (gotFromDb.length > 0) {
+						isEmpty = !gotFromDb.some(n => this.accepts(tl, n));
+					}
+
+					if (isEmpty) {
+						return this.fanoutTimelineService.injectDummyIfEmpty(tl, dummyId);
+					}
+				}
+				return Promise.resolve();
+			}));
+		}
+
+		return gotFromDb;
 	}
 
 	private async getAndFilterFromDb(noteIds: string[], noteFilter: NoteFilter, idCompare: (a: string, b: string) => number): Promise<MiNote[]> {
@@ -220,5 +298,33 @@ export class FanoutTimelineEndpointService {
 		notes.sort((a, b) => idCompare(a.id, b.id));
 
 		return notes;
+	}
+
+	private accepts(tl: FanoutTimelineName, note: MiNote): boolean {
+		if (tl === 'localTimeline') {
+			return !note.userHost && !note.replyId && note.visibility === 'public';
+		} else if (tl === 'localTimelineWithFiles') {
+			return !note.userHost && !note.replyId && note.visibility === 'public' && note.fileIds.length > 0;
+		} else if (tl === 'localTimelineWithReplies') {
+			return !note.userHost && note.replyId != null && note.visibility === 'public';
+		} else if (tl.startsWith('localTimelineWithReplyTo:')) {
+			const id = tl.split(':')[1];
+			return !note.userHost && note.replyId != null && note.replyUserId === id;
+		} else if (tl.startsWith('userTimeline:')) {
+			const id = tl.split(':')[1];
+			return note.userId === id && !note.replyId;
+		} else if (tl.startsWith('userTimelineWithFiles:')) {
+			const id = tl.split(':')[1];
+			return note.userId === id && !note.replyId && note.fileIds.length > 0;
+		} else if (tl.startsWith('userTimelineWithReplies:')) {
+			const id = tl.split(':')[1];
+			return note.userId === id && note.replyId != null;
+		} else if (tl.startsWith('userTimelineWithChannel:')) {
+			const id = tl.split(':')[1];
+			return note.userId === id && note.channelId != null;
+		} else {
+			// TODO: homeTimeline系
+			return true;
+		}
 	}
 }
