@@ -94,16 +94,21 @@ CREATE INDEX CONCURRENTLY pgroonga_note_text_idx
     normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
   );
 
+-- ⚠️ cw は varchar 型のため opclass の明示が必須。無指定だとデフォルトの
+-- pgroonga_varchar_term_search_ops_v2 (&@~ 非対応) で張られ、OR 検索の cw 腕が
+-- 索引不能 → OR 全体が Filter に落ちる (実環境で踏んだ)。text 型はデフォルトで full text ops。
 CREATE INDEX CONCURRENTLY pgroonga_note_cw_idx
-  ON note USING pgroonga (cw)
+  ON note USING pgroonga (cw pgroonga_varchar_full_text_search_ops_v2)
   WITH (
     tokenizer  = 'TokenMecab',
     normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
   );
 
--- 2. 完了と有効性を確認 (indisvalid = true であること)
-SELECT c.relname, i.indisvalid
-  FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+-- 2. 完了と有効性・opclass を確認 (indisvalid = true / cw 側が varchar_full_text_search であること)
+SELECT c.relname, opc.opcname, i.indisvalid
+  FROM pg_index i
+  JOIN pg_class c ON c.oid = i.indexrelid
+  JOIN pg_opclass opc ON opc.oid = ANY(i.indclass)
  WHERE c.relname LIKE 'pgroonga_note%';
 
 -- 3. 旧索引を落とす
@@ -132,7 +137,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_text_idx
   WHERE "userHost" IS NULL;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_cw_idx
-  ON note USING pgroonga (cw)
+  ON note USING pgroonga (cw pgroonga_varchar_full_text_search_ops_v2)
   WITH (
     tokenizer  = 'TokenMecab',
     normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
@@ -172,7 +177,19 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_cw_idx
 - 期待するプラン: `BitmapOr(pgroonga_note_cw_idx, pgroonga_note_text_idx(相当))` → Bitmap Heap Scan。`BitmapAnd(userHost × PK id レンジ)` が出たら**索引が使われていない** (事故モード)
 - ベースライン比較: 旧 6238ms / shared read 76186 → 数十 ms / 数百ブロック程度まで落ちる見込み
 
-### 5.2. 継続監視
+### 5.2. 実測結果 (2026-07-03 — 達成)
+
+OR 化デプロイ + cw 索引の opclass 明示張り直し後、期待どおり `BitmapOr(pgroonga_note_cw_index, pgroonga_note_text_index)` を確認:
+
+- 「ふぁぼすき」ローカル限定 textWithCw 検索: **6,238ms → 382ms** (コールド比 16 倍)
+- `Buffers: shared hit=1,048 / read=0` — 旧プランの read 77,120 (≒600MB) からディスク読みゼロへ
+- JIT はコスト見積もり低下 (332,207 → 5,461) により発動しなくなった (旧 783ms → 0)
+- 残コスト 382ms の大半は pgroonga の Bitmap Index Scan 2 本 (cw 182ms + text 153ms、ヒット 48 + 943 件)。Groonga 側キャッシュのコールドと思われ、ウォーム時はさらに縮む見込み (要追記)
+- id レンジ・userHost はヒープ Filter に降格したが候補 991 行のため無害。頻出語でここが膨らむ場合のみ D 案 `(text, id)` 複合を検討
+
+途中で踏んだ地雷 3 種の記録: ① 連結式は列索引に不一致 (9.1 節相当の親計画) → ② OR 化しても ③ **cw (varchar) の索引が opclass 無指定で term_search ops になっており、OR の片腕が索引不能 → OR 全体が Filter 落ち** (3.2 節の DDL 警告参照)。
+
+### 5.3. 継続監視
 
 - `pg_stat_user_indexes.idx_scan` — 「張ったのに使われない索引」の検出 (今回の事故はエラーにならず静かに起きた)
 - 検索 API の p50 / p95 レイテンシ
@@ -188,11 +205,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_cw_idx
 
 ## 7. TODO
 
-- [ ] A (text) / B (cw) 索引の張り直し (3.2 節 — A は数時間、要ディスク余裕 +6〜12GB)
-- [ ] 全 pgroonga 索引の定義突き合わせ (4 節 step 2)
-- [ ] SearchService: textWithCw の OR 化 (2.1 節)
-- [ ] SearchService: `SET LOCAL jit = off` 追加 (2.2 節)
-- [ ] `pnpm lint` / backend test / CHANGELOG 追記 (2.3 節)
-- [ ] EXPLAIN 検証 — BitmapOr が出ること + レイテンシ実測 (5.1 節)
+- [x] B (cw) 索引の張り直し — **opclass 明示必須の学びを含む** (3.2 節。varchar_full_text_search_ops_v2 で張り直し済)
+- [ ] A (text) 索引の張り直し (3.2 節 — tokenizer 設定統一。数時間、要ディスク余裕 +6〜12GB)
+- [x] 全 pgroonga 索引の定義突き合わせ (4 節 step 2 — opclass 列も確認)
+- [x] SearchService: textWithCw の OR 化 (2.1 節 — commit c16673b638)
+- [x] SearchService: `SET LOCAL jit = off` 追加 (2.2 節 — 同上)
+- [x] `pnpm lint` / CHANGELOG 追記 (2.3 節)
+- [x] EXPLAIN 検証 — BitmapOr 確認、6,238ms → 382ms (5.2 節)
 - [ ] C / C' 採否判断 (3.3 節 — 頻出語 × ローカル限定の実測プランを見てから。必須ではない)
 - [ ] example.yml / docker_example.yml の案内 SQL 更新 (4 節 step 6)
