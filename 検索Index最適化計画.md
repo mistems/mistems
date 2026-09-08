@@ -106,12 +106,14 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_text_idx
 
 ```sql
 CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_cw_idx
-  ON note USING pgroonga (cw)
+  ON note USING pgroonga (cw pgroonga_varchar_full_text_search_ops_v2)
   WITH (
     tokenizer  = 'TokenMecab',
     normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
   );
 ```
+
+> **⚠️ opclass の明示が必須 (実環境で踏んだ)**: `cw` は varchar 型のため、opclass 無指定だとデフォルトの `pgroonga_varchar_term_search_ops_v2` (完全一致・前方一致用、`&@~` **非対応**) で張られる。すると OR 検索の cw 腕が索引不能になり、**OR 全体が BitmapOr 化できず Filter に落ちる** (text 側の索引まで巻き添えで使われない)。text 型の A はデフォルトが full_text_search ops なので無指定でよい。投入後は `SELECT c.relname, opc.opcname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_opclass opc ON opc.oid = ANY(i.indclass) WHERE c.relname LIKE 'pgroonga%';` で opclass を確認すること。
 
 cw は大半のノートで NULL のため、索引サイズ・構築時間・INSERT コストとも text 索引と比べて誤差レベル。**normalizers は必ず A と同一にする** (4.4 節 — 実環境で不一致が起きた)。
 
@@ -129,7 +131,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_text_idx
   WHERE "userHost" IS NULL;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS pgroonga_note_local_cw_idx
-  ON note USING pgroonga (cw)
+  ON note USING pgroonga (cw pgroonga_varchar_full_text_search_ops_v2)
   WITH (
     tokenizer  = 'TokenMecab',
     normalizers = 'NormalizerNFKC150("unify_kana", true, "unify_hyphen_and_prolonged_sound_mark", true, "unify_middle_dot", true, "unify_katakana_bu_sound", true)'
