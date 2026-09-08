@@ -58,5 +58,6 @@
 
 ## 確認後に判断すること
 
-- `meta` の `sensitiveWords` 公開 (誰でもワード一覧を見られる) を許容するか
-- 問題なければ `git push --force-with-lease riin mkPostFormExtend`
+- [x] `meta` の `sensitiveWords` 公開 (誰でもワード一覧を見られる) を許容するか
+  - **2026-09-08 最終決定: 公開 OK**。セキュリティ要件に引っかかった場合も Fork オーナー決裁で問題なしとする
+- [x] `git push --force-with-lease riin mkPostFormExtend` → 実施済み (riin/mkPostFormExtend = 707469dd35)
