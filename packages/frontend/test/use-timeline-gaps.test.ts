@@ -21,15 +21,15 @@ function ids(items: readonly { id: string }[]): string[] {
 	return items.map(x => x.id);
 }
 
-function setup(initialItems: Note[], options: { canAutoFill?: boolean } = {}) {
+function setup(initialItems: Note[], options: { canAutoFill?: () => boolean; getGapElement?: () => HTMLElement | null } = {}) {
 	const paginator = new Paginator('notes/timeline', { useShallowRef: true });
 	paginator.fetching.value = false;
 	paginator.items.value = initialItems;
 
 	const fetchRange = vi.spyOn(paginator, 'fetchRange');
 	const gaps = useTimelineGaps(paginator, {
-		canAutoFill: () => options.canAutoFill ?? false,
-		getGapElement: () => null,
+		canAutoFill: options.canAutoFill ?? (() => false),
+		getGapElement: options.getGapElement ?? (() => null),
 		getScrollContainer: () => null,
 	});
 	paginator.onQueueOverflow = gaps.onQueueOverflow;
@@ -37,7 +37,12 @@ function setup(initialItems: Note[], options: { canAutoFill?: boolean } = {}) {
 	return { paginator, gaps, fetchRange };
 }
 
-// 新しい順 (降順) のノート列を作る: from から count 件、from より新しい側へ
+// 画面内に見えているマーカー要素のスタブ (isGapVisible が true になる矩形を返す)
+function visibleElement(): HTMLElement {
+	return { getBoundingClientRect: () => ({ top: 10, bottom: 50 }) } as unknown as HTMLElement;
+}
+
+// newestId を先頭 (最新) として、そこから古い側へ count 件のノート列 (降順) を作る
 function descendingNotes(newestId: string, count: number): Note[] {
 	const base = parseInt(newestId.slice(1), 10);
 	return Array.from({ length: count }, (_, i) => note('n' + String(base - i).padStart(3, '0')));
@@ -107,7 +112,7 @@ describe('useTimelineGaps', () => {
 		});
 
 		test('canAutoFill が true なら生成直後に 1 回だけ補給する', async () => {
-			const { gaps, fetchRange } = setup([note('n003'), note('n002'), note('n001')], { canAutoFill: true });
+			const { gaps, fetchRange } = setup([note('n003'), note('n002'), note('n001')], { canAutoFill: () => true });
 			fetchRange.mockResolvedValue([]);
 			gaps.openGap({ sinceId: 'n002', untilId: 'n003' });
 			expect(fetchRange).toHaveBeenCalledTimes(1);
@@ -260,12 +265,121 @@ describe('useTimelineGaps', () => {
 			expect(ids(gaps.displayItems.value)).toEqual(['n003', 'gap:0', 'n001']);
 		});
 
+		test('付け替え先に既にマーカーがあれば統合する (同じ sinceId のマーカーは 1 つ)', () => {
+			const { paginator, gaps } = setup([note('n005'), note('n004'), note('n003')]);
+			gaps.openGap({ sinceId: 'n005', untilId: 'n009' });
+			gaps.openGap({ sinceId: 'n004', untilId: 'n005' });
+			gaps.onNoteRemoved('n005');
+			paginator.removeItem('n005');
+			expect(gaps.gaps.value).toHaveLength(1);
+			expect(gaps.gaps.value[0]).toMatchObject({ sinceId: 'n004', untilId: 'n009' });
+		});
+
 		test('付け替え先が無ければマーカーを捨てる', () => {
 			const { paginator, gaps } = setup([note('n003'), note('n002'), note('n001')]);
 			gaps.openGap({ sinceId: 'n001', untilId: 'n002' });
 			gaps.onNoteRemoved('n001');
 			paginator.removeItem('n001');
 			expect(gaps.gaps.value).toHaveLength(0);
+		});
+	});
+
+	describe('fill: backend の並び順に依存しない', () => {
+		test('untilId 指定なのに昇順で返っても (notes/mentions)、新しい順に挿入し untilId を最古に進める', async () => {
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')]);
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			fetchRange.mockResolvedValueOnce(descendingNotes('n099', 30).toReversed()); // 昇順 n070..n099
+			await gaps.fill(gap);
+			expect(ids(paginator.items.value).slice(0, 3)).toEqual(['n100', 'n099', 'n098']);
+			expect(ids(paginator.items.value).slice(-3)).toEqual(['n070', 'n002', 'n001']);
+			expect(gap.untilId).toBe('n070');
+		});
+
+		test('sinceId のみなのに降順で返っても (roles/notes)、sinceId を最新に進める', async () => {
+			const { paginator, gaps, fetchRange } = setup([note('n002'), note('n001')]);
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: null })!;
+			fetchRange.mockResolvedValueOnce(descendingNotes('n032', 30)); // 降順 n032..n003
+			await gaps.fill(gap);
+			expect(ids(paginator.items.value).slice(0, 2)).toEqual(['n032', 'n031']);
+			expect(gap.sinceId).toBe('n032');
+		});
+	});
+
+	describe('fill: 自動継続', () => {
+		test('マーカーが見えていて自動補給可なら続き、上限回数に達したら手動待ちにする', async () => {
+			let canAutoFill = true;
+			const { gaps, fetchRange } = setup([note('n500'), note('n002'), note('n001')], {
+				canAutoFill: () => canAutoFill,
+				getGapElement: visibleElement,
+			});
+			// 常に limit ちょうど返す (区間が長い)
+			fetchRange.mockImplementation(async ({ untilId }) => descendingNotes('n' + String(parseInt(untilId!.slice(1), 10) - 1).padStart(3, '0'), 30));
+
+			// canAutoFill は「生成直後」の自動補給には効くので、まず tryAutoFill を抑えて手動クリックから始める
+			canAutoFill = false;
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n500' })!;
+			expect(fetchRange).toHaveBeenCalledTimes(0);
+
+			canAutoFill = true;
+			await gaps.fill(gap); // 手動 1 回
+			// 自動継続は非同期 (nextTick 後) に走るので、落ち着くまで待つ
+			for (let i = 0; i < 10; i++) await nextTick();
+			await new Promise(resolve => setTimeout(resolve, 0));
+
+			// 手動 1 回 + 自動継続 3 回 (MAX_AUTO_CONTINUE) で止まる
+			expect(fetchRange).toHaveBeenCalledTimes(4);
+			expect(gaps.gaps.value).toHaveLength(1);
+			expect(gap.fetching).toBe(false);
+
+			// 手動クリックで回数がリセットされ、再び 1 + 3 回進む
+			await gaps.fill(gap);
+			for (let i = 0; i < 10; i++) await nextTick();
+			await new Promise(resolve => setTimeout(resolve, 0));
+			expect(fetchRange).toHaveBeenCalledTimes(8);
+		});
+
+		test('自動補給不可 (非アクティブ / 先頭以外) になったら、見えていても続けない', async () => {
+			let canAutoFill = true;
+			const { gaps, fetchRange } = setup([note('n500'), note('n002'), note('n001')], {
+				canAutoFill: () => canAutoFill,
+				getGapElement: visibleElement,
+			});
+			fetchRange.mockImplementation(async ({ untilId }) => {
+				canAutoFill = false; // 取得中にタブが裏に回った
+				return descendingNotes('n' + String(parseInt(untilId!.slice(1), 10) - 1).padStart(3, '0'), 30);
+			});
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n500' })!;
+			await gaps.fill(gap);
+			for (let i = 0; i < 10; i++) await nextTick();
+			await new Promise(resolve => setTimeout(resolve, 0));
+			expect(fetchRange).toHaveBeenCalledTimes(1);
+			expect(gaps.gaps.value).toHaveLength(1);
+		});
+	});
+
+	describe('孤立したマーカーの掃除', () => {
+		test('sinceId のノートが trim で押し出された上限確定済マーカーは捨てる', async () => {
+			const { paginator, gaps } = setup([note('n003'), note('n002'), note('n001')]);
+			gaps.openGap({ sinceId: 'n001', untilId: 'n002' });
+			// 30 件超を先頭に足して trim させる (n001 が押し出される)
+			paginator.unshiftItems(descendingNotes('n040', 35));
+			await nextTick();
+			expect(paginator.items.value.some(x => x.id === 'n001')).toBe(false);
+			expect(gaps.gaps.value).toHaveLength(0);
+		});
+
+		test('sinceId のノートが先読みキューにいる (items の最新より新しい) マーカーは残す', async () => {
+			const { paginator, gaps } = setup([note('n003'), note('n002'), note('n001')]);
+			paginator.enqueue(note('n010'));
+			const gap = gaps.openGap()!; // sinceId = n010 (キュー側)
+			gaps.bindUntil('n011');
+			expect(gap.untilId).toBe('n011');
+			paginator.removeItem('n001'); // items が変わっても
+			await nextTick();
+			expect(gaps.gaps.value).toHaveLength(1);
+			// 解放されれば表示される
+			paginator.releaseQueue();
+			expect(ids(gaps.displayItems.value)).toEqual(['gap:0', 'n010', 'n003', 'n002']);
 		});
 	});
 
@@ -281,7 +395,7 @@ describe('useTimelineGaps', () => {
 	});
 
 	test('isTimelineGap はマーカーとノートを判別する', () => {
-		const gap: TimelineGap = { id: 'gap:x', createdAt: '', _type: 'gap', sinceId: 'a', untilId: null, fetching: false, autoFillPending: false };
+		const gap: TimelineGap = { id: 'gap:x', createdAt: '', _type: 'gap', sinceId: 'a', untilId: null, fetching: false, autoFillPending: false, autoContinueCount: 0 };
 		expect(isTimelineGap(gap)).toBe(true);
 		expect(isTimelineGap(note('n001'))).toBe(false);
 	});

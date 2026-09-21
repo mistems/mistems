@@ -11,7 +11,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 const MAX_ITEMS = 30;
 const MAX_QUEUE_ITEMS = 100;
 const FIRST_FETCH_LIMIT = 15;
-const SECOND_FETCH_LIMIT = 30;
+export const SECOND_FETCH_LIMIT = 30;
 
 export type MisskeyEntity = {
 	id: string;
@@ -420,8 +420,12 @@ export class Paginator<
 
 	/**
 	 * sinceId (と untilId) で区切られた区間のアイテムを取得する。items には反映しない。
-	 * untilId 指定時は降順 (新しい順)、未指定時は昇順 (古い順) で返る (backend の仕様に従う)。
+	 * 並び順は endpoint によって異なる (多くは untilId 指定時に降順、未指定時に昇順だが例外あり) ので呼び出し側でソートすること。
 	 * 失敗時は null。
+	 *
+	 * NOTE: 区間内のノートが漏れなく返ることは backend 側の補完処理 (FanoutTimelineEndpointService の
+	 * 全範囲 DB フォールバック、MISTEMS の FTTL 歯抜け対策パッチ) に依存している。
+	 * それが無い環境では Redis 上の欠損がそのまま返り、補給しても穴が残りうる
 	 */
 	public async fetchRange(range: { sinceId: string; untilId?: string | null; limit?: number }): Promise<T[] | null> {
 		const data: E['req'] = {

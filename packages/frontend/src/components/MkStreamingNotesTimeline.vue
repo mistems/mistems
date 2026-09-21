@@ -215,6 +215,9 @@ let scrollContainer: HTMLElement | null = null;
 function onScrollContainerScroll() {
 	if (isTop()) {
 		paginator.releaseQueue();
+		// スクロールで先頭に戻ったときも、保留中の歯抜けマーカーの自動補給を試す
+		// (scrollToTop を伴うコンポーネント側の releaseQueue() はスクロールイベント内から呼ばない)
+		timelineGaps.tryAutoFill();
 	}
 }
 
@@ -235,7 +238,6 @@ onUnmounted(() => {
 
 const visibility = useDocumentVisibility();
 let isPausingUpdate = false;
-let hiddenAt: number | null = null;
 
 // 未取得区間 (歯抜け) のマーカー。paginator.items には混ぜず displayItems で合成する
 const timelineGaps = useTimelineGaps(paginator, {
@@ -250,7 +252,7 @@ paginator.onQueueOverflow = timelineGaps.onQueueOverflow;
 /**
  * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
  */
-function getPrevNote(i: number): Misskey.entities.Note | null {
+function getPrevNote(i: number): (Misskey.entities.Note & MisskeyEntity) | null {
 	for (let j = i - 1; j >= 0; j--) {
 		const item = displayItems.value[j];
 		if (item != null && !isTimelineGap(item)) return item;
@@ -258,9 +260,15 @@ function getPrevNote(i: number): Misskey.entities.Note | null {
 	return null;
 }
 
-// これ以上 hidden が続いた後の復帰では、ソケットが黙って死んでいた可能性があるので歯抜けマーカーを立てる
-// (実際に欠損が無ければ自動補給で空が返り即消える)
+// 歯抜けマーカーのトリガーは 3 つ:
+//   1. WS 再接続 (下の stream の _disconnected_ → _connected_): 切断中に流れたノートは誰も取り直さないため
+//   2. 先読みキュー溢れ (paginator.onQueueOverflow): 最古側が捨てられるため
+//   3. 長時間 hidden からの復帰 (ここ): タブ凍結中にソケットが黙って死に、close が遅れて届くケースの保険。
+//      1 で拾えないケースの安全網であり、実際に欠損が無ければ自動補給で空が返り即消える。
+//      ポーリングモードはキュー経由で順次追いつくので対象外
+// 閾値は仮の値 (設計書の未決事項)。設定化する場合はここを起点にする
 const HIDDEN_GAP_THRESHOLD_MS = 1000 * 60 * 5;
+let hiddenAt: number | null = null;
 
 watch(visibility, () => {
 	if (visibility.value === 'hidden') {
@@ -268,14 +276,15 @@ watch(visibility, () => {
 		hiddenAt = Date.now();
 	} else { // 'visible'
 		isPausingUpdate = false;
-		if (hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
+		if (stream != null && hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
 			timelineGaps.openGap();
 		}
 		hiddenAt = null;
 		if (isTop()) {
-			releaseQueue();
+			releaseQueue(); // 内部で tryAutoFill も呼ぶ
+		} else {
+			timelineGaps.tryAutoFill();
 		}
-		timelineGaps.tryAutoFill();
 	}
 });
 
@@ -307,12 +316,13 @@ if (!store.s.realtimeMode) {
 }
 
 useGlobalEvent('noteDeleted', (noteId) => {
-	timelineGaps.onNoteRemoved(noteId);
+	timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 	paginator.removeItem(noteId);
 });
 
 useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 	if (props.src === 'antenna' && props.antenna === antennaId) {
+		timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 		paginator.removeItem(noteId);
 	}
 });
@@ -619,15 +629,8 @@ defineExpose({
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
-.ad {
-	padding: 8px;
-	background-size: auto auto;
-	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
-	border-bottom: solid 0.5px var(--MI_THEME-divider);
-
-	&:empty {
-		display: none;
-	}
+.ad, .ad:empty {
+	display: none;
 }
 
 .more {

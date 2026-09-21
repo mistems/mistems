@@ -31,6 +31,10 @@ export function isFusionNote(note: Misskey.entities.Note | FusionNote): note is 
 /**
  * タイムマシン機能専用のPaginator
  * Misskey.entities.Note型に特化したシンプルな実装
+ *
+ * NOTE: 基底クラスの insertItemsBefore / fetchRange / onQueueOverflow (歯抜けマーカー用) はそのまま継承されるが、
+ * それらは基底の items にしか作用せず、タイムシフト中の表示元である timeshiftItems / fusionItems には反映されない。
+ * useTimelineGaps との併用は想定していない
  */
 // 再生できる新しいノートがもうないときに投げる。再生を終える合図に使う
 export class TimeshiftNoMoreItemsError extends Error {
