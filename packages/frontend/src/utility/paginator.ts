@@ -58,7 +58,8 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 
 	/**
 	 * 先読みキューが上限を超えて最古側が捨てられたときに呼ばれる。
-	 * 引数は捨てた後にキューへ残っている最古の id (タイムラインの歯抜け検知用)
+	 * 引数は捨てた後にキューへ残っている最古の id (タイムラインの歯抜け検知用)。
+	 * fetchRange / insertItemsBefore と共に order === 'newest' のタイムライン用で、'oldest' では使わないこと
 	 */
 	onQueueOverflow: ((oldestRemainingQueuedId: string) => void) | null;
 
@@ -407,6 +408,9 @@ export class Paginator<
 	 * anchorId のアイテムの直前 (新しい側) に newItems を差し込む。
 	 * 既に存在する id は除外する。戻り値は実際に挿入した件数。
 	 * anchorId が items に無い場合は何もせず 0 を返す。
+	 *
+	 * NOTE: order === 'newest' (新しいものが先頭) を前提にしている。newItems は新しい順に並べて渡すこと。
+	 * order === 'oldest' では配列上の「直前」が古い側になるため、そのままでは並びが崩れる
 	 */
 	public insertItemsBefore(anchorId: string, newItems: T[]): number {
 		const index = this.items.value.findIndex(x => x.id === anchorId);

@@ -629,7 +629,14 @@ defineExpose({
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
-.ad, .ad:empty {
+.ad, .gap {
+	padding: 8px;
+	background-size: auto auto;
+	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+}
+
+.ad:empty {
 	display: none;
 }
 

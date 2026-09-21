@@ -65,6 +65,11 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 	onNoteRemoved: (noteId: string) => void;
 	reset: () => void;
 } {
+	// 挿入位置 (sinceId ノートの直前 = 新しい側) と境界更新は「新しいものが先頭」を前提にしている
+	if (paginator.order.value !== 'newest') {
+		throw new Error('useTimelineGaps supports only paginators with order === "newest"');
+	}
+
 	const gaps = ref<TimelineGap[]>([]);
 	let counter = 0;
 
