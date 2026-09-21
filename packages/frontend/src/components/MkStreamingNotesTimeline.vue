@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		>
 			<template v-for="(item, i) in displayItems" :key="item.id">
 				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id">
-					<button class="_button" :class="$style.gapButton" :disabled="item.fetching" @click="timelineGaps.fill(item)">
+					<button class="_button" :class="$style.gapButton" :disabled="item.fetching" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching" @click="timelineGaps.fill(item)">
 						<template v-if="!item.fetching"><i class="ti ti-arrows-vertical"></i> {{ i18n.ts.fetchNotesBetween }}</template>
 						<MkLoading v-else :inline="true"/>
 					</button>
@@ -192,27 +192,6 @@ if (props.src === 'antenna') {
 	throw new Error('Unrecognized timeline type: ' + props.src);
 }
 
-// 未取得区間 (歯抜け) のマーカー。paginator.items には混ぜず displayItems で合成する
-const timelineGaps = useTimelineGaps(paginator, {
-	canAutoFill: () => isTop() && !isPausingUpdate,
-	getGapElement: (gapId) => rootEl.value?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(gapId)}"]`) ?? null,
-	getScrollContainer: () => scrollContainer,
-});
-const displayItems = timelineGaps.displayItems;
-
-paginator.onQueueOverflow = timelineGaps.onQueueOverflow;
-
-/**
- * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
- */
-function getPrevNote(i: number): Misskey.entities.Note | null {
-	for (let j = i - 1; j >= 0; j--) {
-		const item = displayItems.value[j];
-		if (item != null && !isTimelineGap(item)) return item;
-	}
-	return null;
-}
-
 onMounted(() => {
 	paginator.init();
 
@@ -257,6 +236,27 @@ onUnmounted(() => {
 const visibility = useDocumentVisibility();
 let isPausingUpdate = false;
 let hiddenAt: number | null = null;
+
+// 未取得区間 (歯抜け) のマーカー。paginator.items には混ぜず displayItems で合成する
+const timelineGaps = useTimelineGaps(paginator, {
+	canAutoFill: () => isTop() && !isPausingUpdate,
+	getGapElement: (gapId) => rootEl.value?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(gapId)}"]`) ?? null,
+	getScrollContainer: () => scrollContainer,
+});
+const displayItems = timelineGaps.displayItems;
+
+paginator.onQueueOverflow = timelineGaps.onQueueOverflow;
+
+/**
+ * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
+ */
+function getPrevNote(i: number): Misskey.entities.Note | null {
+	for (let j = i - 1; j >= 0; j--) {
+		const item = displayItems.value[j];
+		if (item != null && !isTimelineGap(item)) return item;
+	}
+	return null;
+}
 
 // これ以上 hidden が続いた後の復帰では、ソケットが黙って死んでいた可能性があるので歯抜けマーカーを立てる
 // (実際に欠損が無ければ自動補給で空が返り即消える)

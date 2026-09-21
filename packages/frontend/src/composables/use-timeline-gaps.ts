@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { ComputedRef, Ref } from 'vue';
 import type { IPaginator, MisskeyEntity } from '@/utility/paginator.js';
@@ -30,7 +30,7 @@ export type TimelineGap = {
 export type TimelineItem = (Misskey.entities.Note & MisskeyEntity) | TimelineGap;
 
 export function isTimelineGap(item: TimelineItem): item is TimelineGap {
-	return '_type' in item && item._type === 'gap';
+	return (item as { _type?: unknown })._type === 'gap';
 }
 
 const GAP_FETCH_LIMIT = 30;
@@ -120,7 +120,8 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 		}
 
 		const anchor = paginator.items.value.find(x => x.id === sinceId);
-		gaps.value.push({
+		// reactive() の proxy は同じ対象に対して共有されるので、配列経由で取り出したものと同一になる
+		const gap = reactive<TimelineGap>({
 			id: `gap:${counter++}`,
 			createdAt: anchor?.createdAt ?? new Date().toISOString(),
 			_type: 'gap',
@@ -129,8 +130,9 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 			fetching: false,
 			autoFillPending: true,
 		});
+		gaps.value.push(gap);
 		tryAutoFill();
-		return gaps.value[gaps.value.length - 1]!;
+		return gap;
 	}
 
 	function onQueueOverflow(oldestRemainingQueuedId: string): void {
