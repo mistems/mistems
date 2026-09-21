@@ -56,13 +56,22 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	order: Ref<'newest' | 'oldest'>;
 	allowPartial: boolean;
 
+	/**
+	 * 先読みキューが上限を超えて最古側が捨てられたときに呼ばれる。
+	 * 引数は捨てた後にキューへ残っている最古の id (タイムラインの歯抜け検知用)
+	 */
+	onQueueOverflow: ((oldestRemainingQueuedId: string) => void) | null;
+
+	getNewestId(): string | null | undefined;
 	init(): Promise<void>;
 	reload(): Promise<void>;
 	fetchOlder(): Promise<void>;
 	fetchNewer(options?: { toQueue?: boolean }): Promise<void>;
+	fetchRange(range: { sinceId: string; untilId?: string | null; limit?: number }): Promise<_T[] | null>;
 	trim(trigger?: boolean): void;
 	unshiftItems(newItems: (_T)[]): void;
 	pushItems(oldItems: (_T)[]): void;
+	insertItemsBefore(anchorId: string, newItems: (_T)[]): number;
 	prepend(item: _T): void;
 	enqueue(item: _T): void;
 	releaseQueue(): void;
@@ -110,6 +119,7 @@ export class Paginator<
 	private aheadQueue: T[] = [];
 	private useShallowRef: SRef;
 	public allowPartial: boolean;
+	public onQueueOverflow: ((oldestRemainingQueuedId: string) => void) | null = null;
 
 	// 配列内の要素をどのような順序で並べるか
 	// newest: 新しいものが先頭 (default)
@@ -173,8 +183,10 @@ export class Paginator<
 		this.reload = this.reload.bind(this);
 		this.fetchOlder = this.fetchOlder.bind(this);
 		this.fetchNewer = this.fetchNewer.bind(this);
+		this.fetchRange = this.fetchRange.bind(this);
 		this.unshiftItems = this.unshiftItems.bind(this);
 		this.pushItems = this.pushItems.bind(this);
+		this.insertItemsBefore = this.insertItemsBefore.bind(this);
 		this.prepend = this.prepend.bind(this);
 		this.enqueue = this.enqueue.bind(this);
 		this.releaseQueue = this.releaseQueue.bind(this);
@@ -182,7 +194,10 @@ export class Paginator<
 		this.updateItem = this.updateItem.bind(this);
 	}
 
-	private getNewestId(): string | null | undefined {
+	/**
+	 * items と先読みキューを合わせた中で最も新しい id (キュー優先)
+	 */
+	public getNewestId(): string | null | undefined {
 		// 様々な要因により並び順は保証されないのでソートが必要
 		if (this.aheadQueue.length > 0) {
 			return this.aheadQueue.map(x => x.id).sort().at(-1);
@@ -347,6 +362,7 @@ export class Paginator<
 			this.aheadQueue.unshift(...apiRes.toReversed());
 			if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 				this.aheadQueue = this.aheadQueue.slice(0, MAX_QUEUE_ITEMS);
+				this.notifyQueueOverflow();
 			}
 			this.queuedAheadItemsCount.value = this.aheadQueue.length;
 		} else {
@@ -387,6 +403,48 @@ export class Paginator<
 		if (this.useShallowRef) triggerRef(this.items);
 	}
 
+	/**
+	 * anchorId のアイテムの直前 (新しい側) に newItems を差し込む。
+	 * 既に存在する id は除外する。戻り値は実際に挿入した件数。
+	 * anchorId が items に無い場合は何もせず 0 を返す。
+	 */
+	public insertItemsBefore(anchorId: string, newItems: T[]): number {
+		const index = this.items.value.findIndex(x => x.id === anchorId);
+		if (index === -1) return 0;
+		const filtered = newItems.filter(x => !this.items.value.some(y => y.id === x.id));
+		if (filtered.length === 0) return 0; // これやらないと余計なre-renderが走る
+		this.items.value.splice(index, 0, ...filtered);
+		if (this.useShallowRef) triggerRef(this.items);
+		return filtered.length;
+	}
+
+	/**
+	 * sinceId (と untilId) で区切られた区間のアイテムを取得する。items には反映しない。
+	 * untilId 指定時は降順 (新しい順)、未指定時は昇順 (古い順) で返る (backend の仕様に従う)。
+	 * 失敗時は null。
+	 */
+	public async fetchRange(range: { sinceId: string; untilId?: string | null; limit?: number }): Promise<T[] | null> {
+		const data: E['req'] = {
+			...(typeof this.params === 'function' ? this.params() : this.params),
+			...(this.computedParams ? this.computedParams.value : {}),
+			...(this.searchQuery.value != null && this.searchQuery.value.trim() !== '' ? { [this.searchParamName]: this.searchQuery.value } : {}),
+			limit: range.limit ?? SECOND_FETCH_LIMIT,
+			sinceId: range.sinceId,
+			...(range.untilId != null ? { untilId: range.untilId } : {}),
+		};
+
+		return (await misskeyApi<T[]>(this.endpoint, data).catch(_ => {
+			return null;
+		})) as T[] | null;
+	}
+
+	private notifyQueueOverflow(): void {
+		if (this.onQueueOverflow == null || this.aheadQueue.length === 0) return;
+		// 様々な要因により並び順は保証されないのでソートが必要
+		const oldestRemaining = this.aheadQueue.map(x => x.id).sort().at(0);
+		if (oldestRemaining != null) this.onQueueOverflow(oldestRemaining);
+	}
+
 	public prepend(item: T): void {
 		if (this.items.value.some(x => x.id === item.id)) return;
 		this.items.value.unshift(item);
@@ -398,6 +456,7 @@ export class Paginator<
 		this.aheadQueue.unshift(item);
 		if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 			this.aheadQueue.pop();
+			this.notifyQueueOverflow();
 		}
 		this.queuedAheadItemsCount.value = this.aheadQueue.length;
 	}

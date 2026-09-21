@@ -590,6 +590,7 @@ showFixedPostFormInChannel: "タイムライン上部に投稿フォームを表
 withRepliesByDefaultForNewlyFollowed: "フォローする際、デフォルトで返信をTLに含むようにする"
 newNoteRecived: "新しいノートがあります"
 newNote: "新しいノート"
+fetchNotesBetween: "間のノートを取得"
 sounds: "サウンド"
 sound: "サウンド"
 notificationSoundSettings: "通知音の設定"

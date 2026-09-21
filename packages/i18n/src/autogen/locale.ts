@@ -2373,6 +2373,10 @@ export interface Locale extends ILocale {
      */
     "newNote": string;
     /**
+     * 間のノートを取得
+     */
+    "fetchNotesBetween": string;
+    /**
      * サウンド
      */
     "sounds": string;
