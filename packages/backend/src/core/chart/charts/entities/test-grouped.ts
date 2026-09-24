@@ -9,7 +9,7 @@ export const name = 'testGrouped';
 
 export const schema = {
 	'foo.total': { accumulate: true },
-	'foo.inc': {},
+	'foo.inc': { range: 'small' },
 	'foo.dec': {},
 } as const;
 

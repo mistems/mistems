@@ -572,20 +572,27 @@ export default abstract class Chart<T extends Schema> {
 			}
 
 			// ログ更新
-			await Promise.all([
-				this.repositoryForHour.createQueryBuilder()
-					.update()
-					.set(queryForHour as any)
-					.where('id = :id', { id: logHour.id })
-					.execute(),
-				this.repositoryForDay.createQueryBuilder()
-					.update()
-					.set(queryForDay as any)
-					.where('id = :id', { id: logDay.id })
-					.execute(),
-			]);
+			try {
+				await Promise.all([
+					this.repositoryForHour.createQueryBuilder()
+						.update()
+						.set(queryForHour as any)
+						.where('id = :id', { id: logHour.id })
+						.execute(),
+					this.repositoryForDay.createQueryBuilder()
+						.update()
+						.set(queryForDay as any)
+						.where('id = :id', { id: logDay.id })
+						.execute(),
+				]);
 
-			this.logger.debug(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
+				this.logger.debug(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
+			} catch (err) {
+				// 書き込めなかった差分をバッファに残すと、次回以降の save も同じ差分で失敗し続け、
+				// バッファが際限なく増えるため、このグループの差分は捨てる
+				const discarded = this.buffer.filter(q => q.group == null || (q.group === logHour.group)).length;
+				this.logger.error(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Failed to update, discarding ${discarded} buffered commits`, { error: err });
+			}
 
 			// TODO: この一連の処理が始まった後に新たにbufferに入ったものは消さないようにする
 			this.buffer = this.buffer.filter(q => q.group != null && (q.group !== logHour.group));
