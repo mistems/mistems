@@ -317,7 +317,7 @@ export class ApPersonService implements OnModuleInit {
 
 		const person = this.validateActor(object, uri);
 
-		this.logger.info(`Creating the Person: ${person.id}`);
+		this.logger.debug(`Creating the Person: ${person.id}`);
 
 		const fields = this.analyzeAttachments(person.attachment ?? []);
 
@@ -472,7 +472,7 @@ export class ApPersonService implements OnModuleInit {
 		}
 		//#endregion
 
-		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
+		await this.updateFeatured(user.id, resolver).catch(err => this.logUpdateFeaturedFailed(err));
 
 		return user;
 	}
@@ -506,11 +506,11 @@ export class ApPersonService implements OnModuleInit {
 
 		const person = this.validateActor(object, uri);
 
-		this.logger.info(`Updating the Person: ${person.id}`);
+		this.logger.debug(`Updating the Person: ${person.id}`);
 
 		// カスタム絵文字取得
 		const emojis = await this.apNoteService.extractEmojis(person.tag ?? [], exist.host).catch(e => {
-			this.logger.info(`extractEmojis: ${e}`);
+			this.logger.debug(`extractEmojis: ${e}`);
 			return [];
 		});
 
@@ -635,7 +635,7 @@ export class ApPersonService implements OnModuleInit {
 			{ followerSharedInbox: person.sharedInbox ?? person.endpoints?.sharedInbox ?? null },
 		);
 
-		await this.updateFeatured(exist.id, resolver).catch(err => this.logger.error(err));
+		await this.updateFeatured(exist.id, resolver).catch(err => this.logUpdateFeaturedFailed(err));
 
 		const updated = { ...exist, ...updates };
 
@@ -700,12 +700,24 @@ export class ApPersonService implements OnModuleInit {
 	}
 
 	@bindThis
+	private logUpdateFeaturedFailed(e: unknown): void {
+		const isExpected =
+			(e instanceof Error && e.name === 'AbortError') ||
+			(e instanceof StatusError && e.isClientError);
+		if (isExpected) {
+			this.logger.debug(`Failed to update featured notes: ${e}`);
+		} else {
+			this.logger.error(`Failed to update featured notes: ${e}`);
+		}
+	}
+
+	@bindThis
 	public async updateFeatured(userId: MiUser['id'], resolver?: Resolver): Promise<void> {
 		const user = await this.usersRepository.findOneByOrFail({ id: userId, isDeleted: false });
 		if (!this.userEntityService.isRemoteUser(user)) return;
 		if (!user.featured) return;
 
-		this.logger.info(`Updating the featured: ${user.uri}`);
+		this.logger.debug(`Updating the featured: ${user.uri}`);
 
 		const _resolver = resolver ?? await this.apResolverService.createResolver();
 
