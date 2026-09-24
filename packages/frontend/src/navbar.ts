@@ -14,6 +14,7 @@ import { lookup } from '@/utility/lookup.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { unisonReload } from '@/utility/unison-reload.js';
+import { timemachineAvailable } from '@/utility/check-permissions.js';
 
 export const navbarItemDef = reactive<{
 	[key: string]: {
@@ -110,6 +111,12 @@ export const navbarItemDef = reactive<{
 		title: 'Play',
 		icon: 'ti ti-player-play',
 		to: '/play',
+	},
+	timemachine: {
+		title: i18n.ts.timeMachine,
+		icon: 'ti ti-clock-bolt',
+		show: computed(() => $i != null && timemachineAvailable),
+		to: '/timemachine',
 	},
 	gallery: {
 		title: i18n.ts.gallery,

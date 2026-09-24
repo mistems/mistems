@@ -27,6 +27,11 @@ function toolsMenuItems(): MenuItem[] {
 		to: '/clicker',
 		text: '🍪👈',
 		icon: 'ti ti-cookie',
+	}, {
+		type: 'link',
+		to: '/timemachine',
+		text: i18n.ts.timeMachine,
+		icon: 'ti ti-clock-bolt',
 	}];
 
 	if ($i && ($i.isAdmin || $i.policies.canManageCustomEmojis)) {
