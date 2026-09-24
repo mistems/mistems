@@ -61,9 +61,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i v-if="store.r.realtimeMode.value" class="ti ti-bolt ti-fw"></i>
 				<i v-else class="ti ti-bolt-off ti-fw"></i>
 			</button>
-			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-testid="open-post-form" @click="() => { os.post(); }">
-				<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
-			</button>
+			<div :class="$style.postButtons">
+				<button v-if="!isInChannel || showLocalTimelinePostButtonInChannel" v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post, { [$style.twoColumn]: postButtonsTwoColumn }]" data-testid="open-post-form" @click="os.post({}, { forceTimeline: true })">
+					<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
+				</button>
+				<button v-if="isInChannel" v-tooltip.noDelay.right="i18n.ts.postToTheChannel" class="_button" :class="[$style.post, { [$style.twoColumn]: postButtonsTwoColumn }]" data-testid="open-post-form-channel" @click="() => { os.post(); }">
+					<i class="ti ti-device-tv ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts._visibility.channel }}</span>
+				</button>
+			</div>
 			<button v-if="$i != null" v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">
 				<MkAvatar :user="$i" :class="$style.avatar" style="view-transition-name: navbar-avatar;"/><MkAcct class="_nowrap" :class="$style.acct" :user="$i"/>
 			</button>
@@ -111,6 +116,7 @@ import { navbarItemDef } from '@/navbar.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
+import { mainRouter } from '@/router.js';
 import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 import { useRouter } from '@/router.js';
 import { prefer } from '@/preferences.js';
@@ -133,6 +139,9 @@ const iconOnly = computed(() => {
 	return !props.asDrawer && (forceIconOnly.value || (store.r.menuDisplay.value === 'sideIcon'));
 });
 
+const isInChannel = computed(() => mainRouter.currentRoute.value.name === 'channel');
+const showLocalTimelinePostButtonInChannel = computed(() => prefer.r.showLocalTimelinePostButtonInChannel.value);
+const postButtonsTwoColumn = computed(() => isInChannel.value && showLocalTimelinePostButtonInChannel.value);
 const otherMenuItemIndicated = computed(() => {
 	for (const def in navbarItemDef) {
 		if (prefer.r.menu.value.includes(def)) continue;
@@ -199,6 +208,11 @@ function menuEdit() {
 </script>
 
 <style lang="scss" module>
+.postButtons {
+	// ボタンは width: 100% を持つが、wrap しないので 2 個のときは flex の縮小で自然に半々になる
+	display: flex;
+}
+
 .root {
 	--nav-width: 250px;
 	--nav-icon-only-width: 80px;
@@ -453,17 +467,18 @@ function menuEdit() {
 
 	.post {
 		position: relative;
-		display: block;
+		display: flex;
+		justify-content: center;
+		align-items: center;
 		width: 100%;
 		height: 40px;
 		color: var(--MI_THEME-fgOnAccent);
 		font-weight: bold;
-		text-align: left;
 
 		&::before {
 			content: "";
 			display: block;
-			width: calc(100% - 38px);
+			width: calc(100% - 32px);
 			height: 100%;
 			margin: auto;
 			position: absolute;
@@ -473,6 +488,12 @@ function menuEdit() {
 			bottom: 0;
 			border-radius: 999px;
 			background: linear-gradient(90deg, var(--MI_THEME-buttonGradateA), var(--MI_THEME-buttonGradateB));
+		}
+
+		&.twoColumn {
+			&::before{
+				width: calc(100% - 12px)
+			}
 		}
 
 		&:focus-visible {
@@ -493,8 +514,7 @@ function menuEdit() {
 
 	.postIcon {
 		position: relative;
-		margin-left: 30px;
-		margin-right: 8px;
+		margin-left: -16px;
 		width: 32px;
 	}
 
