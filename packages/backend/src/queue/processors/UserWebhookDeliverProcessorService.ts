@@ -29,7 +29,7 @@ export class UserWebhookDeliverProcessorService {
 		private httpRequestService: HttpRequestService,
 		private queueLoggerService: QueueLoggerService,
 	) {
-		this.logger = this.queueLoggerService.logger.createSubLogger('webhook');
+		this.logger = this.queueLoggerService.logger.createSubLogger('user-webhook');
 	}
 
 	@bindThis
