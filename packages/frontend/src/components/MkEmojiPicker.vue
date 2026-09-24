@@ -218,6 +218,13 @@ customEmojiCategories.value.forEach(ec => {
 
 parseAndMergeCategories('', customEmojiFolderRoot);
 
+function toKanaToHira(str: string): string {
+	return str.replace(/[\u30a1-\u30f6]/g, (match) => {
+		const chr = match.charCodeAt(0) - 0x60;
+		return String.fromCharCode(chr);
+	});
+}
+
 watch(q, () => {
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 
@@ -227,7 +234,7 @@ watch(q, () => {
 		return;
 	}
 
-	const newQ = q.value.replace(/:/g, '').toLowerCase();
+	const newQ = toKanaToHira(q.value.replace(/:/g, '').toLowerCase());
 
 	const searchCustom = () => {
 		const max = 100;
