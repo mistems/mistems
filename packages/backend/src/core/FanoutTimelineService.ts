@@ -14,9 +14,9 @@ export type FanoutTimelineName = (
 	| `homeTimeline:${string}`
 	| `homeTimelineWithFiles:${string}` // only notes with files are included
 	// local timeline
-	| `localTimeline` // replies are not included
-	| `localTimelineWithFiles` // only non-reply notes with files are included
-	| `localTimelineWithReplies` // only replies are included
+	| 'localTimeline' // replies are not included
+	| 'localTimelineWithFiles' // only non-reply notes with files are included
+	| 'localTimelineWithReplies' // only replies are included
 	| `localTimelineWithReplyTo:${string}` // Only replies to specific local user are included. Parameter is reply user id.
 
 	// antenna
@@ -109,8 +109,48 @@ export class FanoutTimelineService {
 	}
 
 	@bindThis
+	injectDummy(tl: FanoutTimelineName, id: string) {
+		return this.redisForTimelines.lpush('list:' + tl, id);
+	}
+
+	@bindThis
+	public injectDummyIfEmpty(tl: FanoutTimelineName, id: string): Promise<boolean> {
+		return this.redisForTimelines.eval(
+			'if redis.call("LLEN", KEYS[1]) == 0 then redis.call("LPUSH", KEYS[1], ARGV[1]) return 1 else return 0 end',
+			1,
+			'list:' + tl,
+			id,
+		).then(res => res === 1);
+	}
+
+	@bindThis
 	public purge(name: FanoutTimelineName) {
 		return this.redisForTimelines.del('list:' + name);
+	}
+
+	/**
+	 * Redis 上のすべてのタイムラインリスト (`list:*`) を一括削除する。
+	 * `enableFanoutTimeline` の有効/無効を切り替えた直後など、Redis 上のキャッシュが
+	 * DB と整合しなくなる可能性があるタイミングで呼ぶことを想定。
+	 * 削除後は各タイムライン取得時にFanoutTimelineEndpointServiceが `noteIds.length === 0`
+	 * を検知してDB直行するため、結果としてDBから自然に再構築される。
+	 */
+	@bindThis
+	public async purgeAll(): Promise<number> {
+		let cursor = '0';
+		let totalDeleted = 0;
+		do {
+			const [next, keys] = await this.redisForTimelines.scan(cursor, 'MATCH', this.redisForTimelines.options.keyPrefix + 'list:*', 'COUNT', 100);
+			cursor = next;
+			if (keys.length === 0) continue;
+			// ioredis の keyPrefix は SCAN で返るキーには含まれているが DEL 渡し時に
+			// 二重に付加されるのを防ぐため prefix を剥がして渡す
+			const prefix = this.redisForTimelines.options.keyPrefix ?? '';
+			const stripped = prefix !== '' ? keys.map(k => k.startsWith(prefix) ? k.slice(prefix.length) : k) : keys;
+			await this.redisForTimelines.del(...stripped);
+			totalDeleted += stripped.length;
+		} while (cursor !== '0');
+		return totalDeleted;
 	}
 
 	@bindThis
