@@ -18,6 +18,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
+import { TimelineDbFallbackService } from '@/core/TimelineDbFallbackService.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -35,6 +36,11 @@ export const meta = {
 		},
 	},
 } as const;
+
+// フォロー数がこれ以上ある場合のみ、getFromDb で LATERAL 経由の高速パスを試す。
+// フォロー数が少ないユーザーはもともと現行実装で十分速いため、
+// 分岐自体のオーバーヘッドを避けて素通りさせる。
+const LATERAL_FALLBACK_THRESHOLD = 50;
 
 export const paramDef = {
 	type: 'object',
@@ -72,6 +78,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private channelMutingService: ChannelMutingService,
 		private channelFollowingService: ChannelFollowingService,
 		private queryService: QueryService,
+		private timelineDbFallbackService: TimelineDbFallbackService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const untilId = ps.untilId ?? (ps.untilDate ? this.idService.gen(ps.untilDate!) : null);
@@ -149,6 +156,57 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.list({ requestUserId: me.id }, { idOnly: true })
 			.then(x => x.map(x => x.id).filter(x => !mutingChannelIds.includes(x)));
 
+		if (followees.length < LATERAL_FALLBACK_THRESHOLD) {
+			return await this.buildQuery(ps, me, followees, mutingChannelIds, followingChannelIds).limit(ps.limit).getMany();
+		}
+
+		// フォロー数が多い場合、素朴な `userId IN (大量)` は主キーを新しい順に
+		// 全走査しながらフィルタする計画になりやすく、キャッシュが温まって
+		// いない環境では読み込みブロック数が跳ね上がる (詳細は
+		// timeline-dbfallback-lateral-plan.md 参照)。
+		// Phase 1: LATERAL で followee/channel ごとに浅くシークした候補 id を集める
+		// (安全マージンとして ps.limit の3倍を上限にする)。
+		const meOrFolloweeIds = [me.id, ...followees.map(f => f.followeeId)];
+		const marginLimit = ps.limit * 3;
+		const perSourceLimit = Math.max(10, Math.ceil(ps.limit / 2));
+		const candidateIds = await this.timelineDbFallbackService.getCandidateIds(
+			{ userIds: meOrFolloweeIds, channelIds: followingChannelIds },
+			{ untilId: ps.untilId, sinceId: ps.sinceId, limit: marginLimit, perSourceLimit },
+		);
+
+		if (candidateIds.length === 0) {
+			// LATERAL 側で該当範囲に候補が一件もなかった = 本当に投稿がない
+			// (各 followee/channel について「条件に合う行なし」を確認済みの結果なので正確)
+			return [];
+		}
+
+		// Phase 2: 候補 id に対してのみ、現行と全く同じフィルタ (block/mute/visibility/
+		// isSuspended 等) を再適用して正確な結果に絞り込む。正確性の担保はここが担う。
+		const result = await this.buildQuery(ps, me, followees, mutingChannelIds, followingChannelIds)
+			.andWhere('note.id IN (:...candidateIds)', { candidateIds })
+			.limit(ps.limit)
+			.getMany();
+
+		const candidatesExhausted = candidateIds.length < marginLimit;
+		if (result.length >= ps.limit || candidatesExhausted) {
+			// limit を満たした、または「これ以上候補を掘っても増えない」ことが
+			// 確定している (各 source の LATERAL が上限未満で打ち切られた = 全件拾った)
+			return result;
+		}
+
+		// Safety net: 想定外に多くがフィルタ (isSuspended 等) で弾かれ、
+		// まだ候補が残っている可能性がある場合のみ、現行実装のフルクエリで
+		// 取りこぼしなく再取得する。滅多に通らない経路のはず。
+		return await this.buildQuery(ps, me, followees, mutingChannelIds, followingChannelIds).limit(ps.limit).getMany();
+	}
+
+	private buildQuery(
+		ps: { untilId: string | null; sinceId: string | null; includeMyRenotes: boolean; includeRenotedMyNotes: boolean; includeLocalRenotes: boolean; withFiles: boolean; withRenotes: boolean; },
+		me: MiLocalUser,
+		followees: { followeeId: string }[],
+		mutingChannelIds: string[],
+		followingChannelIds: string[],
+	) {
 		//#region Construct query
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
 			.innerJoinAndSelect('note.user', 'user')
@@ -263,6 +321,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		}
 		//#endregion
 
-		return await query.limit(ps.limit).getMany();
+		return query;
 	}
 }
