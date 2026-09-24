@@ -26,7 +26,7 @@ export class MiBlocking {
 	@JoinColumn()
 	public blockee: MiUser | null;
 
-	@Index()
+	// Covered by the composite unique index (blockerId, blockeeId).
 	@Column({
 		...id(),
 		comment: 'The blocker user ID.',

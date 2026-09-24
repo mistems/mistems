@@ -27,7 +27,7 @@ export class MiChannelFollowing {
 	@JoinColumn()
 	public followee: MiChannel | null;
 
-	@Index()
+	// Covered by the composite unique index (followerId, followeeId).
 	@Column({
 		...id(),
 		comment: 'The follower user ID.',

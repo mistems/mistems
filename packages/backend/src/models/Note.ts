@@ -20,17 +20,29 @@ import type { MiDriveFile } from './DriveFile.js';
 // You should not use `@Index({ concurrent: true })` decorator because database initialization for test will fail
 // because it will always run CREATE INDEX in transaction based on decorators.
 // Not appending `{ concurrent: true }` to `@Index` will not cause any problem in production,
+//
+// Also note: indexes declared with `{ synchronize: false }` (the GIN indexes and the partial
+// indexes on replyId/renoteId/threadId/channelId) are managed by migrations only and do NOT
+// exist in test databases built via synchronize (packages/backend/test/utils.ts initTestDb),
+// so query plans there differ from production for these columns.
 
 @Index(['userId', 'id']) // Note: this index is ("userId", "id" DESC) in production, but not in test.
 // PGroonga 式インデックス (COALESCE(cw, '')::text || text)。ノート検索の本文+CW モードが使う。
 // PGroonga 拡張が前提のため migration (1785395964596) で管理し、ここでは同期対象外として宣言だけする
 @Index('idx_note_cw_and_text_with_pgroonga', { synchronize: false })
+// Partial index ("channelId", "id" DESC) WHERE "channelId" IS NOT NULL. Managed by migration (1783062429920).
+@Index('IDX_note_on_channelId_and_id_desc', { synchronize: false })
+// Partial index ("userId", "channelId") WHERE "channelId" IS NOT NULL. Managed by migration (1785227588654).
+// チャンネル内投稿数の COUNT (userId = ? AND channelId = ?) が ("userId", "id") の全ノート走査に
+// フォールバックするのを防ぐ。channelId は大半 NULL のため部分インデックスで小さく保てる
+@Index('IDX_note_on_userId_and_channelId', { synchronize: false })
 @Entity('note')
 export class MiNote {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Partial index WHERE "replyId" IS NOT NULL. Managed by migration (1783062429920).
+	@Index('IDX_note_on_replyId', { synchronize: false })
 	@Column({
 		...id(),
 		nullable: true,
@@ -44,7 +56,8 @@ export class MiNote {
 	@JoinColumn()
 	public reply: MiNote | null;
 
-	@Index()
+	// Partial index WHERE "renoteId" IS NOT NULL. Managed by migration (1783062429920).
+	@Index('IDX_note_on_renoteId', { synchronize: false })
 	@Column({
 		...id(),
 		nullable: true,
@@ -58,7 +71,8 @@ export class MiNote {
 	@JoinColumn()
 	public renote: MiNote | null;
 
-	@Index()
+	// Partial index WHERE "threadId" IS NOT NULL. Managed by migration (1783062429920).
+	@Index('IDX_note_on_threadId', { synchronize: false })
 	@Column('varchar', {
 		length: 256, nullable: true,
 	})
@@ -203,7 +217,7 @@ export class MiNote {
 	})
 	public hasPoll: boolean;
 
-	@Index()
+	// Covered by the partial index IDX_note_on_channelId_and_id_desc (declared at class level).
 	@Column({
 		...id(),
 		nullable: true,

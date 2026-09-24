@@ -32,7 +32,7 @@ export class MiMuting {
 	@JoinColumn()
 	public mutee: MiUser | null;
 
-	@Index()
+	// Covered by the composite unique index (muterId, muteeId).
 	@Column({
 		...id(),
 		comment: 'The muter user ID.',

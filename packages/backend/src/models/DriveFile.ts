@@ -10,11 +10,14 @@ import { MiDriveFolder } from './DriveFolder.js';
 
 @Entity('drive_file')
 @Index(['userId', 'folderId', 'id'])
+// ドライブ使用量の集計 (userId = ? AND isLink = ?) 用。単独 (userId) はこの複合と
+// (userId, folderId, id) の先頭列に包含されるため migration (1785227588654) で削除した
+@Index('IDX_drive_file_on_userId_and_isLink', ['userId', 'isLink'])
 export class MiDriveFile {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Covered by the composite indexes (userId, folderId, id) and (userId, isLink).
 	@Column({
 		...id(),
 		nullable: true,
