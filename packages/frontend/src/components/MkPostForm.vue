@@ -63,6 +63,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkInfo v-if="!store.r.tips.value.postForm" :class="$style.showHowToUse" closable @close="closeTip('postForm')">
 		<button class="_textButton" @click="showTour">{{ i18n.ts._postForm.showHowToUse }}</button>
 	</MkInfo>
+	<MkInfo v-if="isTimemachinePostRestricted" warn :class="$style.timemachineWarning">
+		タイムマシン中に投稿するにはタイムフュージョンを有効にしてください
+	</MkInfo>
 	<MkInfo v-if="scheduledAt != null" :class="$style.scheduledAt">
 		<I18n :src="i18n.ts.scheduleToPostOnX" tag="span">
 			<template #x>
@@ -119,7 +122,7 @@ import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import insertTextAtCursor from 'insert-text-at-cursor';
 import { toASCII } from 'punycode.js';
-import { host, url } from '@@/js/config.js';
+import { host, url, ui } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
 import type { ShallowRef } from 'vue';
 import type { PostFormProps } from '@/types/post-form.js';
@@ -158,6 +161,7 @@ import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
 import { useUploader } from '@/composables/use-uploader.js';
 import { startTour } from '@/utility/tour.js';
 import { closeTip } from '@/tips.js';
+import { isTimemachineActive } from '@/timemachine-state.js';
 
 const $i = ensureSignin();
 
@@ -306,7 +310,17 @@ const cwTextLength = computed((): number => {
 
 const maxCwTextLength = 100;
 
+// タイムマシン中で投稿が制限されているかどうか
+const isTimemachinePostRestricted = computed((): boolean => {
+	return !!(isTimemachineActive.value && (ui === 'default' || ui === null));
+});
+
 const canPost = computed((): boolean => {
+	// タイムマシン/タイムシフト中で、かつUIモードがデフォルトの場合は投稿不可
+	if (isTimemachinePostRestricted.value) {
+		return false;
+	}
+
 	return !props.mock && !posting.value && !posted.value && !uploader.uploading.value && (uploader.items.value.length === 0 || uploader.readyForUpload.value) &&
 		(
 			1 <= textLength.value ||
@@ -1699,6 +1713,10 @@ html[data-color-scheme=light] .preview {
 }
 
 .showHowToUse {
+	margin: 0 20px 16px 20px;
+}
+
+.timemachineWarning {
 	margin: 0 20px 16px 20px;
 }
 
