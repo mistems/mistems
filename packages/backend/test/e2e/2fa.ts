@@ -284,7 +284,7 @@ describe('2要素認証', () => {
 		}, alice);
 	});
 
-	test('が設定でき、セキュリティキーでパスワードレスログインできる。', async () => {
+	test('が設定でき、パスワードレスログイン有効時もパスワード入力経由ではTOTPが要求される。', async () => {
 		const registerResponse = await api('i/2fa/register', {
 			password,
 		}, alice);
@@ -320,23 +320,18 @@ describe('2要素認証', () => {
 		assert.strictEqual(iResponse.status, 200);
 		assert.strictEqual(iResponse.body.usePasswordLessLogin, true);
 
+		// パスワードレスログインが有効でも、パスワード入力経由のサインインではパスキーではなく
+		// TOTP が第2要素として要求される (パスキー単体ログインは signin-with-passkey に集約)。
 		const signinResponse = await api('signin-flow', {
 			...signinParam(),
-			password: '',
 		});
 		assert.strictEqual(signinResponse.status, 200);
 		assert.strictEqual(signinResponse.body.finished, false);
-		assert.strictEqual(signinResponse.body.next, 'passkey');
-		assert.notEqual(signinResponse.body.authRequest.challenge, undefined);
-		assert.notEqual(signinResponse.body.authRequest.allowCredentials, undefined);
+		assert.strictEqual(signinResponse.body.next, 'totp');
 
 		const signinResponse2 = await api('signin-flow', {
-			...signinWithSecurityKeyParam({
-				keyName,
-				credentialId,
-				requestOptions: signinResponse.body.authRequest,
-			} as any),
-			password: '',
+			...signinParam(),
+			token: otpToken(registerResponse.body.secret),
 		});
 		assert.strictEqual(signinResponse2.status, 200);
 		assert.strictEqual(signinResponse2.body.finished, true);
