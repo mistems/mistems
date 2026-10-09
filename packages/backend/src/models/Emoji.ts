@@ -9,6 +9,9 @@ import { id } from './util/id.js';
 @Entity('emoji')
 @Index(['name', 'host'], { unique: true })
 @Index('IDX_EMOJI_ROLE_IDS', { synchronize: false }) // GIN for roleIdsThatCanBeUsedThisEmojiAsReaction in production
+// Partial index ("category", "name") WHERE "host" IS NULL. Managed by migration (1785227588654).
+// ローカル絵文字一覧のカテゴリ・名前順ソート用 (ピッカー・管理画面)
+@Index('IDX_emoji_on_category_and_name_local', { synchronize: false })
 export class MiEmoji {
 	@PrimaryColumn(id())
 	public id: string;
