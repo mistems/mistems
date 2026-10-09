@@ -27,7 +27,7 @@ export const meta = {
 				items: {
 					type: 'object',
 					optional: false, nullable: false,
-					ref: 'EmojiSimple',
+					ref: 'EmojiDetailed',
 				},
 			},
 		},
@@ -61,7 +61,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			});
 
 			return {
-				emojis: await this.emojiEntityService.packSimpleMany(emojis),
+				emojis: await this.emojiEntityService.packDetailedMany(emojis),
 			};
 		});
 	}
