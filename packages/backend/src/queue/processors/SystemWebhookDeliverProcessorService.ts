@@ -29,7 +29,7 @@ export class SystemWebhookDeliverProcessorService {
 		private httpRequestService: HttpRequestService,
 		private queueLoggerService: QueueLoggerService,
 	) {
-		this.logger = this.queueLoggerService.logger.createSubLogger('webhook');
+		this.logger = this.queueLoggerService.logger.createSubLogger('system-webhook');
 	}
 
 	@bindThis
@@ -63,7 +63,7 @@ export class SystemWebhookDeliverProcessorService {
 
 			return 'Success';
 		} catch (res) {
-			this.logger.error(res as Error);
+			this.logger.error(`Failed to deliver webhook ${job.data.webhookId}: ${res}`);
 
 			this.systemWebhooksRepository.update({ id: job.data.webhookId }, {
 				latestSentAt: new Date(),
