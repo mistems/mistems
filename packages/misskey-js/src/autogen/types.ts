@@ -31215,6 +31215,10 @@ export interface operations {
                      * @default null
                      */
                     channelId?: string | null;
+                    /** @default null */
+                    searchFrom?: string | null;
+                    /** @default null */
+                    withFiles?: boolean | null;
                 };
             };
         };
