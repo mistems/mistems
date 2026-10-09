@@ -14,7 +14,7 @@ export class MiNoteReaction {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Covered by the composite unique index (userId, noteId).
 	@Column(id())
 	public userId: MiUser['id'];
 
