@@ -10,6 +10,14 @@ const ignoreElements = [
 	'style',
 ];
 
+// この属性を持つ要素は、モーダル等の focus trap が張られても inert にされない
+// (通信切断の通知など、モーダルと無関係に常時操作できる必要があるオーバーレイ向け)
+const IGNORE_FOCUS_TRAP_ATTR = 'data-ignore-focus-trap';
+
+function shouldIgnoreForFocusTrap(el: HTMLElement): boolean {
+	return ignoreElements.includes(el.tagName.toLowerCase()) || el.hasAttribute(IGNORE_FOCUS_TRAP_ATTR);
+}
+
 function containsFocusTrappedElements(el: HTMLElement): boolean {
 	return Array.from(focusTrapElements).some((focusTrapElement) => {
 		return el.contains(focusTrapElement);
@@ -67,7 +75,7 @@ function releaseFocusTrap(el: HTMLElement): void {
 				highestZIndexElement != null &&
 				siblingEl !== highestZIndexElement.el &&
 				!siblingEl.contains(highestZIndexElement.el) &&
-				!ignoreElements.includes(siblingEl.tagName.toLowerCase())
+				!shouldIgnoreForFocusTrap(siblingEl)
 			) {
 				siblingEl.inert = true;
 			} else {
@@ -114,7 +122,7 @@ export function focusTrap(el: HTMLElement, hasInteractionWithOtherFocusTrappedEl
 					hasInteractionWithOtherFocusTrappedEls === false ||
 					(!focusTrapElements.has(siblingEl) && !containsFocusTrappedElements(siblingEl))
 				) &&
-				!ignoreElements.includes(siblingEl.tagName.toLowerCase())
+				!shouldIgnoreForFocusTrap(siblingEl)
 			) {
 				siblingEl.inert = true;
 			}
