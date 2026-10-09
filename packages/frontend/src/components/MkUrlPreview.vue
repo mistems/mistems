@@ -28,12 +28,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 <template v-else-if="tweetId && tweetExpanded">
 	<div ref="twitter">
+		<!-- 埋め込み文書は theme=dark でも color-scheme: normal (= light) のため、light を明示しないと
+		ダークテーマ時に color-scheme 不一致で iframe の透過背景が不透明な白として描画される -->
 		<iframe
 			ref="tweet"
 			allow="fullscreen;web-share"
 			sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
 			scrolling="no"
-			:style="{ position: 'relative', width: '100%', height: `${tweetHeight}px`, border: 0 }"
+			:style="{ position: 'relative', width: '100%', height: `${tweetHeight}px`, border: 0, colorScheme: 'light' }"
 			:src="`https://platform.twitter.com/embed/index.html?embedId=${embedId}&amp;hideCard=false&amp;hideThread=false&amp;lang=en&amp;theme=${store.s.darkMode ? 'dark' : 'light'}&amp;id=${tweetId}`"
 		></iframe>
 	</div>
