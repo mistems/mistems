@@ -9518,6 +9518,7 @@ export interface operations {
                         manifestJsonOverride: string;
                         policies: Record<string, never>;
                         enableFanoutTimeline: boolean;
+                        fanoutTimelineActive: boolean;
                         enableFanoutTimelineDbFallback: boolean;
                         perLocalUserUserTimelineCacheMax: number;
                         perRemoteUserUserTimelineCacheMax: number;
