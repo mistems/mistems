@@ -1,63 +1,150 @@
-<div align="center">
-<a href="https://misskey-hub.net">
-	<img src="./assets/title_float.svg" alt="Misskey logo" style="border-radius:50%" width="300"/>
-</a>
+# MISTEMS
 
-**🌎 **Misskey** is an open source, federated social media platform that's free forever! 🚀**
+ほしい機能詰め込み改造Misskey  
+諸般の事情により実際にデプロイするブランチは mistems-main で mistems-readme ブランチはダミーである  
+mistems-mainの現在の差分はおそらくこちら  
+https://github.com/misskey-dev/misskey/compare/develop...mistems:mistems:mistems-main
 
-[Learn more](https://misskey-hub.net/)
 
----
+## 変更点
 
-<a href="https://misskey-hub.net/servers/">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/find_an-instance-acea31?logoColor=acea31&style=for-the-badge&logo=misskey&labelColor=363B40" alt="find an instance"/></a>
+このPRをだいたいぜんぶ入れる
+https://github.com/mistems/mistems/pulls
 
-<a href="https://misskey-hub.net/docs/for-admin/install/guides/">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/create_an-instance-FBD53C?logoColor=FBD53C&style=for-the-badge&logo=server&labelColor=363B40" alt="create an instance"/></a>
+- セキュリティ
+  - ローカルフォロワーが0人のリモートユーザーからのメンション/リプライ/リノートを拒否できるように（環境変数 `MISSKEY_BLOCK_MENTIONS_FROM_UNFAMILIAR_REMOTE_USERS` で有効化）
+  - パスワードレス+TOTP併用時のサインインをパスワード経由ではTOTPに統一
+  - ファイル配信時に `X-Content-Type-Options: nosniff` を常時付与（content sniffing 対策）
 
-<a href="./CONTRIBUTING.md">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/become_a-contributor-A371F7?logoColor=A371F7&style=for-the-badge&logo=git-merge&labelColor=363B40" alt="become a contributor"/></a>
+- 投稿フォーム
+  - 公開範囲ピッカーに「チャンネル」を追加（お気に入りチャンネルから宛先を選べる）
+  - 宛先チャンネル名を投稿フォーム内に表示
+  - CWと本文の入れ替えボタン　追加
+  - センシティブワード（自動ホーム送りになる語）を含む投稿に警告バナー＋プレビューで黄色ハイライト
+  - 添付ファイル・アップロード中ファイルをドラッグで並べ替えられるように
+  - 長文ペースト時の「テキストファイルとして添付」のしきい値を固定1000文字→自分の投稿上限文字数に変更、確認ダイアログの文言も明確化
+  - スマホで投稿フォームの上・横の余白をタップしても閉じないように（下側タップのみで閉じる）
+  - ショートカットキー刷新: p=通常投稿 / n=文脈依存投稿（チャンネルページではチャンネル宛）/ h=ショートカットヘルプ
 
-<a href="https://discord.gg/Wp8gVStHW3">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/join_the-community-5865F2?logoColor=5865F2&style=for-the-badge&logo=discord&labelColor=363B40" alt="join the community"/></a>
+- チャンネル
+  - チャンネル一覧に「だいたいぜんぶ」タブ　追加（サーバー上のチャンネルをほぼ全件、更新順で一覧。表示モード切替・センシティブ表示トグル付き）
+  - チャンネル検索をキャッシュからのクライアント側絞り込みに変更（高速化）
+  - フォロー/お気に入りボタンに「何が起きるか」の説明文を追加
+  - チャンネルページにローカルタイムライン投稿ボタンも表示する設定を追加（既定OFF）
+  - チャンネルの既読位置をサーバーに保存し端末間で同期
 
-<a href="https://www.patreon.com/syuilo">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/become_a-patron-F96854?logoColor=F96854&style=for-the-badge&logo=patreon&labelColor=363B40" alt="become a patron"/></a>
+- 検索
+  - 検索対象を「本文のみ / 本文+CW」で切り替えられるように
+  - チャンネル指定検索（お気に入りチャンネルから選択）
+  - 添付ファイルの「あり限定 / なし限定」絞り込み
+  - 期間指定ショートカット（今日・直近3日・直近1か月・直近3か月）
+  - 検索がタイムアウトしたら期間を絞った再検索を提案
+  - 検索ボタンに連打防止（6秒）
+  - デフォルト検索範囲をローカルに変更
+  - サーバー側: 検索クエリに15秒タイムアウト、PGroonga 列単独インデックス対応（管理者向け: 推奨インデックス定義を .config サンプルに記載）
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/misskey-dev/misskey)
+- ノート・タイムライン
+  - リノート行にリノートした人のインスタンス情報（ティッカー）を表示
+  - チャンネル由来ノートのリノートに「どのチャンネルから来たか」のリンクを表示
+  - リノート折りたたみ表示のレイアウト刷新
+  - ノート詳細を開いたとき返信を自動で読み込む
+  - blueskyの投稿埋め込み表示に対応（handle→did 解決つき）
+  - ハッシュタグを長押し/右クリックでメニュー（新しいウィンドウで開く・リンクをコピー・ワードミュート・ハードワードミュートに追加）
 
-<a href="https://flatt.tech/oss/gmo/trampoline" target="_blank"><img src="https://flatt.tech/assets/images/badges/gmo-oss.svg" height="24px"/></a>
+- リアクション・絵文字
+  - リアクション詳細ツールチップにヨミ（エイリアス）・ライセンス・ローカルのみ・センシティブを表示
+  - ピッカーの検索がひらがな/カタカナを区別しなくなる
+  - カテゴリが閉じている状態でも先頭4個は見えている状態になる
+  - 絵文字ピッカーを開いた後に背景更新で位置がガクッと動かないように
+  - クライアントを閉じている間に追加されたカスタム絵文字が自動反映されるように（`emojis/stats` API 新設・キャッシュ1時間制限を撤廃）
 
-</div>
+- ふぁぼったー・タイムマシン
+  - リアクションがたくさんついたノートは「みつける＞注目」で青ふぁぼ/赤ふぁぼになる（ON/OFFトグルあり）
+  - しきい値・採用確率・除外絵文字はコンパネ＞サーバー設定＞ハイライトの調整から設定
+  - ハイライト色はユーザーごとにカラーピッカーで変更可能（プリセット付き）
+  - タイムマシン（過去のタイムラインを遡れる /timemachine ページ・デッキ列）
+    - タイムシフト再生（早送り）とタイムフュージョン（リアルタイム統合）モード
+    - ノートの時刻を右クリック→「この時刻にタイムマシンで移動」
+    - 利用可否・遡れる範囲はロールポリシーで制限可能（既定は利用不可）
 
-## Thanks
+- ページエディター
+  - 設定/コンテンツのタブ化、コンテンツ編集は常時プレビュー併設（狭い画面ではタブ切替）
+  - テキストブロックに MFM 挿入ツールバー（$MFM・各種装飾・#・絵文字ピッカー）
+  - ページ一覧のカードに本文の簡易プレビューを表示
+  - 未保存のまま離脱しようとしたら確認
+  - ドラッグアンドドロップ全面刷新: スマホの長押しドラッグ・自動スクロール・アニメーション対応
 
-<a href="https://sentry.io/"><img src="https://github.com/misskey-dev/misskey/assets/4439005/98576556-222f-467a-94be-e98dbda1d852" height="30" alt="Sentry" /></a>
+- クリップ
+  - clipへのノート登録レートリミットを 20→100 へ緩和
 
-Thanks to [Sentry](https://sentry.io/) for providing the error tracking platform that helps us catch unexpected errors.
+- アカウント管理
+  - ログアウト時に「このアカウントのみ / すべてのアカウント」を選べるように（従来は全アカウントのデータが消えていた）
+  - アカウント管理ページ刷新: ログイン中バッジ・一括ログアウト・一覧の即時反映・取得不能アカウントの掃除
 
-<a href="https://www.chromatic.com/"><img src="https://user-images.githubusercontent.com/321738/84662277-e3db4f80-af1b-11ea-88f5-91d67a5e59f6.png" height="30" alt="Chromatic" /></a>
+- UI・UX
+  - 接続が瞬断してすぐ復旧した場合は「サーバーから切断されました」を出さない（5秒待ってから表示）
+  - 接続切断Tipがモーダル表示中でもクリックできるように
+  - 複数タブでMisskeyを開いている場合、そのうちの一つだけでサウンドを再生するように
+  - ホームタイムラインが空のとき「みつける」やローカルタイムラインに誘導するように（新規登録直後はウェルカム表示）
+  - お知らせの既読をリセットできるように（管理者向け、モデレーションログにも記録）
 
-Thanks to [Chromatic](https://www.chromatic.com/) for providing the visual testing platform that helps us review UI changes and catch visual regressions.
+- パフォーマンス
+  - フォロー数が多い（50人以上）ユーザーのホームタイムライン構築を高速化（LATERAL方式）
+  - ノート検索・チャート・メンション補完のDBインデックス最適化（管理者向け: 大規模サーバーは `MISSKEY_MIGRATION_CREATE_INDEX_CONCURRENTLY=1` 推奨）
 
-<a href="https://about.codecov.io/for/open-source/"><img src="https://about.codecov.io/wp-content/themes/codecov/assets/brand/sentry-cobranding/logos/codecov-by-sentry-logo.svg" height="30" alt="Codecov" /></a>
+- バグ修正
+  - 未読通知バッジが消えない・数が合わないバグを修正（表示できない通知をカウントから除外、99+で飽和）
+  - FTT（ファンアウトタイムライン）の歯抜けバグを根本修正、FTT ON/OFF 切替時のキャッシュパージも安全に
+  - 添付テキストファイルが iOS Safari 等で文字化けする問題を修正（charset=utf-8 付与）
+  - エラー画面で操作不能になることがあるのを修正
+  - ドライブでフォルダを移動しても選択状態が持ち越されるバグの修正
+  - リバーシの制限時間がバックグラウンドで遅れる問題を修正
+  - ダークテーマ時にX (Twitter) の埋め込みの余白が白く表示される問題を修正
+  - resyncCharts が大規模サーバーで statement timeout で失敗する問題を修正
+  - チャートの UPDATE 失敗時にバッファが際限なく増え続ける問題を修正（instance チャートの smallint 溢れ対策込み）
 
-Thanks to [Codecov](https://about.codecov.io/for/open-source/) for providing the code coverage platform that helps us improve our test coverage.
+- 開発・運用
+  - 正常系・相手都合のAPログをデバッグレベルに落とす（error に残るのは本当に異常なものだけに）
+  - Claude Code GitHub Workflow追加（Issue, PRでClaudeが反応）
+  - node-fetch の AbortError にリクエストURLを含める診断パッチ
+  - FileServerService のエラーログにリクエスト情報（URL・クエリ）を追加
+  - webhook 配送処理のロガーを system/user で区別し、失敗ログに webhookId を追加
 
-<a href="https://crowdin.com/"><img src="https://user-images.githubusercontent.com/20679825/230709597-1299a011-171a-4294-a91e-355a9b37c672.svg" height="30" alt="Crowdin" /></a>
+# 開発者向けドキュメント
+## MISTEMSの作り方
 
-Thanks to [Crowdin](https://crowdin.com/) for providing the localization platform that helps us translate Misskey into many languages.
+リモートブランチにたいして squash mergeする  
+CHANGELOGはしぬほどコンフリクトするのでなかったことにする  
+それ以外のコンフリクトは git rerere で解除方法を覚えてもらう  
+rerere が全部自動解決したときはスクリプトが自動で続行する
 
-<a href="https://hub.docker.com/"><img src="https://user-images.githubusercontent.com/20679825/230148221-f8e73a32-a49b-47c3-9029-9a15c3824f92.png" height="30" alt="Docker" /></a>
+具体的には以下のようなshellscriptを実行している
 
-Thanks to [Docker](https://hub.docker.com/) for providing the container platform that helps us run Misskey in production.
+最新のスクリプトは同リポジトリの `main-統合.sh` を参照してください。  
+スクリプトの exit 行以降は開発メモ（ブランチ台帳・CHANGELOG 等）なので実行には関係ありません。
+```
 
----
+### 管理用ブランチ
 
-<div align="center">
-	
-Support us with a ⭐ !
+- mistems-main  - 後述の方法で misskey/develop 最新に機能ブランチを取り込んだブランチ デプロイするときはこれを使う コミットログはあまり当てにならない
+- mistems-readme - READMEが置いてあるだけで何も無い
 
-[![Star History Chart](https://api.star-history.com/svg?repos=misskey-dev/misskey&type=Date)](https://star-history.com/#misskey-dev/misskey&Date)
+### ブランチの取り込み方
+PRのと見込みはGitHub上ではなくローカルで行う
+```
+git merge --squash 任意ブランチ
+git commit -a -m "メッセージ"
+```
 
-</div>
+### squash マージ同士の共存（コンフリクトの解除）
+コンフリクトした場合、適宜解決する
+が、毎回コンフリクト解除するのはやってられないので、 git rerere に乗っかる
+rerere が全コンフリクトを自動解決した場合（マーカー残存なし）はスクリプトが自動でステージして続行する
+
+【Git】同じコンフリクト解消を繰り返している人に教えたい「git rerere」 #初心者 - Qiita https://qiita.com/_ken_/items/64856e91e062b325590f
+
+### 機能ブランチを最新に追従させる方法
+feature ブランチを rebase してコンフリクトを解除したのち、mainでsquashする
+featureブランチが複数のコミットからなっていて繰り返しコンフリクトする場合、コミットを1つに圧縮する
+上流が対象ファイルを削除・別実装に置き換えるなど大きく書き換えた場合は、その場で解決し続けず、
+いったん統合からスキップしてブランチを作り直す（詳細は .claude/skills/rebase-to-develop 参照）
