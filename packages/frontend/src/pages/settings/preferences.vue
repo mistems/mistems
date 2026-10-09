@@ -166,6 +166,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</MkPreferenceContainer>
 							</SearchMarker>
 
+							<SearchMarker :keywords="['post', 'button', 'timeline', 'channel', 'local']">
+								<MkPreferenceContainer k="showLocalTimelinePostButtonInChannel">
+									<MkSwitch v-model="showLocalTimelinePostButtonInChannel">
+										<template #label><SearchLabel>{{ i18n.ts.showLocalTimelinePostButtonInChannel }}</SearchLabel></template>
+										<template #caption><SearchText>{{ i18n.ts.showLocalTimelinePostButtonInChannelDescription }}</SearchText></template>
+									</MkSwitch>
+								</MkPreferenceContainer>
+							</SearchMarker>
+
 							<SearchMarker :keywords="['renote']">
 								<MkPreferenceContainer k="collapseRenotes">
 									<MkSwitch v-model="collapseRenotes">
@@ -915,6 +924,7 @@ const loadRawImages = prefer.model('loadRawImages');
 const imageNewTab = prefer.model('imageNewTab');
 const showFixedPostForm = prefer.model('showFixedPostForm');
 const showFixedPostFormInChannel = prefer.model('showFixedPostFormInChannel');
+const showLocalTimelinePostButtonInChannel = prefer.model('showLocalTimelinePostButtonInChannel');
 const numberOfPageCache = prefer.model('numberOfPageCache');
 const enableInfiniteScroll = prefer.model('enableInfiniteScroll');
 const useReactionPickerForContextMenu = prefer.model('useReactionPickerForContextMenu');
