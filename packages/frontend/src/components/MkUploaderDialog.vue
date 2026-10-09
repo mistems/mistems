@@ -23,7 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				{{ i18n.ts._uploader.tip }}
 			</MkTip>
 
-			<MkUploaderItems :items="items" @showMenu="(item, ev) => showPerItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerItemMenuViaContextmenu(item, ev)"/>
+			<MkUploaderItems :modelValue="items" @showMenu="(item, ev) => showPerItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerItemMenuViaContextmenu(item, ev)"/>
 
 			<div v-if="props.multiple">
 				<MkButton style="margin: auto;" :iconOnly="true" rounded @click="chooseFile($event)"><i class="ti ti-plus"></i></MkButton>
