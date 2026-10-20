@@ -16,6 +16,7 @@ import type { Manifest } from 'vite';
 import type { Config } from '@/config.js';
 import type { MiMeta } from '@/models/Meta.js';
 import type { CommonData, ViteFiles } from './views/_.js';
+import { ClientLoggerService } from './ClientLoggerService.js';
 import { listVariants, pickVariant } from './frontend-variant.js';
 
 type FrontendAssets = {
@@ -46,6 +47,8 @@ export class HtmlTemplateService {
 		private meta: MiMeta,
 
 		private metaEntityService: MetaEntityService,
+
+		private clientLoggerService: ClientLoggerService,
 	) {
 		this.frontendViteBuilt = resolve(this.config.rootDir, 'built/_frontend_vite_');
 		this.frontendEmbedViteBuilt = resolve(this.config.rootDir, 'built/_frontend_embed_vite_');
@@ -111,9 +114,10 @@ export class HtmlTemplateService {
 			fsp.readFile(resolve(dir, 'loader/style.css'), 'utf-8').catch(() => null),
 			fsp.readFile(resolve(dir, 'manifest.json'), 'utf-8').catch(() => null),
 		]);
-		const manifest = manifestContent != null ? JSON.parse(manifestContent) as Manifest : null;
+		if (manifestContent == null) throw new Error(`manifest.json not found in ${dir}`);
+		const manifest = JSON.parse(manifestContent) as Manifest;
 		return {
-			viteFiles: manifest != null ? this.collectViteAssetFiles(manifest) : null,
+			viteFiles: this.collectViteAssetFiles(manifest),
 			bootloaderJs,
 			bootloaderCss,
 		};
@@ -174,7 +178,11 @@ export class HtmlTemplateService {
 		}
 
 		for (const name of listVariants(this.frontendVariantsRoot)) {
-			this.variantAssets.set(name, await this.loadVariantAssets(resolve(this.frontendVariantsRoot, name)));
+			try {
+				this.variantAssets.set(name, await this.loadVariantAssets(resolve(this.frontendVariantsRoot, name)));
+			} catch (err) {
+				this.clientLoggerService.logger.warn(`Failed to load frontend variant "${name}", skipping: ${err instanceof Error ? err.message : String(err)}`);
+			}
 		}
 	}
 
