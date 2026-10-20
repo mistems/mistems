@@ -203,7 +203,7 @@ squash_merge riin/fix/webhook-log-context
 git commit -a -m "fix(backend): webhook 配送処理のロガーを system/user で区別し、失敗ログに webhookId を追加"
 
 # X 埋め込み展開時、ダークテーマだと color-scheme 不一致で iframe の透過背景が白く描画される問題
-# NOTE: ローカルブランチ (worktree: misskey/worktrees/fix-x-embed-color-scheme)。riin へ push したら riin/ プレフィックスに読み替えること
+# NOTE: ローカルブランチ (worktree: misskey-worktrees/fix-x-embed-color-scheme)。riin へ push したら riin/ プレフィックスに読み替えること
 squash_merge fix-x-embed-color-scheme
 git commit -a -m "fix(frontend): ダークテーマ時にX (Twitter) ポスト展開でカード周囲の余白が白く表示される問題を修正"
 
