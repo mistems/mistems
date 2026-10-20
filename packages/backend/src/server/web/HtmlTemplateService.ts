@@ -16,6 +16,13 @@ import type { Manifest } from 'vite';
 import type { Config } from '@/config.js';
 import type { MiMeta } from '@/models/Meta.js';
 import type { CommonData, ViteFiles } from './views/_.js';
+import { listVariants, pickVariant } from './frontend-variant.js';
+
+type FrontendAssets = {
+	viteFiles: ViteFiles | null;
+	bootloaderJs: string | null;
+	bootloaderCss: string | null;
+};
 
 @Injectable()
 export class HtmlTemplateService {
@@ -28,6 +35,8 @@ export class HtmlTemplateService {
 	public frontendEmbedViteFiles: ViteFiles | null = null;
 	public frontendEmbedBootloaderJs: string | null = null;
 	public frontendEmbedBootloaderCss: string | null = null;
+	public readonly frontendVariantsRoot: string;
+	private readonly variantAssets = new Map<string, FrontendAssets>();
 
 	constructor(
 		@Inject(DI.config)
@@ -40,6 +49,7 @@ export class HtmlTemplateService {
 	) {
 		this.frontendViteBuilt = resolve(this.config.rootDir, 'built/_frontend_vite_');
 		this.frontendEmbedViteBuilt = resolve(this.config.rootDir, 'built/_frontend_embed_vite_');
+		this.frontendVariantsRoot = resolve(this.config.rootDir, 'frontend-variants');
 	}
 
 	// 初期ロードで読み込むべきファイルのパスを収集する。
@@ -91,6 +101,21 @@ export class HtmlTemplateService {
 			entryJs: entryFile.file,
 			css: Array.from(cssFiles),
 			modulePreloads: Array.from(modulePreloads),
+		};
+	}
+
+	@bindThis
+	private async loadVariantAssets(dir: string): Promise<FrontendAssets> {
+		const [bootloaderJs, bootloaderCss, manifestContent] = await Promise.all([
+			fsp.readFile(resolve(dir, 'loader/boot.js'), 'utf-8').catch(() => null),
+			fsp.readFile(resolve(dir, 'loader/style.css'), 'utf-8').catch(() => null),
+			fsp.readFile(resolve(dir, 'manifest.json'), 'utf-8').catch(() => null),
+		]);
+		const manifest = manifestContent != null ? JSON.parse(manifestContent) as Manifest : null;
+		return {
+			viteFiles: manifest != null ? this.collectViteAssetFiles(manifest) : null,
+			bootloaderJs,
+			bootloaderCss,
 		};
 	}
 
@@ -147,11 +172,29 @@ export class HtmlTemplateService {
 		if (embedBootCss != null) {
 			this.frontendEmbedBootloaderCss = embedBootCss;
 		}
+
+		for (const name of listVariants(this.frontendVariantsRoot)) {
+			this.variantAssets.set(name, await this.loadVariantAssets(resolve(this.frontendVariantsRoot, name)));
+		}
 	}
 
 	@bindThis
-	public async getCommonData(): Promise<CommonData> {
+	public resolveVariant(cookieHeader: string | undefined): string | null {
+		return pickVariant(cookieHeader, [...this.variantAssets.keys()]);
+	}
+
+	@bindThis
+	public async getAvailableVariants(): Promise<string[]> {
 		await this.prepareFrontendAssets();
+		return [...this.variantAssets.keys()];
+	}
+
+	@bindThis
+	public async getCommonData(cookieHeader?: string): Promise<CommonData> {
+		await this.prepareFrontendAssets();
+
+		const variant = this.resolveVariant(cookieHeader);
+		const variantAssets = variant != null ? this.variantAssets.get(variant) : undefined;
 
 		return {
 			version: this.config.version,
@@ -168,12 +211,13 @@ export class HtmlTemplateService {
 			metaJson: htmlSafeJsonStringify(await this.metaEntityService.packDetailed(this.meta)),
 			now: Date.now(),
 			federationEnabled: this.meta.federation !== 'none',
-			frontendViteFiles: this.frontendViteFiles,
-			frontendBootloaderJs: this.frontendBootloaderJs,
-			frontendBootloaderCss: this.frontendBootloaderCss,
+			frontendViteFiles: variantAssets?.viteFiles ?? this.frontendViteFiles,
+			frontendBootloaderJs: variantAssets?.bootloaderJs ?? this.frontendBootloaderJs,
+			frontendBootloaderCss: variantAssets?.bootloaderCss ?? this.frontendBootloaderCss,
 			frontendEmbedViteFiles: this.frontendEmbedViteFiles,
 			frontendEmbedBootloaderJs: this.frontendEmbedBootloaderJs,
 			frontendEmbedBootloaderCss: this.frontendEmbedBootloaderCss,
+			frontendVariant: variantAssets != null ? variant : null,
 		};
 	}
 
