@@ -37,7 +37,13 @@ if (process.env.FRONTEND_VARIANTS_NO_FETCH === '1') {
 	console.log('[frontend-variants] FRONTEND_VARIANTS_NO_FETCH=1 のため git fetch を省略する');
 } else {
 	try {
-		git(['fetch', 'origin', '--prune']);
+		// 認証待ちでデプロイが固まらないよう、対話プロンプトを禁止して時間も制限する
+		execFileSync('git', ['fetch', 'origin', '--prune'], {
+			cwd: repoRoot,
+			stdio: ['ignore', 'pipe', 'pipe'],
+			env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+			timeout: 120000,
+		});
 	} catch (e) {
 		console.warn(`[frontend-variants] git fetch に失敗したので、手元の origin/* で続ける: ${e.message}`);
 	}
@@ -45,6 +51,12 @@ if (process.env.FRONTEND_VARIANTS_NO_FETCH === '1') {
 
 rmSync(nextRoot, { recursive: true, force: true });
 rmSync(workRoot, { recursive: true, force: true });
+// 前回の実行が途中で止まると worktree の登録だけが残り、同じパスへの worktree add が失敗するので掃除する
+try {
+	git(['worktree', 'prune']);
+} catch (e) {
+	console.warn(`[frontend-variants] git worktree prune に失敗した: ${e.message}`);
+}
 mkdirSync(nextRoot, { recursive: true });
 mkdirSync(workRoot, { recursive: true });
 
@@ -101,7 +113,11 @@ for (const v of variants) {
 }
 
 rmSync(workRoot, { recursive: true, force: true });
-git(['worktree', 'prune']);
+try {
+	git(['worktree', 'prune']);
+} catch (e) {
+	console.warn(`[frontend-variants] git worktree prune に失敗した: ${e.message}`);
+}
 writeFileSync(join(nextRoot, '_skipped.json'), JSON.stringify(skipped, null, '\t'));
 
 // 入れ替え。古いディレクトリは rename してから消し、配信が空になる時間を短くする
