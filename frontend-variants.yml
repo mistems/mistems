@@ -1,0 +1,8 @@
+# 本番に同居させるフロントエンド variant の一覧。
+# サーバーでのデプロイ時に scripts/build-frontend-variants.mjs がビルドする。
+# 切り替えは /__fe から行う。詳しくは docs/frontend-variants.md を参照。
+#
+# - name: emoji-drop                   # variant 名（英数字・ハイフン・アンダースコア）
+#   branch: riin/feat/emoji-drop-area  # origin にあるブランチ
+#   mode: merge                        # merge（既定）: HEAD に squash merge してビルド / as-is: ブランチをそのままビルド
+[]
