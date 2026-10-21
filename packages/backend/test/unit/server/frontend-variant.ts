@@ -13,7 +13,7 @@ import {
 	listVariants,
 	parseVariantCookie,
 	pickVariant,
-	readSkippedVariants,
+	readVariantIndex,
 } from '@/server/web/frontend-variant.js';
 
 describe('isValidVariantName', () => {
@@ -86,7 +86,7 @@ describe('listVariants', () => {
 	});
 });
 
-describe('readSkippedVariants', () => {
+describe('readVariantIndex', () => {
 	let root: string;
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), 'fe-variants-'));
@@ -95,24 +95,45 @@ describe('readSkippedVariants', () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	test('ファイルがなければ空配列', () => {
-		expect(readSkippedVariants(root)).toEqual([]);
+	const empty = { variants: [], skipped: [] };
+
+	test('ファイルがなければ空', () => {
+		expect(readVariantIndex(root)).toEqual(empty);
 	});
-	test('JSON が壊れていたら空配列', () => {
-		writeFileSync(join(root, '_skipped.json'), '{broken');
-		expect(readSkippedVariants(root)).toEqual([]);
+	test('JSON が壊れていたら空', () => {
+		writeFileSync(join(root, '_variants.json'), '{broken');
+		expect(readVariantIndex(root)).toEqual(empty);
 	});
-	test('配列でなければ空配列', () => {
-		writeFileSync(join(root, '_skipped.json'), '{"name":"x"}');
-		expect(readSkippedVariants(root)).toEqual([]);
+	test('トップレベルが配列なら空', () => {
+		writeFileSync(join(root, '_variants.json'), '[]');
+		expect(readVariantIndex(root)).toEqual(empty);
 	});
-	test('形の正しい要素だけを返す', () => {
-		writeFileSync(join(root, '_skipped.json'), JSON.stringify([
-			{ name: 'a', branch: 'riin/feat/a', reason: 'conflict' },
-			{ name: 'b' },
-			'garbage',
-		]));
-		expect(readSkippedVariants(root)).toEqual([{ name: 'a', branch: 'riin/feat/a', reason: 'conflict' }]);
+	test('variants / skipped が配列でなければそのキーは空', () => {
+		writeFileSync(join(root, '_variants.json'), JSON.stringify({ variants: { name: 'a' }, skipped: 'x' }));
+		expect(readVariantIndex(root)).toEqual(empty);
+	});
+	test('形の悪い要素と不正な mode を捨て、余分なフィールドを落とす', () => {
+		writeFileSync(join(root, '_variants.json'), JSON.stringify({
+			variants: [
+				{ name: 'a', branch: 'riin/feat/a', mode: 'merge', extra: 1 },
+				{ name: 'b', branch: 'riin/feat/b', mode: 'as-is' },
+				{ name: 'c', branch: 'riin/feat/c', mode: 'other' },
+				{ name: 'd', mode: 'merge' },
+				'garbage',
+			],
+			skipped: [
+				{ name: 'x', branch: 'riin/feat/x', reason: 'conflict', detail: 'secret' },
+				{ name: 'y' },
+				null,
+			],
+		}));
+		expect(readVariantIndex(root)).toEqual({
+			variants: [
+				{ name: 'a', branch: 'riin/feat/a', mode: 'merge' },
+				{ name: 'b', branch: 'riin/feat/b', mode: 'as-is' },
+			],
+			skipped: [{ name: 'x', branch: 'riin/feat/x', reason: 'conflict' }],
+		});
 	});
 });
 

@@ -27,7 +27,7 @@ type FrontendAssets = {
 
 @Injectable()
 export class HtmlTemplateService {
-	private frontendAssetsFetched = false;
+	private frontendAssetsPromise: Promise<void> | null = null;
 	private readonly frontendViteBuilt: string;
 	private readonly frontendEmbedViteBuilt: string;
 	public frontendViteFiles: ViteFiles | null = null;
@@ -125,9 +125,18 @@ export class HtmlTemplateService {
 
 	@bindThis
 	private async prepareFrontendAssets() {
-		if (this.frontendAssetsFetched) return;
-		this.frontendAssetsFetched = true;
+		// 同時に呼ばれても読み込みは一度だけ行い、失敗したら次の呼び出しで再試行する
+		if (this.frontendAssetsPromise == null) {
+			this.frontendAssetsPromise = this.loadFrontendAssets().catch(err => {
+				this.frontendAssetsPromise = null;
+				throw err;
+			});
+		}
+		await this.frontendAssetsPromise;
+	}
 
+	@bindThis
+	private async loadFrontendAssets() {
 		const [
 			bootJs,
 			bootCss,
@@ -177,7 +186,14 @@ export class HtmlTemplateService {
 			this.frontendEmbedBootloaderCss = embedBootCss;
 		}
 
-		for (const name of listVariants(this.frontendVariantsRoot)) {
+		let variantNames: string[] = [];
+		try {
+			variantNames = listVariants(this.frontendVariantsRoot);
+		} catch (err) {
+			this.clientLoggerService.logger.warn(`Failed to list frontend variants: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		for (const name of variantNames) {
 			try {
 				this.variantAssets.set(name, await this.loadVariantAssets(resolve(this.frontendVariantsRoot, name)));
 			} catch (err) {

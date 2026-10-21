@@ -11,7 +11,6 @@ import sharp from 'sharp';
 import { In, IsNull } from 'typeorm';
 import fastifyStatic from '@fastify/static';
 import vary from 'vary';
-import { escapeHtml } from '@kitajs/html';
 import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
 import * as Acct from '@/misc/acct.js';
@@ -45,7 +44,8 @@ import { FeedService } from './FeedService.js';
 import { UrlPreviewService } from './UrlPreviewService.js';
 import { ClientLoggerService } from './ClientLoggerService.js';
 import { HtmlTemplateService } from './HtmlTemplateService.js';
-import { buildVariantCookie, isValidVariantName, listVariants, readSkippedVariants } from './frontend-variant.js';
+import { buildVariantCookie, listVariants, readVariantIndex } from './frontend-variant.js';
+import type { VariantEntry } from './frontend-variant.js';
 
 import { BasePage } from './views/base.js';
 import { htmlToPlainText } from '@/misc/html-to-plain-text.js';
@@ -460,28 +460,22 @@ export class ClientServerService {
 		//#endregion
 
 		//#region frontend variants
-		fastify.get('/__fe', async (request, reply) => {
-			const variants = await this.htmlTemplateService.getAvailableVariants();
-			const current = this.htmlTemplateService.resolveVariant(request.headers.cookie);
-			const items = variants.map(name => `<li><a href="/__fe/switch?v=${name}">${name}</a>${name === current ? '（表示中）' : ''}</li>`).join('');
-			const skipped = readSkippedVariants(this.htmlTemplateService.frontendVariantsRoot)
-				.map(s => `<li>${escapeHtml(s.name)}（${escapeHtml(s.branch)}）: ${escapeHtml(s.reason)}</li>`).join('');
+		fastify.get('/__fe/variants.json', async (request, reply) => {
+			const available = await this.htmlTemplateService.getAvailableVariants();
+			const index = readVariantIndex(this.htmlTemplateService.frontendVariantsRoot);
+			const variants: VariantEntry[] = available.map(name => index.variants.find(v => v.name === name) ?? { name, branch: '', mode: 'as-is' });
 			reply.header('Cache-Control', 'private, no-store');
-			reply.header('Content-Type', 'text/html; charset=utf-8');
-			return `<!doctype html><meta charset="utf-8"><title>Frontend variants</title><h1>Frontend variants</h1><ul><li><a href="/__fe/switch">本線に戻す</a>${current == null ? '（表示中）' : ''}</li>${items}</ul>${skipped !== '' ? `<h2>ビルドできなかった variant</h2><ul>${skipped}</ul>` : ''}`;
+			reply.header('Content-Type', 'application/json; charset=utf-8');
+			return JSON.stringify({
+				current: this.htmlTemplateService.resolveVariant(request.headers.cookie),
+				variants,
+				skipped: index.skipped,
+			});
 		});
 
-		fastify.get<{ Querystring: { v?: string } }>('/__fe/switch', async (request, reply) => {
-			const v = request.query.v ?? '';
-			const secure = this.config.url.startsWith('https://');
-			if (v === '') {
-				reply.header('Set-Cookie', buildVariantCookie(null, secure));
-			} else if (isValidVariantName(v) && (await this.htmlTemplateService.getAvailableVariants()).includes(v)) {
-				reply.header('Set-Cookie', buildVariantCookie(v, secure));
-			} else {
-				reply.code(404);
-				return 'unknown variant';
-			}
+		// 本線に戻す専用。variant の指定は受け取らない（切り替えは管理画面が Cookie を直接書く）
+		fastify.get('/__fe/switch', async (request, reply) => {
+			reply.header('Set-Cookie', buildVariantCookie(null, this.config.url.startsWith('https://')));
 			reply.header('Cache-Control', 'private, no-store');
 			return reply.redirect('/');
 		});

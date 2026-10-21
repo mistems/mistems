@@ -64,13 +64,39 @@ function isSkippedVariant(x: unknown): x is SkippedVariant {
 	return typeof o.name === 'string' && typeof o.branch === 'string' && typeof o.reason === 'string';
 }
 
-export function readSkippedVariants(variantsRoot: string): SkippedVariant[] {
+export type VariantEntry = {
+	name: string;
+	branch: string;
+	mode: 'merge' | 'as-is';
+};
+
+export type VariantIndex = {
+	variants: VariantEntry[];
+	skipped: SkippedVariant[];
+};
+
+function isVariantEntry(x: unknown): x is VariantEntry {
+	if (typeof x !== 'object' || x == null) return false;
+	const o = x as Record<string, unknown>;
+	return typeof o.name === 'string' && typeof o.branch === 'string' && (o.mode === 'merge' || o.mode === 'as-is');
+}
+
+// ビルドスクリプトが書き出す _variants.json を読む。ない・壊れている場合は空として扱う
+export function readVariantIndex(variantsRoot: string): VariantIndex {
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(readFileSync(join(variantsRoot, '_skipped.json'), 'utf-8'));
+		parsed = JSON.parse(readFileSync(join(variantsRoot, '_variants.json'), 'utf-8'));
 	} catch {
-		return [];
+		return { variants: [], skipped: [] };
 	}
-	if (!Array.isArray(parsed)) return [];
-	return parsed.filter(isSkippedVariant).map(({ name, branch, reason }) => ({ name, branch, reason }));
+	if (typeof parsed !== 'object' || parsed == null || Array.isArray(parsed)) return { variants: [], skipped: [] };
+	const o = parsed as Record<string, unknown>;
+	return {
+		variants: Array.isArray(o.variants)
+			? o.variants.filter(isVariantEntry).map(({ name, branch, mode }) => ({ name, branch, mode }))
+			: [],
+		skipped: Array.isArray(o.skipped)
+			? o.skipped.filter(isSkippedVariant).map(({ name, branch, reason }) => ({ name, branch, reason }))
+			: [],
+	};
 }
