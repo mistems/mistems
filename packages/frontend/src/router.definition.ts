@@ -491,6 +491,10 @@ export const ROUTE_DEF = [{
 		name: 'external-services',
 		component: page(() => import('@/pages/admin/external-services.vue')),
 	}, {
+		path: '/frontend-variants',
+		name: 'frontend-variants',
+		component: page(() => import('@/pages/admin/frontend-variants.vue')),
+	}, {
 		path: '/performance',
 		name: 'performance',
 		component: page(() => import('@/pages/admin/performance.vue')),
