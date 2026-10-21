@@ -13,13 +13,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkInfo>{{ i18n.ts._frontendVariants.description }}</MkInfo>
 
 			<div class="_gaps_s">
-				<button class="_button" :class="[$style.item, { [$style.active]: data.current == null }]" @click="switchToMain()">
-					<i class="ti ti-git-branch"></i>
+				<button class="_button" :class="[$style.item, { [$style.active]: data.current == null }]" :disabled="data.current == null" :aria-current="data.current == null ? 'true' : undefined" @click="switchToMain()">
+					<i class="ti ti-git-branch" aria-hidden="true"></i>
 					<span :class="$style.name">{{ i18n.ts._frontendVariants.mainLine }}</span>
 					<span v-if="data.current == null" :class="$style.badge">{{ i18n.ts._frontendVariants.current }}</span>
 				</button>
-				<button v-for="v in data.variants" :key="v.name" class="_button" :class="[$style.item, { [$style.active]: data.current === v.name }]" @click="switchTo(v.name)">
-					<i class="ti ti-git-branch"></i>
+				<button v-for="v in data.variants" :key="v.name" class="_button" :class="[$style.item, { [$style.active]: data.current === v.name }]" :disabled="data.current === v.name" :aria-current="data.current === v.name ? 'true' : undefined" @click="switchTo(v.name)">
+					<i class="ti ti-git-branch" aria-hidden="true"></i>
 					<span :class="$style.name">{{ v.name }}</span>
 					<span :class="$style.sub">{{ v.branch }} / {{ v.mode }}</span>
 					<span v-if="data.current === v.name" :class="$style.badge">{{ i18n.ts._frontendVariants.current }}</span>
@@ -29,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkFolder v-if="data.skipped.length > 0">
 				<template #label>{{ i18n.ts._frontendVariants.skippedTitle }}</template>
 				<div class="_gaps_s">
-					<div v-for="s in data.skipped" :key="s.name">
+					<div v-for="(s, i) in data.skipped" :key="`${i}-${s.name}`">
 						<div :class="$style.name">{{ s.name }}</div>
 						<div :class="$style.sub">{{ s.branch }}</div>
 						<div :class="$style.sub">{{ s.reason }}</div>
@@ -68,7 +68,8 @@ async function load() {
 		const res = await window.fetch('/__fe/variants.json', { credentials: 'same-origin' });
 		if (!res.ok) throw new Error(String(res.status));
 		data.value = await res.json() as VariantsResponse;
-	} catch {
+	} catch (err) {
+		console.error(err);
 		error.value = true;
 	} finally {
 		fetching.value = false;
@@ -78,6 +79,8 @@ async function load() {
 function switchTo(name: string) {
 	// 取得した一覧に含まれる名前だけを Cookie に書く
 	if (data.value == null || !data.value.variants.some(v => v.name === name)) return;
+	// Cookie 名・Max-Age (604800)・属性は packages/backend/src/server/web/frontend-variant.ts の
+	// buildVariantCookie / FRONTEND_VARIANT_COOKIE と一致させること
 	window.document.cookie = `mk_fe_variant=${name}; Path=/; Max-Age=604800; SameSite=Lax` + (window.location.protocol === 'https:' ? '; Secure' : '');
 	window.location.reload();
 }
