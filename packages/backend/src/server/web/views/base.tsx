@@ -104,7 +104,7 @@ export function Layout(props: PropsWithChildren<CommonProps<{
 							title="クリックで本線に戻す"
 							style="position:fixed;left:8px;bottom:8px;z-index:2147483647;padding:4px 8px;border-radius:6px;background:#e5484d;color:#fff;font:12px/1.4 sans-serif;text-decoration:none;"
 						>
-							FE: {props.frontendVariant} ✕
+							FE: <span safe>{props.frontendVariant}</span> ✕
 						</a>
 					) : null}
 				</body>
