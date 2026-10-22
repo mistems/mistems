@@ -39,8 +39,9 @@ node scripts/build-frontend-variants.mjs
 スクリプトは `frontend-variants.yml` を読み、variant ごとに次の処理をします。
 
 - ブランチを明示的な refspec で fetch する
-- `.frontend-variants-work/<name>` で install とビルドを実行する。制限時間は install が 15 分、ビルドが 5 分、全体が 30 分である
-- 成功したら `frontend-variants/<name>/` に入れ替える。失敗したときは入れ替えを元に戻す
+- `.frontend-variants-work/<name>` で install とビルドを実行する。制限時間は install が 15 分、`build-pre` が 5 分、フロントエンドのビルドが 30 分である（variant ごと。全体の上限はない）
+- 成功した variant を、まとめて `frontend-variants/` ごと入れ替える。2 回目の rename に失敗したときは、ディレクトリの入れ替えだけを元に戻す
+- ビルドに失敗した variant は今回の一覧から外れ、前回の成果物も残らない。その Cookie を持つ利用者は、黙って本線に戻る
 
 スクリプトは失敗しても常に終了コード 0 で終わります。variant のビルド失敗で本線のデプロイが止まらないようにするためです。
 
@@ -96,7 +97,7 @@ variant のビルドは、本番と同じ VPS で variant ごとに実行しま�
 
 ## キャッシュ
 
-backend は variant の情報を短時間キャッシュします。切り替えた直後は、最大 30 秒ほど古い HTML が返ることがあります。表示が変わらないときは、少し待ってから再読み込みしてください。
+本線の HTML には `Cache-Control: public, max-age=30` が付いています。variant が 1 つでもあるとき、backend は HTML 応答に `Vary: Cookie` を付けるので、`Vary` を守るブラウザや CDN では、切り替えた直後でも Cookie に合った HTML が返ります。`Vary` を無視するキャッシュでは、最大 30 秒ほど古い HTML が返ることがあります。表示が変わらないときは、少し待ってから再読み込みしてください。
 
 ## 制約
 
