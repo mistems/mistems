@@ -207,6 +207,12 @@ export class HtmlTemplateService {
 		return pickVariant(cookieHeader, [...this.variantAssets.keys()]);
 	}
 
+	/** 読み込み済みの variant があるか。読み込みは起こさない。 */
+	@bindThis
+	public hasVariants(): boolean {
+		return this.variantAssets.size > 0;
+	}
+
 	@bindThis
 	public async getAvailableVariants(): Promise<string[]> {
 		await this.prepareFrontendAssets();
@@ -214,7 +220,7 @@ export class HtmlTemplateService {
 	}
 
 	@bindThis
-	public async getCommonData(cookieHeader?: string): Promise<CommonData> {
+	public async getCommonData(cookieHeader: string | undefined): Promise<CommonData> {
 		await this.prepareFrontendAssets();
 
 		const variant = this.resolveVariant(cookieHeader);

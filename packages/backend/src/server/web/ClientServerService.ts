@@ -208,10 +208,18 @@ export class ClientServerService {
 	public createServer(fastify: FastifyInstance, options: FastifyPluginOptions, done: (err?: Error) => void) {
 		const configUrl = new URL(this.config.url);
 
-		// variant 表示中の HTML を共有キャッシュに載せない
+		// variant 表示中の HTML を共有キャッシュに載せない。
+		// variant が 1 つでもあるときは、Cookie で内容が変わることをキャッシュに伝える
 		fastify.addHook('onSend', async (request, reply, payload) => {
 			const contentType = String(reply.getHeader('Content-Type') ?? '');
-			if (contentType.startsWith('text/html') && this.htmlTemplateService.resolveVariant(request.headers.cookie) != null) {
+			if (!contentType.startsWith('text/html')) return payload;
+			if (this.htmlTemplateService.hasVariants()) {
+				const vary = String(reply.getHeader('Vary') ?? '');
+				if (!vary.split(',').some(v => ['cookie', '*'].includes(v.trim().toLowerCase()))) {
+					reply.header('Vary', vary === '' ? 'Cookie' : `${vary}, Cookie`);
+				}
+			}
+			if (this.htmlTemplateService.resolveVariant(request.headers.cookie) != null) {
 				reply.header('Cache-Control', 'private, no-store');
 			}
 			return payload;
