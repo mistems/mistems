@@ -42,14 +42,21 @@ const REASON_BAD_LIST = 'frontend-variants.yml の書式が正しくない（デ
 class SkipError extends Error {}
 const skip = (reason) => { throw new SkipError(reason); };
 
-const { variants, errors } = existsSync(listPath)
-	? parseVariantList(readFileSync(listPath, 'utf-8'))
-	: { variants: [], errors: [] };
+let variants = [];
+let errors = [];
+let listReadFailed = false;
+try {
+	if (existsSync(listPath)) ({ variants, errors } = parseVariantList(readFileSync(listPath, 'utf-8')));
+} catch (e) {
+	console.warn(`[frontend-variants] frontend-variants.yml を読み込めない — ${describeError(e)}`);
+	listReadFailed = true;
+}
 // 解析エラーの文言は YAML の内容を含むため、公開しない。元の文言はログにだけ出す
 const skipped = errors.map((e) => {
 	console.warn(`[frontend-variants] ${e.name}: 一覧の書式エラー — ${e.reason}`);
 	return { name: e.name, branch: e.branch, reason: REASON_BAD_LIST };
 });
+if (listReadFailed) skipped.push({ name: 'frontend-variants.yml', branch: '', reason: REASON_BAD_LIST });
 const built = [];
 const noFetch = process.env.FRONTEND_VARIANTS_NO_FETCH === '1';
 
