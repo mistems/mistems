@@ -12,11 +12,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 		<div>
 			<p v-if="useCw" :class="$style.cw">
-				<Mfm v-if="cw != null && cw != ''" :text="cw" :author="user" :nyaize="'respect'" :i="user" style="margin-right: 8px;"/>
+				<Mfm v-if="cw != null && cw != ''" :text="highlightedCw!" :author="user" :nyaize="'respect'" :i="user" style="margin-right: 8px;"/>
 				<MkCwButton v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
 			</p>
 			<div v-show="!useCw || showContent">
-				<Mfm :text="text.trim()" :author="user" :nyaize="'respect'" :i="user"/>
+				<Mfm :text="highlightedText" :author="user" :nyaize="'respect'" :i="user"/>
 			</div>
 		</div>
 	</div>
@@ -24,10 +24,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
+import { highlightSensitiveWords } from '@/utility/sensitive-words.js';
 
 const showContent = ref(false);
 
@@ -38,7 +39,23 @@ const props = defineProps<{
 	useCw: boolean;
 	cw: string | null;
 	user: Misskey.entities.User;
+	sensitiveWords?: string[];
 }>();
+
+// サーバーのセンシティブワード判定は cw があれば cw、無ければ text を対象にする。
+// それに合わせてハイライト対象も切り替える。
+const isCwTarget = computed(() => props.useCw && props.cw != null && props.cw !== '');
+
+const highlightedText = computed(() => {
+	const t = props.text.trim();
+	if (!props.sensitiveWords?.length || isCwTarget.value) return t;
+	return highlightSensitiveWords(t, props.sensitiveWords);
+});
+
+const highlightedCw = computed(() => {
+	if (!props.sensitiveWords?.length || !isCwTarget.value) return props.cw;
+	return highlightSensitiveWords(props.cw!, props.sensitiveWords);
+});
 </script>
 
 <style lang="scss" module>
