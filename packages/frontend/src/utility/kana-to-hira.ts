@@ -4,9 +4,10 @@
  */
 
 // MISTEMS: 絵文字検索ひらカナ大統一
-// custom-emojis.ts はカスタム絵文字のエイリアスをひらがな・小文字にそろえて保持する。
-// 検索語の側もそろえないと、カタカナの検索語がエイリアスに当たらなくなるので、検索の入口ではここを通す。
-// NOTE: custom-emojis.ts と MkEmojiPicker.vue にも同じ変換がある。party/17758-emoji-cache との統合
+// 絵文字の検索では、検索語と比べられる側 (名前・エイリアス・Unicode 絵文字の索引のキーワード) の両方に
+// normalizeForEmojiSearch をかけてから比べる。片側だけをそろえると、大文字やカタカナを含む側に当たらなくなる。
+// データ自体は変えず、比べるときだけかける。
+// NOTE: custom-emojis.ts にも toKanaToHira と同じ変換がある。party/17758-emoji-cache との統合
 //       (rerere の解消方法) を崩さないため、今は共通化していない。
 
 import { searchEmoji } from '@/utility/search-emoji.js';
@@ -19,24 +20,49 @@ export function toKanaToHira(str: string): string {
 	});
 }
 
+// Unicode 絵文字の索引のキーワードは 1 言語で約 9 千件あり、入力のたびに正規化し直すのは無駄なのでキャッシュする
+const NORMALIZE_CACHE_LIMIT = 100_000;
+const normalizeCache = new Map<string, string>();
+
 /**
- * searchEmoji を、ひらがな・カタカナを区別せずに引く。
- * 元の検索語の結果を先に並べ、検索語をひらがな・小文字にそろえた語の結果を後に足す (重複は除く)。
- * 元の検索語でも引くのは、Unicode 絵文字の名前など、カタカナのまま残る項目にも当てるため。
+ * 絵文字の検索で比べるための形にそろえる。
+ * NFKC で全角英数・全角記号を半角に、半角カナを全角カナに、分けて書いた濁点を 1 文字にしたうえで、
+ * 小文字にし、カタカナをひらがなにする。
  */
-export function searchEmojiKanaInsensitive(query: string | null, emojiDb: EmojiDef[], max = 30): EmojiDef[] {
-	const results = searchEmoji(query, emojiDb, max);
-	if (query == null) return results;
+export function normalizeForEmojiSearch(str: string): string {
+	const cached = normalizeCache.get(str);
+	if (cached != null) return cached;
 
-	const normalizedQuery = toKanaToHira(query.toLowerCase());
-	if (normalizedQuery === query) return results;
+	const normalized = toKanaToHira(str.normalize('NFKC').toLowerCase());
+	if (normalizeCache.size >= NORMALIZE_CACHE_LIMIT) normalizeCache.clear();
+	normalizeCache.set(str, normalized);
+	return normalized;
+}
 
-	const seen = new Set(results.map(x => x.emoji));
-	for (const x of searchEmoji(normalizedQuery, emojiDb, max)) {
-		if (results.length >= max) break;
-		if (seen.has(x.emoji)) continue;
-		seen.add(x.emoji);
-		results.push(x);
-	}
-	return results;
+// 名前を正規化した検索用の一覧。元の一覧ごとに作り、正規化した項目から元の項目へ引き戻せるようにしておく
+const normalizedDbCache = new WeakMap<EmojiDef[], EmojiDef[]>();
+const originalOf = new WeakMap<EmojiDef, EmojiDef>();
+
+function getNormalizedEmojiDb(emojiDb: EmojiDef[]): EmojiDef[] {
+	const cached = normalizedDbCache.get(emojiDb);
+	if (cached) return cached;
+
+	const normalized = emojiDb.map(x => {
+		const y = { ...x, name: normalizeForEmojiSearch(x.name) };
+		originalOf.set(y, x);
+		return y;
+	});
+	normalizedDbCache.set(emojiDb, normalized);
+	return normalized;
+}
+
+/**
+ * searchEmoji を、大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。
+ * 返る項目は元の (正規化していない) 一覧の項目である。
+ */
+export function searchEmojiNormalized(query: string | null, emojiDb: EmojiDef[], max = 30): EmojiDef[] {
+	if (!query) return [];
+
+	return searchEmoji(normalizeForEmojiSearch(query), getNormalizedEmojiDb(emojiDb), max)
+		.map(x => originalOf.get(x) ?? x);
 }
