@@ -57,12 +57,55 @@ function getNormalizedEmojiDb(emojiDb: EmojiDef[]): EmojiDef[] {
 }
 
 /**
+ * スペースで区切った語のすべてを含む絵文字を返す (AND 検索)。
+ * 絵文字ごと (同じ emoji を持つ項目) に名前とエイリアスを集め、各語がそのどれかに含まれればよい。
+ * 並びは元の一覧の順で、エイリアスでない項目を代表にする。
+ */
+function searchEmojiAnd(keywords: string[], normalizedDb: EmojiDef[], max: number): EmojiDef[] {
+	const groups = new Map<string, { representative: EmojiDef; names: string[] }>();
+	for (const x of normalizedDb) {
+		const key = x.emoji;
+		const group = groups.get(key);
+		if (group == null) {
+			groups.set(key, { representative: x, names: [x.name] });
+		} else {
+			group.names.push(x.name);
+			if (group.representative.aliasOf != null && x.aliasOf == null) group.representative = x;
+		}
+	}
+
+	const results: EmojiDef[] = [];
+	for (const { representative, names } of groups.values()) {
+		if (keywords.every(keyword => names.some(name => name.includes(keyword)))) {
+			results.push(representative);
+			if (results.length >= max) break;
+		}
+	}
+	return results;
+}
+
+/**
  * searchEmoji を、大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。
+ * 検索語にスペースがあれば、区切った語のすべてを含む絵文字に絞る (AND 検索)。
  * 返る項目は元の (正規化していない) 一覧の項目である。
  */
 export function searchEmojiNormalized(query: string | null, emojiDb: EmojiDef[], max = 30): EmojiDef[] {
 	if (!query) return [];
 
-	return searchEmoji(normalizeForEmojiSearch(query), getNormalizedEmojiDb(emojiDb), max)
-		.map(x => originalOf.get(x) ?? x);
+	const normalizedQuery = normalizeForEmojiSearch(query);
+	const normalizedDb = getNormalizedEmojiDb(emojiDb);
+	const keywords = normalizedQuery.split(' ').filter(keyword => keyword !== '');
+	const results = keywords.length >= 2
+		? searchEmojiAnd(keywords, normalizedDb, max)
+		: searchEmoji(keywords[0] ?? normalizedQuery, normalizedDb, max);
+	return results.map(x => originalOf.get(x) ?? x);
+}
+
+/**
+ * 入力補助 (`:` に続けて打った文字列) で、絵文字の候補を開いておくかどうか。
+ * スペースで区切って AND 検索できるよう、スペース 1 つでは閉じない。
+ * `:` の直後がスペースのとき (`注意: …` など普通の文章) は開かず、スペースが 2 つ続いたら閉じる。
+ */
+export function shouldOpenEmojiSuggestion(query: string): boolean {
+	return !query.startsWith(' ') && !query.includes('  ');
 }

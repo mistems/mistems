@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { EmojiDef } from '@/utility/search-emoji.js';
-import { normalizeForEmojiSearch, searchEmojiNormalized, toKanaToHira } from '@/utility/kana-to-hira.js';
+import { normalizeForEmojiSearch, searchEmojiNormalized, shouldOpenEmojiSuggestion, toKanaToHira } from '@/utility/kana-to-hira.js';
 
 describe('toKanaToHira', () => {
 	test('カタカナをひらがなにする', () => {
@@ -98,5 +98,73 @@ describe('searchEmojiNormalized', () => {
 	test('検索語が空なら空', () => {
 		expect(searchEmojiNormalized('', emojiDb)).toEqual([]);
 		expect(searchEmojiNormalized(null, emojiDb)).toEqual([]);
+	});
+});
+
+describe('searchEmojiNormalized の AND 検索', () => {
+	const emojiDb: EmojiDef[] = [
+		{ name: 'cat_face', emoji: ':cat_face:', isCustomEmoji: true },
+		{ name: 'ねこ', aliasOf: 'cat_face', emoji: ':cat_face:', isCustomEmoji: true },
+		{ name: 'かお', aliasOf: 'cat_face', emoji: ':cat_face:', isCustomEmoji: true },
+		{ name: 'cat_tail', emoji: ':cat_tail:', isCustomEmoji: true },
+		{ name: 'ねこ', aliasOf: 'cat_tail', emoji: ':cat_tail:', isCustomEmoji: true },
+		{ name: 'dog_face', emoji: ':dog_face:', isCustomEmoji: true },
+		{ name: 'かお', aliasOf: 'dog_face', emoji: ':dog_face:', isCustomEmoji: true },
+	];
+	const emojisOf = (q: string, max?: number) => searchEmojiNormalized(q, emojiDb, max).map(x => x.emoji);
+
+	test('すべての語を含む絵文字だけに絞る（名前とエイリアスにまたがってよい）', () => {
+		expect(emojisOf('ねこ かお')).toEqual([':cat_face:']);
+		expect(emojisOf('cat かお')).toEqual([':cat_face:']);
+	});
+
+	test('語の順序に依らない', () => {
+		expect(emojisOf('かお ねこ')).toEqual([':cat_face:']);
+	});
+
+	test('全角スペース・カタカナでも区切って絞る', () => {
+		expect(emojisOf('ネコ　カオ')).toEqual([':cat_face:']);
+	});
+
+	test('1 語だけ当たる絵文字は出ない', () => {
+		expect(emojisOf('ねこ かお')).not.toContain(':cat_tail:');
+		expect(emojisOf('ねこ かお')).not.toContain(':dog_face:');
+	});
+
+	test('返る項目は代表の項目（エイリアスでない項目）', () => {
+		const found = searchEmojiNormalized('ねこ かお', emojiDb)[0];
+		expect(found.name).toBe('cat_face');
+		expect(found.aliasOf).toBeUndefined();
+	});
+
+	test('件数は max を超えない', () => {
+		expect(emojisOf('ねこ', 1)).toHaveLength(1);
+		expect(emojisOf('_ face', 1)).toHaveLength(1);
+	});
+
+	test('余分なスペースは無視する', () => {
+		expect(emojisOf('ねこ かお ')).toEqual([':cat_face:']);
+	});
+});
+
+describe('shouldOpenEmojiSuggestion', () => {
+	test('普通の検索語や空なら開く', () => {
+		expect(shouldOpenEmojiSuggestion('')).toBe(true);
+		expect(shouldOpenEmojiSuggestion('neko')).toBe(true);
+	});
+
+	test('スペース 1 つで区切った検索語なら開いたまま', () => {
+		expect(shouldOpenEmojiSuggestion('neko inu')).toBe(true);
+		expect(shouldOpenEmojiSuggestion('neko ')).toBe(true);
+	});
+
+	test('コロンの直後がスペースなら開かない', () => {
+		expect(shouldOpenEmojiSuggestion(' neko')).toBe(false);
+		expect(shouldOpenEmojiSuggestion(' ')).toBe(false);
+	});
+
+	test('スペースが 2 つ続いたら閉じる', () => {
+		expect(shouldOpenEmojiSuggestion('neko  ')).toBe(false);
+		expect(shouldOpenEmojiSuggestion('neko  inu')).toBe(false);
 	});
 });

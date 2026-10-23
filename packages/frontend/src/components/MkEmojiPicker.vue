@@ -34,6 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkCustomEmoji class="emoji" :name="emoji.name" :fallbackToImage="true"/>
 				</button>
 			</div>
+			<!-- MISTEMS: 終端付近で続きを読み込む目印。v-appear は描画時のコールバックしか使わないので、件数をキーにして作り直す -->
+			<div v-if="hasMoreCustom" :key="`sentinel-custom-${customLimit}`" v-appear="loadMoreCustom" class="sentinel" aria-hidden="true"></div>
 			<div v-if="searchResultUnicode.length > 0" class="body">
 				<button
 					v-for="emoji in searchResultUnicode"
@@ -46,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkEmoji class="emoji" :emoji="emoji.char"/>
 				</button>
 			</div>
+			<div v-if="hasMoreUnicode" :key="`sentinel-unicode-${unicodeLimit}`" v-appear="loadMoreUnicode" class="sentinel" aria-hidden="true"></div>
 		</section>
 
 		<div v-if="tab === 'index'" class="group index">
@@ -188,6 +191,12 @@ const height = computed(() => emojiPickerHeight.value);
 const q = ref<string>('');
 const searchResultCustom = ref<Misskey.entities.EmojiSimple[]>([]);
 const searchResultUnicode = ref<UnicodeEmojiDef[]>([]);
+// MISTEMS: 検索結果はカスタム・Unicode それぞれ SEARCH_PAGE_SIZE 件ずつ、終端付近までスクロールしたら続きを読み込む
+const SEARCH_PAGE_SIZE = 100;
+const customLimit = ref(SEARCH_PAGE_SIZE);
+const unicodeLimit = ref(SEARCH_PAGE_SIZE);
+const hasMoreCustom = computed(() => searchResultCustom.value.length >= customLimit.value);
+const hasMoreUnicode = computed(() => searchResultUnicode.value.length >= unicodeLimit.value);
 const tab = ref<'index' | 'custom' | 'unicode' | 'tags'>('index');
 
 const customEmojiFolderRoot: CustomEmojiFolderTree = { value: '', category: '', children: [] };
@@ -219,9 +228,7 @@ customEmojiCategories.value.forEach(ec => {
 
 parseAndMergeCategories('', customEmojiFolderRoot);
 
-watch(q, () => {
-	if (emojisEl.value) emojisEl.value.scrollTop = 0;
-
+function runSearch() {
 	if (q.value === '') {
 		searchResultCustom.value = [];
 		searchResultUnicode.value = [];
@@ -232,7 +239,7 @@ watch(q, () => {
 	const newQ = normalizeForEmojiSearch(q.value).replace(/:/g, '');
 
 	const searchCustom = () => {
-		const max = 100;
+		const max = customLimit.value;
 		const emojis = customEmojis.value;
 		const matches = new Set<Misskey.entities.EmojiSimple>();
 
@@ -308,7 +315,7 @@ watch(q, () => {
 	};
 
 	const searchUnicode = () => {
-		const max = 100;
+		const max = unicodeLimit.value;
 		const emojis = emojilist;
 		const matches = new Set<UnicodeEmojiDef>();
 
@@ -375,7 +382,24 @@ watch(q, () => {
 
 	searchResultCustom.value = Array.from(searchCustom());
 	searchResultUnicode.value = Array.from(searchUnicode());
+}
+
+watch(q, () => {
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+	customLimit.value = SEARCH_PAGE_SIZE;
+	unicodeLimit.value = SEARCH_PAGE_SIZE;
+	runSearch();
 });
+
+function loadMoreCustom() {
+	customLimit.value += SEARCH_PAGE_SIZE;
+	runSearch();
+}
+
+function loadMoreUnicode() {
+	unicodeLimit.value += SEARCH_PAGE_SIZE;
+	runSearch();
+}
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {
 	return !props.targetNote || checkReactionPermissions($i!, props.targetNote, emoji);
@@ -797,6 +821,10 @@ defineExpose({
 
 				&:empty {
 					display: none;
+				}
+
+				> .sentinel {
+					height: 1px;
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import { toASCII } from 'punycode.js';
 import type { Ref } from 'vue';
 import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
 import { popup } from '@/os.js';
+import { shouldOpenEmojiSuggestion } from '@/utility/kana-to-hira.js';
 
 export type SuggestionType = 'user' | 'hashtag' | 'emoji' | 'mfmTag' | 'mfmParam';
 
@@ -153,7 +154,8 @@ export class Autocomplete {
 
 		if (isEmoji && !opened && this.onlyType.includes('emoji')) {
 			const emoji = text.substring(emojiIndex + 1);
-			if (!emoji.includes(' ')) {
+			// MISTEMS: スペース区切りで AND 検索できるよう、スペース 1 つでは閉じない (2 つ続いたら閉じる)
+			if (shouldOpenEmojiSuggestion(emoji)) {
 				this.open('emoji', emoji);
 				opened = true;
 			}

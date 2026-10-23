@@ -29,6 +29,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span v-else v-text="emoji.name"></span>
 			<span v-if="emoji.aliasOf" :class="$style.emojiAlias">({{ emoji.aliasOf }})</span>
 		</li>
+		<!-- MISTEMS: 終端付近で続きを読み込む目印。v-appear は描画時のコールバックしか使わないので、件数をキーにして作り直す -->
+		<li v-if="hasMoreEmojis" :key="`sentinel-${emojiLimit}`" v-appear="loadMoreEmojis" data-sentinel aria-hidden="true" :class="$style.sentinel"></li>
 	</ol>
 	<ol v-else-if="type === 'mfmTag' && mfmTags.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="tag in mfmTags" tabindex="-1" :class="$style.item" @click="complete(type, tag)" @keydown="onKeydown">
@@ -190,6 +192,10 @@ const fetching = ref(true);
 const users = ref<Misskey.entities.User[]>([]);
 const hashtags = ref<string[]>([]);
 const emojis = ref<EmojiDef[]>([]);
+// MISTEMS: 絵文字の候補は 1 回に EMOJI_PAGE_SIZE 件ずつ、終端付近までスクロールしたら続きを読み込む
+const EMOJI_PAGE_SIZE = 30;
+const emojiLimit = ref(EMOJI_PAGE_SIZE);
+const hasMoreEmojis = computed(() => props.type === 'emoji' && emojis.value.length >= emojiLimit.value);
 const items = ref<Element[] | HTMLCollection>([]);
 const mfmTags = ref<string[]>([]);
 const mfmParams = ref<string[]>([]);
@@ -226,6 +232,12 @@ function setPosition() {
 		rootEl.value.style.top = props.y + 'px';
 		rootEl.value.style.marginTop = 'calc(1em + 8px)';
 	}
+}
+
+function loadMoreEmojis() {
+	if (props.type !== 'emoji' || typeof props.q !== 'string' || props.q === '') return;
+	emojiLimit.value += EMOJI_PAGE_SIZE;
+	emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
 }
 
 function exec() {
@@ -292,8 +304,12 @@ function exec() {
 			return;
 		}
 
-		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く
-		emojis.value = searchEmojiNormalized(props.q, emojiDb.value);
+		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。スペース区切りなら AND 検索
+		emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
+		// スペースを含むのに候補がない = 絵文字を探していない普通の文章 (`12:30 の会議` など) なので閉じる
+		if (props.q.includes(' ') && emojis.value.length === 0) {
+			props.close();
+		}
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {
@@ -404,7 +420,8 @@ function chooseUser() {
 
 onUpdated(() => {
 	setPosition();
-	items.value = suggests.value?.children ?? [];
+	// 追加読み込みの目印はキーボードでの選択の対象にしない
+	items.value = Array.from(suggests.value?.children ?? []).filter(el => !el.hasAttribute('data-sentinel'));
 });
 
 onMounted(() => {
@@ -418,6 +435,7 @@ onMounted(() => {
 		exec();
 
 		watch(() => props.q, () => {
+			emojiLimit.value = EMOJI_PAGE_SIZE;
 			nextTick(() => {
 				exec();
 			});
@@ -512,6 +530,11 @@ onBeforeUnmount(() => {
 
 .emojiName {
 	flex-shrink: 1;
+}
+
+.sentinel {
+	height: 1px;
+	padding: 0;
 }
 
 .emojiAlias {
