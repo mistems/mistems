@@ -126,8 +126,35 @@ fulltextSearch:
   # - sqlPgroonga
   #   Use pgroonga.
   #   You need to install pgroonga and configure it as a PostgreSQL extension.
-  #   In addition to the above, you need to create a pgroonga index on the text column of the note table.
-  #   see: https://pgroonga.github.io/tutorial/
+  #   In addition to the above, you need to create two pgroonga indexes
+  #   so that both the normal text search and the "text + CW" search option use the index.
+  #   Both indexes must share the same tokenizer and normalizers; TokenMecab is recommended
+  #   for Japanese-heavy instances (requires mecab + dictionary on the PostgreSQL host).
+  #
+  #   The normalizers below normalize NFKC width / case / compatibility equivalents but
+  #   DO NOT unify hiragana<->katakana (unify_kana=false) to avoid hurting exact match
+  #   precision. Blanks are removed from the index to ignore stray spacing.
+  #
+  #     CREATE INDEX pgroonga_note_text_index
+  #       ON note USING pgroonga (text)
+  #       WITH (
+  #         tokenizer  = 'TokenMecab',
+  #         normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+  #       );
+  #     CREATE INDEX pgroonga_note_text_cw_index
+  #       ON note USING pgroonga ((coalesce(cw, '') || coalesce(text, '')))
+  #       WITH (
+  #         tokenizer  = 'TokenMecab',
+  #         normalizers = 'NormalizerNFKC130("unify_kana", false), NormalizerRemoveBlank'
+  #       );
+  #
+  #   When the dictionary or normalizer changes, REINDEX is required to rebuild posting
+  #   lists with the new analysis:
+  #     REINDEX INDEX CONCURRENTLY pgroonga_note_text_index;
+  #     REINDEX INDEX CONCURRENTLY pgroonga_note_text_cw_index;
+  #
+  #   For NEologd dictionary integration, see docs/search-pgroonga-neologd.md
+  #   see also: https://pgroonga.github.io/tutorial/
   # - meilisearch
   #   Use Meilisearch.
   #   You need to install Meilisearch and configure.
