@@ -1,8 +1,5 @@
-# 本番に同居させるフロントエンド variant の一覧。
-# サーバーでのデプロイ時に scripts/build-frontend-variants.mjs がビルドする。
-# 切り替えは管理画面の /admin/frontend-variants から行う。詳しくは docs/frontend-variants.md を参照。
-#
-# - name: emoji-drop                   # variant 名（英数字・ハイフン・アンダースコア）
-#   branch: feat/emoji-drop-area       # remote（FRONTEND_VARIANTS_REMOTE、省略時 origin）上のブランチ名
-#   mode: merge                        # merge（既定）: HEAD に squash merge してビルド / as-is: ブランチをそのままビルド
-[]
+# main-統合.sh が生成する。直接編集せず main-統合.sh を直すこと。
+- name: clips-pagination
+  branch: fix-clips-pagination
+# backend 変更あり (新 API) のため除外: claude/renote-lock-feature-7J0NA
+# backend 変更と fork 側の別変更が混在するため除外: claude/issue-26-20260510-1119, claude/misskey-pr-34-continue-5YwvL, claude/remote-emoji-refetch-2nbU9
