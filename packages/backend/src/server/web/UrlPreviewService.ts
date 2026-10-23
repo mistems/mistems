@@ -79,7 +79,7 @@ export class UrlPreviewService implements OnApplicationShutdown {
 			};
 		}
 
-		this.logger.info(this.meta.urlPreviewSummaryProxyUrl
+		this.logger.debug(this.meta.urlPreviewSummaryProxyUrl
 			? `(Proxy) Getting preview of ${url}@${lang} ...`
 			: `Getting preview of ${url}@${lang} ...`);
 
@@ -108,7 +108,7 @@ export class UrlPreviewService implements OnApplicationShutdown {
 				throw new Error('Invalid summary');
 			}
 
-			this.logger.succ(`Got preview of ${url}: ${summary.title}`);
+			this.logger.debug(`Got preview of ${url}: ${summary.title}`);
 
 			summary.icon = this.wrap(summary.icon);
 			summary.thumbnail = this.wrap(summary.thumbnail);

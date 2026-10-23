@@ -11,7 +11,7 @@ import type Logger from '@/logger.js';
 import { bindThis } from '@/decorators.js';
 import { TelemetryService } from '@/core/telemetry/TelemetryService.js';
 import { CheckModeratorsActivityProcessorService } from '@/queue/processors/CheckModeratorsActivityProcessorService.js';
-import { runQueueJobWithTraceContext } from './queue-job-runner.js';
+import { runQueueJob } from './queue-job-runner.js';
 import { UserWebhookDeliverProcessorService } from './processors/UserWebhookDeliverProcessorService.js';
 import { SystemWebhookDeliverProcessorService } from './processors/SystemWebhookDeliverProcessorService.js';
 import { EndedPollNotificationProcessorService } from './processors/EndedPollNotificationProcessorService.js';
@@ -159,8 +159,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			};
 		}
 
-		// 以下の各 Worker は job.data に保存された enqueue 元の trace context を復元し、
-		// ジョブの実処理全体を Link または parent の worker span で囲む。
+		// 以下の各 Worker はジョブの実処理全体を worker span で囲む。
 		//#region system
 		{
 			const processer = (job: Bull.Job) => {
@@ -180,13 +179,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('system');
 
 			this.systemQueueWorker = new Bull.Worker(QUEUE.SYSTEM, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: System: ' + job.name,
-					job.data,
 					() => processer(job) as Promise<void>,
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: System: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -235,13 +234,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('db');
 
 			this.dbQueueWorker = new Bull.Worker(QUEUE.DB, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: DB: ' + job.name,
-					job.data,
 					() => processer(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: DB: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -266,13 +265,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('deliver');
 
 			this.deliverQueueWorker = new Bull.Worker(QUEUE.DELIVER, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: Deliver',
-					job.data,
 					() => this.deliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Deliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -305,14 +304,14 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('inbox');
 
 			this.inboxQueueWorker = new Bull.Worker(QUEUE.INBOX, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: Inbox',
-					job.data,
 					() => this.inboxProcessorService.process(job),
 					err => {
 						const activityId = job.data.activity ? job.data.activity.id : 'none';
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} activity=${activityId}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} activity=${activityId}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Inbox: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -345,13 +344,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('user-webhook');
 
 			this.userWebhookDeliverQueueWorker = new Bull.Worker(QUEUE.USER_WEBHOOK_DELIVER, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: UserWebhookDeliver',
-					job.data,
 					() => this.userWebhookDeliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: UserWebhookDeliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -384,13 +383,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('system-webhook');
 
 			this.systemWebhookDeliverQueueWorker = new Bull.Worker(QUEUE.SYSTEM_WEBHOOK_DELIVER, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: SystemWebhookDeliver',
-					job.data,
 					() => this.systemWebhookDeliverProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`, { e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) ${getJobInfo(job)} to=${job.data.to}`);
+						logger.debug(`failed job detail id=${job.id}`, { e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: SystemWebhookDeliver: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -432,13 +431,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('relationship');
 
 			this.relationshipQueueWorker = new Bull.Worker(QUEUE.RELATIONSHIP, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: Relationship: ' + job.name,
-					job.data,
 					() => processer(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: Relationship: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -475,13 +474,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('objectStorage');
 
 			this.objectStorageQueueWorker = new Bull.Worker(QUEUE.OBJECT_STORAGE, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: ObjectStorage: ' + job.name,
-					job.data,
 					() => processer(job) as Promise<void>,
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: ObjectStorage: ${job.name}: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -507,13 +506,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('ended-poll-notification');
 
 			this.endedPollNotificationQueueWorker = new Bull.Worker(QUEUE.ENDED_POLL_NOTIFICATION, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: EndedPollNotification',
-					job.data,
 					() => this.endedPollNotificationProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: EndedPollNotification: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
@@ -532,13 +531,13 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			const logger = this.logger.createSubLogger('post-scheduled-note');
 
 			this.postScheduledNoteQueueWorker = new Bull.Worker(QUEUE.POST_SCHEDULED_NOTE, (job) => {
-				return runQueueJobWithTraceContext(
+				return runQueueJob(
 					this.telemetryService,
 					'Queue: PostScheduledNote',
-					job.data,
 					() => this.postScheduledNoteProcessorService.process(job),
 					err => {
-						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`);
+						logger.debug(`failed job detail id=${job.id}`, { job: renderJob(job), e: renderError(err) });
 						this.telemetryService.captureMessage(`Queue: PostScheduledNote: ${err.name}: ${err.message}`, {
 							level: 'error',
 							extra: { job, err },
