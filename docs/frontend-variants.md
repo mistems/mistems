@@ -13,11 +13,11 @@ variant を選択中の HTML には、左下にバッジ「FE: <name> ✕」が�
 ## variant の載せ方
 
 1. Mac で機能ブランチを push します。
-2. mistems-main の `frontend-variants.yml` に variant を追記して push します。
+2. `main-統合.sh` の中で `frontend-variants.yml` を書き出している箇所に variant を追記し、統合し直します。MISTEMS では一覧を `main-統合.sh` で管理しているので、`frontend-variants.yml` を直接編集しないでください。
 
 ```yaml
 - name: emoji-drop                   # 英数字・ハイフン・アンダースコア
-  branch: riin/feat/emoji-drop-area  # origin にあるブランチ
+  branch: feat/emoji-drop-area       # remote 上のブランチ名
   mode: merge                        # 省略すると merge
 ```
 
@@ -31,8 +31,10 @@ variant を選択中の HTML には、左下にバッジ「FE: <name> ✕」が�
 サーバーのデプロイ手順で、`pnpm build` の後に次を 1 行実行し、その直後にプロセスを再起動します。
 
 ```bash
-node scripts/build-frontend-variants.mjs
+FRONTEND_VARIANTS_REMOTE=riin node scripts/build-frontend-variants.mjs
 ```
+
+`FRONTEND_VARIANTS_REMOTE` には、サーバーの clone で fruitriin/misskey を指している remote の名前を指定します。省略すると `origin` を使います。
 
 再起動を忘れると、backend が variant の一覧を古いまま保持します。必ずスクリプトの直後に再起動してください。
 
@@ -49,14 +51,14 @@ node scripts/build-frontend-variants.mjs
 
 ```json
 {
-  "variants": [{ "name": "emoji-drop", "branch": "riin/feat/emoji-drop-area", "mode": "merge" }],
-  "skipped": [{ "name": "foo", "branch": "riin/feat/foo", "reason": "..." }]
+  "variants": [{ "name": "emoji-drop", "branch": "feat/emoji-drop-area", "mode": "merge" }],
+  "skipped": [{ "name": "foo", "branch": "feat/foo", "reason": "..." }]
 }
 ```
 
 `skipped` の `reason` は決まった文言だけです。詳しいエラー内容はデプロイのログにだけ出力されます。ビルドできなかった理由を調べるときは、デプロイのログを確認してください。
 
-環境変数 `FRONTEND_VARIANTS_NO_FETCH=1` を付けると `git fetch --prune` を省略します。これはローカルでの動作確認専用です。本番では付けないでください。
+環境変数 `FRONTEND_VARIANTS_NO_FETCH=1` を付けると、`git fetch` を省略します（全体の `--prune` 付きの fetch も、variant ごとの fetch も省略します）。これはローカルでの動作確認専用です。本番では付けないでください。
 
 ## 切り替え方
 
@@ -73,8 +75,8 @@ variant の一覧と現在の選択を返す公開エンドポイントです。
 ```json
 {
   "current": "emoji-drop",
-  "variants": [{ "name": "emoji-drop", "branch": "riin/feat/emoji-drop-area", "mode": "merge" }],
-  "skipped": [{ "name": "foo", "branch": "riin/feat/foo", "reason": "..." }]
+  "variants": [{ "name": "emoji-drop", "branch": "feat/emoji-drop-area", "mode": "merge" }],
+  "skipped": [{ "name": "foo", "branch": "feat/foo", "reason": "..." }]
 }
 ```
 

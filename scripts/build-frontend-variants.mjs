@@ -9,7 +9,8 @@
 // _variants.json の reason は公開 API で返るため、決まった文言だけにする。詳細はデプロイのログにだけ出す。
 // どこで失敗しても終了コード 0 で終わる（デプロイを止めない）。
 //
-// 環境変数 FRONTEND_VARIANTS_NO_FETCH=1 を指定すると `git fetch origin --prune` と variant ごとの fetch を省略する（手元での検証用）。
+// 環境変数 FRONTEND_VARIANTS_REMOTE で、ブランチを取ってくる remote の名前を指定できる（省略時は origin）。
+// 環境変数 FRONTEND_VARIANTS_NO_FETCH=1 を指定すると `git fetch <remote> --prune` と variant ごとの fetch を省略する（手元での検証用）。
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -27,8 +28,16 @@ const oldRoot = join(repoRoot, 'frontend-variants.old');
 const git = (args, cwd = repoRoot) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 const run = (cmd, args, cwd, timeout) => execFileSync(cmd, args, { cwd, stdio: 'inherit', timeout });
 
+// git のオプションと誤認されないよう、先頭の '-' を禁止する
+const REMOTE_RE = /^[A-Za-z0-9._][A-Za-z0-9._-]*$/;
+const requestedRemote = process.env.FRONTEND_VARIANTS_REMOTE || 'origin';
+const remote = REMOTE_RE.test(requestedRemote) ? requestedRemote : 'origin';
+if (remote !== requestedRemote) {
+	console.error(`[frontend-variants] FRONTEND_VARIANTS_REMOTE に使えない名前が指定されたので origin を使う: ${requestedRemote}`);
+}
+
 // 認証待ちでデプロイが固まらないよう、対話プロンプトを禁止して時間も制限する
-const gitFetch = (args) => execFileSync('git', ['fetch', 'origin', ...args], {
+const gitFetch = (args) => execFileSync('git', ['fetch', remote, ...args], {
 	cwd: repoRoot,
 	stdio: ['ignore', 'pipe', 'pipe'],
 	env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
@@ -66,7 +75,7 @@ if (noFetch) {
 	try {
 		gitFetch(['--prune']);
 	} catch (e) {
-		console.warn(`[frontend-variants] git fetch に失敗したので、手元の origin/* で続ける: ${describeError(e)}`);
+		console.warn(`[frontend-variants] git fetch に失敗したので、手元の ${remote}/* で続ける: ${describeError(e)}`);
 	}
 }
 
@@ -89,12 +98,12 @@ try {
 
 for (const v of prepared ? variants : []) {
 	const wt = join(workRoot, v.name);
-	const remoteRef = `origin/${v.branch}`;
+	const remoteRef = `${remote}/${v.branch}`;
 	console.log(`[frontend-variants] ${v.name}: ${remoteRef} (${v.mode})`);
 	try {
 		if (!noFetch) {
 			try {
-				gitFetch([`+refs/heads/${v.branch}:refs/remotes/origin/${v.branch}`]);
+				gitFetch([`+refs/heads/${v.branch}:refs/remotes/${remote}/${v.branch}`]);
 			} catch (e) {
 				console.warn(`[frontend-variants] ${v.name}: ブランチの fetch に失敗したので、手元の ref で続ける: ${describeError(e)}`);
 			}
