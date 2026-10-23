@@ -52,14 +52,15 @@ import { char2twemojiFilePath, char2fluentEmojiFilePath } from '@@/js/emoji-base
 import { MFM_TAGS, MFM_PARAMS } from '@@/js/const.js';
 import type { EmojiDef } from '@/utility/search-emoji.js';
 import { elementContains } from '@/utility/element-contains.js';
-import { acct } from '@/filters/user.js';
+import { acct } from '@@/js/user.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { customEmojis } from '@/custom-emojis.js';
-import { searchEmoji, searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiNormalized } from '@/utility/kana-to-hira.js';
 import { prefer } from '@/preferences.js';
 
 export type CompleteInfo = {
@@ -291,7 +292,8 @@ function exec() {
 			return;
 		}
 
-		emojis.value = searchEmoji(props.q, emojiDb.value);
+		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く
+		emojis.value = searchEmojiNormalized(props.q, emojiDb.value);
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {

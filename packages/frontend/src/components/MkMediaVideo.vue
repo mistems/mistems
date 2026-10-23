@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</button>
 
-	<div v-else :class="$style.videoRoot" @pointerup="emit('mediaClick', $event)">
+	<div v-else :class="$style.videoRoot" @click="emit('mediaClick', $event)">
 		<img
 			v-if="video.thumbnailUrl"
 			:class="$style.video"
@@ -41,8 +41,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i class="ti ti-player-play"></i>
 			</div>
 		</div>
-		<button :class="[$style.menu, $style.menuBottom]" class="_button" @click.stop="showMenu" @pointerup.stop><i class="ti ti-dots" style="vertical-align: middle;" aria-hidden="true"></i></button>
-		<button :class="[$style.menu, $style.menuTop]" class="_button" @click.stop="hide = true" @pointerup.stop><i class="ti ti-eye-off" style="vertical-align: middle;" aria-hidden="true"></i></button>
+		<button :class="[$style.menu, $style.menuBottom]" class="_button" @click.stop="showMenu"><i class="ti ti-dots" style="vertical-align: middle;" aria-hidden="true"></i></button>
+		<button :class="[$style.menu, $style.menuTop]" class="_button" @click.stop="hide = true"><i class="ti ti-eye-off" style="vertical-align: middle;" aria-hidden="true"></i></button>
 	</div>
 </div>
 </template>
@@ -50,6 +50,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { ref } from 'vue';
 import * as Misskey from 'misskey-js';
+import type { MediaComponentExposes } from '@/types/media-component.js';
 import bytes from '@/filters/bytes.js';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
@@ -83,6 +84,10 @@ function showMenu(ev: PointerEvent) {
 function onContextmenu(ev: PointerEvent) {
 	os.contextMenu(getFileMenu(props.video, (newHide) => { hide.value = newHide; }), ev);
 }
+
+defineExpose<MediaComponentExposes>({
+	isRevealed: () => !hide.value,
+});
 </script>
 
 <style lang="scss" module>
