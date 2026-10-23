@@ -37,7 +37,7 @@ import MkButton from '@/components/MkButton.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkFoldableSection from '@/components/MkFoldableSection.vue';
 import { customEmojis, customEmojiCategories } from '@/custom-emojis.js';
-import { toKanaToHira } from '@/utility/kana-to-hira.js';
+import { normalizeForEmojiSearch } from '@/utility/kana-to-hira.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 
@@ -57,9 +57,9 @@ function search() {
 			queryarry.includes(`:${emoji.name}:`),
 		);
 	} else {
-		// MISTEMS: カスタム絵文字のエイリアスはひらがな・小文字にそろえてあるので、検索語もそろえて比べる
-		const normalizedQ = toKanaToHira(q.value.toLowerCase());
-		searchEmojis.value = customEmojis.value.filter(emoji => emoji.name.includes(q.value) || emoji.aliases.includes(q.value) || emoji.aliases.includes(normalizedQ));
+		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに比べる (比べる両側に同じ正規化をかける)
+		const normalizedQ = normalizeForEmojiSearch(q.value);
+		searchEmojis.value = customEmojis.value.filter(emoji => normalizeForEmojiSearch(emoji.name).includes(normalizedQ) || emoji.aliases.some(alias => normalizeForEmojiSearch(alias) === normalizedQ));
 	}
 }
 

@@ -60,7 +60,7 @@ import { i18n } from '@/i18n.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { customEmojis } from '@/custom-emojis.js';
 import { searchEmojiExact } from '@/utility/search-emoji.js';
-import { searchEmojiKanaInsensitive } from '@/utility/kana-to-hira.js';
+import { searchEmojiNormalized } from '@/utility/kana-to-hira.js';
 import { prefer } from '@/preferences.js';
 
 export type CompleteInfo = {
@@ -292,8 +292,8 @@ function exec() {
 			return;
 		}
 
-		// MISTEMS: カスタム絵文字のエイリアスはひらがなにそろえてあるので、カタカナの検索語でも当たるようにする
-		emojis.value = searchEmojiKanaInsensitive(props.q, emojiDb.value);
+		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く
+		emojis.value = searchEmojiNormalized(props.q, emojiDb.value);
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {

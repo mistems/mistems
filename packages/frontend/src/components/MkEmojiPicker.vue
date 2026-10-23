@@ -137,6 +137,7 @@ import { deviceKind } from '@/utility/device-kind.js';
 import { i18n } from '@/i18n.js';
 import { store } from '@/store.js';
 import { customEmojiCategories, customEmojis, customEmojisMap } from '@/custom-emojis.js';
+import { normalizeForEmojiSearch } from '@/utility/kana-to-hira.js';
 import { $i } from '@/i.js';
 import { checkReactionPermissions } from '@/utility/check-reaction-permissions.js';
 import { prefer } from '@/preferences.js';
@@ -218,13 +219,6 @@ customEmojiCategories.value.forEach(ec => {
 
 parseAndMergeCategories('', customEmojiFolderRoot);
 
-function toKanaToHira(str: string): string {
-	return str.replace(/[\u30a1-\u30f6]/g, (match) => {
-		const chr = match.charCodeAt(0) - 0x60;
-		return String.fromCharCode(chr);
-	});
-}
-
 watch(q, () => {
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 
@@ -234,14 +228,15 @@ watch(q, () => {
 		return;
 	}
 
-	const newQ = toKanaToHira(q.value.replace(/:/g, '').toLowerCase());
+	// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。比べられる側にも同じ正規化をかける
+	const newQ = normalizeForEmojiSearch(q.value).replace(/:/g, '');
 
 	const searchCustom = () => {
 		const max = 100;
 		const emojis = customEmojis.value;
 		const matches = new Set<Misskey.entities.EmojiSimple>();
 
-		const exactMatch = emojis.find(emoji => emoji.name === newQ);
+		const exactMatch = emojis.find(emoji => normalizeForEmojiSearch(emoji.name) === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
 		if (newQ.includes(' ')) { // AND検索
@@ -249,7 +244,7 @@ watch(q, () => {
 
 			// 名前にキーワードが含まれている
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -258,7 +253,7 @@ watch(q, () => {
 
 			// 名前またはエイリアスにキーワードが含まれている
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword) || emoji.aliases.some(alias => alias.includes(keyword)))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword) || emoji.aliases.some(alias => normalizeForEmojiSearch(alias).includes(keyword)))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -270,7 +265,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias === newQ)) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias) === newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -278,7 +273,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.name.startsWith(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).startsWith(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -286,7 +281,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias.startsWith(newQ))) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias).startsWith(newQ))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -294,7 +289,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.name.includes(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).includes(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -302,7 +297,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias.includes(newQ))) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias).includes(newQ))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -317,14 +312,14 @@ watch(q, () => {
 		const emojis = emojilist;
 		const matches = new Set<UnicodeEmojiDef>();
 
-		const exactMatch = emojis.find(emoji => emoji.name === newQ);
+		const exactMatch = emojis.find(emoji => normalizeForEmojiSearch(emoji.name) === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
 		if (newQ.includes(' ')) { // AND検索
 			const keywords = newQ.split(' ');
 
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -333,7 +328,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (keywords.every(keyword => index[emoji.char]?.some(k => k.includes(keyword)))) {
+					if (keywords.every(keyword => index[emoji.char]?.some(k => normalizeForEmojiSearch(k).includes(keyword)))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
@@ -341,7 +336,7 @@ watch(q, () => {
 			}
 		} else {
 			for (const emoji of emojis) {
-				if (emoji.name.startsWith(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).startsWith(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -350,7 +345,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (index[emoji.char]?.some(k => k.startsWith(newQ))) {
+					if (index[emoji.char]?.some(k => normalizeForEmojiSearch(k).startsWith(newQ))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
@@ -358,7 +353,7 @@ watch(q, () => {
 			}
 
 			for (const emoji of emojis) {
-				if (emoji.name.includes(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).includes(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -367,7 +362,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (index[emoji.char]?.some(k => k.includes(newQ))) {
+					if (index[emoji.char]?.some(k => normalizeForEmojiSearch(k).includes(newQ))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
