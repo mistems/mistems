@@ -239,7 +239,14 @@ export default abstract class Chart<T extends Schema> {
 			indices: [{
 				columns: grouped ? ['date', 'group'] : ['date'],
 				unique: true,
-			}],
+			}, ...(grouped ? [{
+				// 「特定 group の最新行」取得 (getLatestLog) が (date, group) だと
+				// 非アクティブな group でインデックス後方全走査になるため、直接シーク用。
+				// TypeORM は複合インデックスの列順を区別せず (date, group) と同一視して
+				// 差分検出できないため、明示的に命名して名前で照合させる
+				name: `IDX_${span === 'hour' ? 'chart' : 'chart_day'}_${camelToSnake(name)}_group_date`,
+				columns: ['group', 'date'],
+			}] : [])],
 			uniques: [{
 				columns: grouped ? ['date', 'group'] : ['date'],
 			}],
