@@ -37,6 +37,7 @@ import MkButton from '@/components/MkButton.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkFoldableSection from '@/components/MkFoldableSection.vue';
 import { customEmojis, customEmojiCategories } from '@/custom-emojis.js';
+import { toKanaToHira } from '@/utility/kana-to-hira.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 
@@ -56,7 +57,9 @@ function search() {
 			queryarry.includes(`:${emoji.name}:`),
 		);
 	} else {
-		searchEmojis.value = customEmojis.value.filter(emoji => emoji.name.includes(q.value) || emoji.aliases.includes(q.value));
+		// MISTEMS: カスタム絵文字のエイリアスはひらがな・小文字にそろえてあるので、検索語もそろえて比べる
+		const normalizedQ = toKanaToHira(q.value.toLowerCase());
+		searchEmojis.value = customEmojis.value.filter(emoji => emoji.name.includes(q.value) || emoji.aliases.includes(q.value) || emoji.aliases.includes(normalizedQ));
 	}
 }
 

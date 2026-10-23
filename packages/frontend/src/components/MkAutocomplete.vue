@@ -59,7 +59,8 @@ import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { customEmojis } from '@/custom-emojis.js';
-import { searchEmoji, searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiKanaInsensitive } from '@/utility/kana-to-hira.js';
 import { prefer } from '@/preferences.js';
 
 export type CompleteInfo = {
@@ -291,7 +292,8 @@ function exec() {
 			return;
 		}
 
-		emojis.value = searchEmoji(props.q, emojiDb.value);
+		// MISTEMS: カスタム絵文字のエイリアスはひらがなにそろえてあるので、カタカナの検索語でも当たるようにする
+		emojis.value = searchEmojiKanaInsensitive(props.q, emojiDb.value);
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {
