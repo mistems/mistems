@@ -13713,4 +13713,34 @@ export interface Locale extends ILocale {
          */
         "exploreDescription": string;
     };
+    "_frontendVariants": {
+        /**
+         * フロントエンド variant
+         */
+        "title": string;
+        /**
+         * ブランチごとにビルドしたフロントエンドを、このブラウザだけで切り替えます。切り替えは Cookie に保存され、他のユーザーには影響しません。
+         */
+        "description": string;
+        /**
+         * 本線
+         */
+        "mainLine": string;
+        /**
+         * 表示中
+         */
+        "current": string;
+        /**
+         * ビルドできなかった variant
+         */
+        "skippedTitle": string;
+        /**
+         * この画面を表示する権限がありません。
+         */
+        "noPermission": string;
+        /**
+         * variant の一覧を読み込めませんでした。
+         */
+        "loadFailed": string;
+    };
 }

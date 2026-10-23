@@ -3669,3 +3669,11 @@ _tlOnboarding:
   ltlTitle: "ローカルタイムライン"
   ltlDescription: "このサーバーにいるユーザー全員の投稿が見られる公開タイムラインを見てみましょう。"
   exploreDescription: "人気のノートやユーザーを見つけて交流をはじめましょう。"
+_frontendVariants:
+  title: "フロントエンド variant"
+  description: "ブランチごとにビルドしたフロントエンドを、このブラウザだけで切り替えます。切り替えは Cookie に保存され、他のユーザーには影響しません。"
+  mainLine: "本線"
+  current: "表示中"
+  skippedTitle: "ビルドできなかった variant"
+  noPermission: "この画面を表示する権限がありません。"
+  loadFailed: "variant の一覧を読み込めませんでした。"

@@ -48,6 +48,8 @@ export type CommonData = MinimumCommonData & {
 	frontendEmbedViteFiles: ViteFiles | null;
 	frontendEmbedBootloaderJs: string | null;
 	frontendEmbedBootloaderCss: string | null;
+	/** 表示中のフロントエンド variant 名。本線なら null */
+	frontendVariant: string | null;
 	metaJson?: string;
 	clientCtxJson?: string;
 };
