@@ -616,7 +616,7 @@ export type paths = {
          * admin/queue/stats
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:admin:emoji*
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:queue*
          */
         post: operations['admin___queue___stats'];
     };
@@ -21879,6 +21879,15 @@ export interface operations {
                     'application/json': components['schemas']['Error'];
                 };
             };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -31194,6 +31203,10 @@ export interface operations {
                      * @default null
                      */
                     channelId?: string | null;
+                    /** @default null */
+                    searchFrom?: string | null;
+                    /** @default null */
+                    withFiles?: boolean | null;
                 };
             };
         };

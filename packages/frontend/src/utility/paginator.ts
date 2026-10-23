@@ -17,8 +17,6 @@ export type MisskeyEntity = {
 	id: string;
 	createdAt: string;
 	_shouldInsertAd_?: boolean;
-	_shouldAnimateIn_?: boolean;
-	_shouldAnimateOut_?: boolean;
 };
 
 type AbsEndpointType = {
@@ -49,6 +47,7 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	canFetchNewer: Ref<boolean>;
 	canSearch: boolean;
 	error: Ref<boolean>;
+	errorDetail: Ref<{ code?: string; id?: string; status?: number } | null>;
 	computedParams: ComputedRef<Misskey.Endpoints[PaginatorCompatibleEndpointPaths]['req'] | null | undefined> | null;
 	initialId: MisskeyEntity['id'] | null;
 	initialDate: number | null;
@@ -90,6 +89,7 @@ export class Paginator<
 	public canFetchNewer = ref(false);
 	public canSearch = false;
 	public error = ref(false);
+	public errorDetail = ref<{ code?: string; id?: string; status?: number } | null>(null);
 	private endpoint: Endpoint;
 	private limit: number;
 	private params: E['req'] | (() => E['req']);
@@ -109,8 +109,6 @@ export class Paginator<
 	private canFetchDetection: 'safe' | 'limit' | null = null;
 	private aheadQueue: T[] = [];
 	private useShallowRef: SRef;
-	private itemRemovalDelay: number | false;
-	private removalTimers = new Map<string, number>();
 
 	// 配列内の要素をどのような順序で並べるか
 	// newest: 新しいものが先頭 (default)
@@ -142,9 +140,6 @@ export class Paginator<
 
 		useShallowRef?: SRef;
 
-		// アイテム削除時にアニメーションを待つ時間 (ms)
-		itemRemovalDelay?: number | false;
-
 		canSearch?: boolean;
 		searchParamName?: keyof E['req'];
 	}) {
@@ -167,7 +162,6 @@ export class Paginator<
 		this.noPaging = props.noPaging ?? false;
 		this.offsetMode = props.offsetMode ?? false;
 		this.canSearch = props.canSearch ?? false;
-		this.itemRemovalDelay = props.itemRemovalDelay ?? false;
 		this.searchParamName = props.searchParamName ?? 'search';
 
 		this.getNewestId = this.getNewestId.bind(this);
@@ -199,7 +193,6 @@ export class Paginator<
 	}
 
 	public async init(): Promise<void> {
-		this.clearRemovalTimers();
 		this.items.value = [];
 		this.aheadQueue = [];
 		this.queuedAheadItemsCount.value = 0;
@@ -222,8 +215,15 @@ export class Paginator<
 			} : {}),
 		};
 
-		const apiRes = (await misskeyApi(this.endpoint, data).catch(_ => {
+		const apiRes = (await misskeyApi(this.endpoint, data).catch(err => {
 			this.error.value = true;
+			this.errorDetail.value = err != null && typeof err === 'object'
+				? {
+					code: (err as { code?: string }).code,
+					id: (err as { id?: string }).id,
+					status: (err as { status?: number }).status,
+				}
+				: null;
 			this.fetching.value = false;
 			return null;
 		})) as T[] | null;
@@ -259,6 +259,7 @@ export class Paginator<
 		}
 
 		this.error.value = false;
+		this.errorDetail.value = null;
 		this.fetching.value = false;
 	}
 
@@ -393,8 +394,6 @@ export class Paginator<
 
 	public prepend(item: T): void {
 		if (this.items.value.some(x => x.id === item.id)) return;
-		item._shouldAnimateIn_ = true;
-		item._shouldAnimateOut_ = false;
 		this.items.value.unshift(item);
 		this.trim(false);
 		if (this.useShallowRef) triggerRef(this.items);
@@ -410,9 +409,6 @@ export class Paginator<
 
 	public releaseQueue(): void {
 		if (this.aheadQueue.length === 0) return; // これやらないと余計なre-renderが走る
-		for (const item of this.aheadQueue) {
-			item._shouldAnimateIn_ = true;
-		}
 		this.unshiftItems(this.aheadQueue);
 		this.aheadQueue = [];
 		this.queuedAheadItemsCount.value = 0;
@@ -421,41 +417,11 @@ export class Paginator<
 	public removeItem(id: string): void {
 		// TODO: queueからも消す
 
-		if (this.itemRemovalDelay === false) {
-			const index = this.items.value.findIndex(x => x.id === id);
-			if (index !== -1) {
-				this.items.value.splice(index, 1);
-				if (this.useShallowRef) triggerRef(this.items);
-			}
-			return;
-		}
-
 		const index = this.items.value.findIndex(x => x.id === id);
 		if (index !== -1) {
+			this.items.value.splice(index, 1);
 			if (this.useShallowRef) triggerRef(this.items);
-
-			const item = this.items.value[index]!;
-			item._shouldAnimateOut_ = true;
-			if (this.useShallowRef) triggerRef(this.items);
-
-			if (this.removalTimers.has(id)) return;
-
-			this.removalTimers.set(id, window.setTimeout(() => {
-				this.removalTimers.delete(id);
-				const currentIndex = this.items.value.findIndex(x => x.id === id);
-				if (currentIndex !== -1) {
-					this.items.value.splice(currentIndex, 1);
-					if (this.useShallowRef) triggerRef(this.items);
-				}
-			}, this.itemRemovalDelay + 20)); // アニメーション終了からやや余裕をもたせる
 		}
-	}
-
-	private clearRemovalTimers(): void {
-		for (const timer of this.removalTimers.values()) {
-			window.clearTimeout(timer);
-		}
-		this.removalTimers.clear();
 	}
 
 	public updateItem(id: string, updater: (item: T) => T): void {

@@ -1421,6 +1421,7 @@ append: "末尾に追加"
 prepend: "先頭に追加"
 urlPreviewSensitiveList: "サムネイルの表示を制限するURL"
 urlPreviewSensitiveListDescription: "スペースで区切るとAND指定になり、改行で区切るとOR指定になります。スラッシュで囲むと正規表現になります。一致した場合、サムネイルが表示されなくなります。"
+pixelatedZoom: "ピクセルアート拡大モード"
 
 _imageEditing:
   _vars:
@@ -3373,11 +3374,15 @@ _search:
   searchScopeLocal: "ローカル"
   searchScopeServer: "サーバー指定"
   searchScopeUser: "ユーザー指定"
+  searchScopeChannel: "チャンネル指定"
   pleaseEnterServerHost: "サーバーのホストを入力してください"
   pleaseSelectUser: "ユーザーを選択してください"
+  pleaseSelectChannel: "チャンネルを選択してください"
+  noFavoritedChannels: "お気に入りに登録したチャンネルがありません"
   serverHostPlaceholder: "例: misskey.example.com"
-  postFrom: "投稿日時from"
-  postTo: "投稿日時to"
+  postFrom: "この日から"
+  postTo: "この日まで"
+  querySyntaxHelp: "スペース区切りで絞り込み (AND)、「A OR B」でいずれか、「-単語」で除外、「\"語句\"」でフレーズ検索"
 
 _serverSetupWizard:
   installCompleted: "Misskeyのインストールが完了しました！"
