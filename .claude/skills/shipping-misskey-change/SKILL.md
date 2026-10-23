@@ -6,7 +6,7 @@ description: Use at every finish moment of a Misskey change, before committing, 
 # shipping-misskey-change
 
 Misskey の変更を commit / PR / merge する直前、または未commitでユーザーへ返す直前の出口。
-規範は [AGENTS.md](../../../AGENTS.md)、ここでは実行方法だけを定める。
+規範は [CLAUDE.md](../../../CLAUDE.md)、ここでは実行方法だけを定める。
 
 ## 1. 検証レベル
 
@@ -35,7 +35,7 @@ script は次を行い、独立した検査を最後まで続けて exit 0 (合�
 - SPDX の結果にかかわらず、`locales/ja-JP.yml` 以外の locale YAML 変更を検査
 
 `SPDX: OK` 後は追加確認しない。
-その他の常設方針は AGENTS.md に従う。
+その他の常設方針は CLAUDE.md に従う。
 
 ## 2. 変更別チェック
 

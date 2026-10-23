@@ -46,7 +46,7 @@ note: Misskey の skills/agents 数は少ないので、MCP / CLAUDE.md / プラ
 - フラグ: 400 行超
 - `.agents/skills/` 等の重複コピーは除外
 
-**Rules** (リポジトリルートの `AGENTS.md` + `.claude/` から `@-import` されるファイル)
+**Rules** (リポジトリルートの `CLAUDE.md` + `.claude/` から `@-import` されるファイル)
 - ファイル単位で token 計算
 - フラグ: 100 行超
 - 同一言語モジュール内の内容重複を検出
