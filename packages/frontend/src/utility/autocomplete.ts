@@ -154,8 +154,11 @@ export class Autocomplete {
 
 		if (isEmoji && !opened && this.onlyType.includes('emoji')) {
 			const emoji = text.substring(emojiIndex + 1);
-			// MISTEMS: スペース区切りで AND 検索できるよう、スペース 1 つでは閉じない (2 つ続いたら閉じる)
-			if (shouldOpenEmojiSuggestion(emoji)) {
+			// MISTEMS: スペース区切りで AND 検索できるよう、スペース 1 つでは閉じない (2 つ続いたら閉じる)。
+			// ただしスペースを含む検索語で開いたままにするのは、絵文字の候補をすでに開いているときだけ。
+			// 一度閉じたら (候補が 0 件など) 開き直さないので、`12:30 の会議` のような文章で開閉を繰り返さない
+			const keepOpenWithSpace = this.suggestion != null && this.currentType === 'emoji';
+			if (shouldOpenEmojiSuggestion(emoji) && (!emoji.includes(' ') || keepOpenWithSpace)) {
 				this.open('emoji', emoji);
 				opened = true;
 			}

@@ -142,6 +142,16 @@ describe('searchEmojiNormalized の AND 検索', () => {
 		expect(emojisOf('_ face', 1)).toHaveLength(1);
 	});
 
+	test('名前だけで全部の語に当たる絵文字を先に並べる', () => {
+		const db: EmojiDef[] = [
+			{ name: 'blob', emoji: ':blob:', isCustomEmoji: true },
+			{ name: 'cat', aliasOf: 'blob', emoji: ':blob:', isCustomEmoji: true },
+			{ name: 'face', aliasOf: 'blob', emoji: ':blob:', isCustomEmoji: true },
+			{ name: 'cat_face', emoji: ':cat_face:', isCustomEmoji: true },
+		];
+		expect(searchEmojiNormalized('cat face', db).map(x => x.emoji)).toEqual([':cat_face:', ':blob:']);
+	});
+
 	test('余分なスペースは無視する', () => {
 		expect(emojisOf('ねこ かお ')).toEqual([':cat_face:']);
 	});

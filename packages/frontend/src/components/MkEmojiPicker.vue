@@ -228,7 +228,7 @@ customEmojiCategories.value.forEach(ec => {
 
 parseAndMergeCategories('', customEmojiFolderRoot);
 
-function runSearch() {
+function runSearch(target: 'both' | 'custom' | 'unicode' = 'both') {
 	if (q.value === '') {
 		searchResultCustom.value = [];
 		searchResultUnicode.value = [];
@@ -380,8 +380,9 @@ function runSearch() {
 		return matches;
 	};
 
-	searchResultCustom.value = Array.from(searchCustom());
-	searchResultUnicode.value = Array.from(searchUnicode());
+	// 追加読み込みでは、読み込んだ側だけを検索し直す
+	if (target !== 'unicode') searchResultCustom.value = Array.from(searchCustom());
+	if (target !== 'custom') searchResultUnicode.value = Array.from(searchUnicode());
 }
 
 watch(q, () => {
@@ -393,12 +394,12 @@ watch(q, () => {
 
 function loadMoreCustom() {
 	customLimit.value += SEARCH_PAGE_SIZE;
-	runSearch();
+	runSearch('custom');
 }
 
 function loadMoreUnicode() {
 	unicodeLimit.value += SEARCH_PAGE_SIZE;
-	runSearch();
+	runSearch('unicode');
 }
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {

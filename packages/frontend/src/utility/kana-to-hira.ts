@@ -56,29 +56,50 @@ function getNormalizedEmojiDb(emojiDb: EmojiDef[]): EmojiDef[] {
 	return normalized;
 }
 
-/**
- * スペースで区切った語のすべてを含む絵文字を返す (AND 検索)。
- * 絵文字ごと (同じ emoji を持つ項目) に名前とエイリアスを集め、各語がそのどれかに含まれればよい。
- * 並びは元の一覧の順で、エイリアスでない項目を代表にする。
- */
-function searchEmojiAnd(keywords: string[], normalizedDb: EmojiDef[], max: number): EmojiDef[] {
-	const groups = new Map<string, { representative: EmojiDef; names: string[] }>();
+type EmojiGroup = { representative: EmojiDef; names: string[] };
+
+// 正規化した一覧ごとに、絵文字 (同じ emoji を持つ項目) ごとのまとまりをキャッシュする
+const emojiGroupsCache = new WeakMap<EmojiDef[], EmojiGroup[]>();
+
+function getEmojiGroups(normalizedDb: EmojiDef[]): EmojiGroup[] {
+	const cached = emojiGroupsCache.get(normalizedDb);
+	if (cached) return cached;
+
+	const groups = new Map<string, EmojiGroup>();
 	for (const x of normalizedDb) {
-		const key = x.emoji;
-		const group = groups.get(key);
+		const group = groups.get(x.emoji);
 		if (group == null) {
-			groups.set(key, { representative: x, names: [x.name] });
+			groups.set(x.emoji, { representative: x, names: [x.name] });
 		} else {
 			group.names.push(x.name);
 			if (group.representative.aliasOf != null && x.aliasOf == null) group.representative = x;
 		}
 	}
+	const result = Array.from(groups.values());
+	emojiGroupsCache.set(normalizedDb, result);
+	return result;
+}
 
+/**
+ * スペースで区切った語のすべてを含む絵文字を返す (AND 検索)。
+ * 絵文字ピッカーの AND 検索と同じく、名前だけで全部の語に当たる絵文字を先に、
+ * 名前とエイリアスのどれかで各語に当たる絵文字を後に並べる (それぞれ元の一覧の順)。代表はエイリアスでない項目。
+ */
+function searchEmojiAnd(keywords: string[], normalizedDb: EmojiDef[], max: number): EmojiDef[] {
+	const groups = getEmojiGroups(normalizedDb);
 	const results: EmojiDef[] = [];
-	for (const { representative, names } of groups.values()) {
-		if (keywords.every(keyword => names.some(name => name.includes(keyword)))) {
-			results.push(representative);
-			if (results.length >= max) break;
+	const added = new Set<EmojiGroup>();
+
+	const passes: ((group: EmojiGroup) => boolean)[] = [
+		group => group.representative.aliasOf == null && keywords.every(keyword => group.representative.name.includes(keyword)),
+		group => keywords.every(keyword => group.names.some(name => name.includes(keyword))),
+	];
+	for (const pass of passes) {
+		for (const group of groups) {
+			if (results.length >= max) return results;
+			if (added.has(group) || !pass(group)) continue;
+			added.add(group);
+			results.push(group.representative);
 		}
 	}
 	return results;

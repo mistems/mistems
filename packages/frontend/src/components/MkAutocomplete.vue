@@ -25,7 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkCustomEmoji v-if="'isCustomEmoji' in emoji && emoji.isCustomEmoji" :name="emoji.emoji" :class="$style.emoji" :fallbackToImage="true"/>
 			<MkEmoji v-else :emoji="emoji.emoji" :class="$style.emoji"/>
 			<!-- eslint-disable-next-line vue/no-v-html -->
-			<span v-if="q != null && typeof q === 'string'" :class="$style.emojiName" v-html="sanitizeHtml(emoji.name.replace(q, `<b>${q}</b>`))"></span>
+			<span v-if="q != null && typeof q === 'string'" :class="$style.emojiName" v-html="sanitizeHtml(highlightKeywords(emoji.name, q))"></span>
 			<span v-else v-text="emoji.name"></span>
 			<span v-if="emoji.aliasOf" :class="$style.emojiAlias">({{ emoji.aliasOf }})</span>
 		</li>
@@ -234,10 +234,23 @@ function setPosition() {
 	}
 }
 
+// 最後に検索した検索語。検索語が変わった直後に古い目印のコールバックが走っても、新しい検索語で上限を増やさないようにする
+let lastEmojiQuery: string | null = null;
+
 function loadMoreEmojis() {
 	if (props.type !== 'emoji' || typeof props.q !== 'string' || props.q === '') return;
+	if (props.q !== lastEmojiQuery) return;
 	emojiLimit.value += EMOJI_PAGE_SIZE;
 	emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
+}
+
+// 検索語をスペースで区切った語ごとに、名前の中の最初の一致を太字にする
+function highlightKeywords(name: string, q: string): string {
+	let result = name;
+	for (const keyword of q.split(/[ \u3000]+/).filter(x => x !== '')) {
+		result = result.replace(keyword, `<b>${keyword}</b>`);
+	}
+	return result;
 }
 
 function exec() {
@@ -306,6 +319,7 @@ function exec() {
 
 		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。スペース区切りなら AND 検索
 		emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
+		lastEmojiQuery = props.q;
 		// スペースを含むのに候補がない = 絵文字を探していない普通の文章 (`12:30 の会議` など) なので閉じる
 		if (props.q.includes(' ') && emojis.value.length === 0) {
 			props.close();
@@ -389,6 +403,15 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 function selectNext() {
+	// MISTEMS: 絵文字の候補の最後で ↓ を押したら、先頭に戻らずに続きを読み込んで次の候補へ進む
+	if (hasMoreEmojis.value && select.value === items.value.length - 1) {
+		loadMoreEmojis();
+		nextTick(() => {
+			if (select.value + 1 < items.value.length) select.value++;
+			applySelect();
+		});
+		return;
+	}
 	if (++select.value >= items.value.length) select.value = 0;
 	if (items.value.length === 0) select.value = -1;
 	applySelect();
