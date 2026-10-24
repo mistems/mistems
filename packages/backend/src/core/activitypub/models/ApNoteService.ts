@@ -7,7 +7,7 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { In } from 'typeorm';
 import * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
-import type { PollsRepository, EmojisRepository, MiMeta } from '@/models/_.js';
+import type { PollsRepository, EmojisRepository, MiMeta, NotesRepository } from '@/models/_.js';
 import type { Config } from '@/config.js';
 import type { MiRemoteUser } from '@/models/User.js';
 import type { MiNote } from '@/models/Note.js';
@@ -21,6 +21,8 @@ import { IdService } from '@/core/IdService.js';
 import { PollService } from '@/core/PollService.js';
 import { StatusError } from '@/misc/status-error.js';
 import { UtilityService } from '@/core/UtilityService.js';
+import { CustomEmojiService } from '@/core/CustomEmojiService.js';
+import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { bindThis } from '@/decorators.js';
 import { checkHttps } from '@/misc/check-https.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
@@ -37,6 +39,14 @@ import { ApQuestionService } from './ApQuestionService.js';
 import { ApImageService } from './ApImageService.js';
 import type { Resolver } from '../ApResolverService.js';
 import type { IObject, IPost } from '../type.js';
+
+// リモートノート再フェッチの TTL (4h)。24h 版にする場合はここだけ変更する。
+const NOTE_REFETCH_TTL = 1000 * 60 * 60 * 4;
+// 一時失敗時の再試行猶予 (10min)。一時失敗後はこの時間が経てば再試行できる。
+const NOTE_REFETCH_RETRY_BACKOFF = 1000 * 60 * 10;
+// リモートホスト単位の再フェッチ予算 (1h あたり)。枯渇したらそのホストの再フェッチは skip する。
+const NOTE_REFETCH_HOST_BUDGET = 30;
+const NOTE_REFETCH_HOST_BUDGET_WINDOW_SEC = 60 * 60;
 
 @Injectable()
 export class ApNoteService {
@@ -58,6 +68,9 @@ export class ApNoteService {
 		@Inject(DI.emojisRepository)
 		private emojisRepository: EmojisRepository,
 
+		@Inject(DI.notesRepository)
+		private notesRepository: NotesRepository,
+
 		private idService: IdService,
 		private apMfmService: ApMfmService,
 		private apResolverService: ApResolverService,
@@ -74,6 +87,8 @@ export class ApNoteService {
 		private pollService: PollService,
 		private noteCreateService: NoteCreateService,
 		private apDbResolverService: ApDbResolverService,
+		private customEmojiService: CustomEmojiService,
+		private globalEventService: GlobalEventService,
 		private apLoggerService: ApLoggerService,
 	) {
 		this.logger = this.apLoggerService.logger;
@@ -381,8 +396,103 @@ export class ApNoteService {
 		}
 	}
 
+	/**
+	 * リモートホスト単位のフェッチ予算を消費する。枯渇していれば false を返す (§7-3)。
+	 * Redis の INCR + EXPIRE による固定ウィンドウ方式。
+	 */
 	@bindThis
-	public async extractEmojis(tags: IObject | IObject[], host: string): Promise<MiEmoji[]> {
+	private async consumeRefetchHostBudget(host: string): Promise<boolean> {
+		const key = `refetch:host:${host}`;
+		const count = await this.redisClient.incr(key);
+		if (count === 1) {
+			await this.redisClient.expire(key, NOTE_REFETCH_HOST_BUDGET_WINDOW_SEC);
+		}
+		return count <= NOTE_REFETCH_HOST_BUDGET;
+	}
+
+	/**
+	 * TTL ガード付きのリモートノート再フェッチ (§4-4)。トリガー非依存。
+	 * - ローカル / 連合禁止は対象外
+	 * - TTL 内 (かつ force でない) なら黙って現状ノートを返す
+	 * - それ以外は分散ロック + double-checked locking で 1 度だけ実フェッチし、emoji を upsert する
+	 */
+	@bindThis
+	public async updateNoteIfStale(note: MiNote, opts?: { force?: boolean; resolver?: Resolver }): Promise<MiNote | null> {
+		if (note.uri == null) return note; // ローカルノートは対象外
+		if (!this.utilityService.isFederationAllowedUri(note.uri)) return note;
+
+		// --- TTL ガード ---
+		if (!opts?.force) {
+			const fresh = note.lastFetchedAt != null
+				&& Date.now() - note.lastFetchedAt.getTime() < NOTE_REFETCH_TTL;
+			if (fresh) return note; // TTL 内 → 何もせず現状ノートを返す
+		}
+
+		const host = this.utilityService.extractDbHost(note.uri);
+
+		const unlock = await acquireApObjectLock(this.redisClient, note.uri);
+		try {
+			// double-checked locking: ロック待ちの間に他プロセスが更新済みかもしれないので再読込して再判定する
+			const current = await this.notesRepository.findOneBy({ id: note.id });
+			if (current == null) return null;
+			if (!opts?.force && current.lastFetchedAt != null
+				&& Date.now() - current.lastFetchedAt.getTime() < NOTE_REFETCH_TTL) {
+				return current; // 直前に他プロセスが取得済み → 実フェッチしない
+			}
+
+			// per-host スロットル (§7-3): 実フェッチ直前に予算を消費。枯渇なら現状ノートを返す。
+			if (!await this.consumeRefetchHostBudget(host)) {
+				this.logger.debug(`updateNoteIfStale: host budget exhausted for ${host}, skip ${note.uri}`);
+				return current;
+			}
+
+			// 連打防止: 試行前に lastFetchedAt のみ先行更新する (refetchedCount は再フェッチ成功時に加算)。
+			await this.notesRepository.update({ id: note.id }, { lastFetchedAt: new Date() });
+
+			const resolver = opts?.resolver ?? await this.apResolverService.createResolver();
+			const object = await resolver.resolve(note.uri);
+			// resolve 成功 = 再フェッチ成功とみなして refetchedCount を加算する。
+			await this.notesRepository.increment({ id: note.id }, 'refetchedCount', 1);
+			const updated = await this.updateNote(note, object);
+			// 購読中クライアントへ通知。クライアントは 'updated' を受けて notes/show を取り直す (§7-2 streaming 化)。
+			this.globalEventService.publishNoteStream(updated, 'updated', { cw: updated.cw, text: updated.text ?? '' });
+			return updated;
+		} catch (e) {
+			// 失敗種別を区別する (§7-4)。恒久失敗 (403/404/410) はそのまま、一時失敗は次回の試行を早める。
+			const permanent = e instanceof StatusError
+				&& [403, 404, 410].includes(e.statusCode);
+			if (!permanent) {
+				// 一時失敗: lastFetchedAt を now - (TTL - RETRY_BACKOFF) に巻き戻し、RETRY_BACKOFF 後に再試行可にする。
+				await this.notesRepository.update({ id: note.id }, {
+					lastFetchedAt: new Date(Date.now() - (NOTE_REFETCH_TTL - NOTE_REFETCH_RETRY_BACKOFF)),
+				}).catch(() => { /* noop */ });
+			}
+			this.logger.debug(`updateNoteIfStale failed: ${e}`);
+			return note;
+		} finally {
+			unlock();
+		}
+	}
+
+	/**
+	 * リモートノートの差分反映 (§4-5)。初版は emoji の無条件 upsert のみ。
+	 * 本文 / CW / 添付などの差分反映は将来の拡張余地。
+	 */
+	@bindThis
+	private async updateNote(exist: MiNote, object: IObject): Promise<MiNote> {
+		const host = this.utilityService.extractDbHost(exist.uri!);
+		// extractEmojis を force で呼ぶと内部で emoji 行を更新し、emojisCache のクラスタ無効化まで行う (§7-1)。
+		await this.extractEmojis(object.tag ?? [], host, { force: true }).catch(e => {
+			this.logger.debug(`updateNote extractEmojis failed: ${e}`);
+			return [];
+		});
+
+		// lastFetchedAt / refetchedCount は updateNoteIfStale 側で更新済み。
+		return await this.notesRepository.findOneByOrFail({ id: exist.id });
+	}
+
+	@bindThis
+	public async extractEmojis(tags: IObject | IObject[], host: string, opts?: { force?: boolean }): Promise<MiEmoji[]> {
 		// eslint-disable-next-line no-param-reassign
 		host = this.utilityService.toPuny(host);
 
@@ -400,7 +510,8 @@ export class ApNoteService {
 			const exists = existingEmojis.find(x => x.name === name);
 
 			if (exists) {
-				if ((exists.updatedAt == null)
+				if (opts?.force
+					|| (exists.updatedAt == null)
 					|| (tag.id != null && exists.uri == null)
 					|| (new Date(tag.updated) > exists.updatedAt)
 					|| (tag.icon.url !== exists.originalUrl)
@@ -416,6 +527,9 @@ export class ApNoteService {
 						// _misskey_license が存在しなければ `null`
 						license: (tag._misskey_license?.freeText ?? null)
 					});
+
+					// クラスタ全体の emojisCache を無効化する (§7-1)。
+					this.customEmojiService.invalidateRemoteEmojiCache(name, host);
 
 					const emoji = await this.emojisRepository.findOneBy({ host, name });
 					if (emoji == null) throw new Error('emoji update failed');

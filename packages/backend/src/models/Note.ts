@@ -121,6 +121,17 @@ export class MiNote {
 	})
 	public pageCount: number;
 
+	@Column('timestamp with time zone', {
+		nullable: true,
+	})
+	public lastFetchedAt: Date | null;
+
+	// 実際にリモート再フェッチが走った回数（クールダウンで skip した分は数えない）
+	@Column('smallint', {
+		default: 0,
+	})
+	public refetchedCount: number;
+
 	@Column('jsonb', {
 		default: {},
 	})

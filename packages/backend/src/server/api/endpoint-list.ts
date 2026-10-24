@@ -335,6 +335,7 @@ export * as 'notes/polls/vote' from './endpoints/notes/polls/vote.js';
 export * as 'notes/reactions' from './endpoints/notes/reactions.js';
 export * as 'notes/reactions/create' from './endpoints/notes/reactions/create.js';
 export * as 'notes/reactions/delete' from './endpoints/notes/reactions/delete.js';
+export * as 'notes/refetch' from './endpoints/notes/refetch.js';
 export * as 'notes/renotes' from './endpoints/notes/renotes.js';
 export * as 'notes/replies' from './endpoints/notes/replies.js';
 export * as 'notes/search' from './endpoints/notes/search.js';
