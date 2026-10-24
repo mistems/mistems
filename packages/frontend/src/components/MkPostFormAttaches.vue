@@ -10,6 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:class="$style.files"
 		direction="horizontal"
 		withGaps
+		noTouchScroll
 		@update:modelValue="v => emit('update:modelValue', v)"
 	>
 		<template #default="{ item }">
