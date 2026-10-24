@@ -224,6 +224,8 @@ export function useNote(
 	// 共通アクション関数群
 	async function renote() {
 		if (props.mock) return;
+		// 公開範囲やリノートロックでリノートできないノートでは、キーボードショートカットからもリノート・引用のメニューを開かない
+		if (!canRenote) return;
 		const isLoggedIn = await pleaseLogin({ openOnRemote: pleaseLoginContext });
 		if (!isLoggedIn) return;
 		showMovedDialog();

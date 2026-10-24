@@ -372,16 +372,13 @@ export class NoteCreateService implements OnApplicationShutdown {
 				}
 			}
 
-			// リノートロックのチェック (純粋リノートのみ対象。引用リノートはフロント側で制御する)
-			const isPureRenoteRequest = data.text == null && data.cw == null && data.replyId == null && data.poll == null && data.fileIds.length === 0;
-			if (isPureRenoteRequest) {
-				if (renote.moderationRenoteLock) {
-					// モデレーションによるロック: 所有者を含む全員のリノートを禁止
-					throw new IdentifiableError('5f8d7a3c-2b1e-4c9a-9e7d-1a2b3c4d5e6f', 'Renote of this note has been locked by moderation');
-				} else if (renote.userRenoteLock && renote.userId !== user.id) {
-					// ユーザーによるロック: 所有者本人以外のリノートを禁止
-					throw new IdentifiableError('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Renote of this note has been locked by the author');
-				}
+			// リノートロックのチェック (純粋リノートと引用リノートの両方が対象)
+			if (renote.moderationRenoteLock) {
+				// モデレーションによるロック: 所有者を含む全員のリノートを禁止
+				throw new IdentifiableError('5f8d7a3c-2b1e-4c9a-9e7d-1a2b3c4d5e6f', 'Renote of this note has been locked by moderation');
+			} else if (renote.userRenoteLock && renote.userId !== user.id) {
+				// ユーザーによるロック: 所有者本人以外のリノートを禁止
+				throw new IdentifiableError('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Renote of this note has been locked by the author');
 			}
 		}
 
