@@ -29,6 +29,13 @@ function jsonResponse(body: unknown) {
 	return { json: async () => body };
 }
 
+type SqlCall = { sql: string; params: Record<string, string | number> };
+
+/** 増減を表す (reaction → count) の組を取り出す (create の引き戻しと、増やす方向だけの更新で使う) */
+function pairsOf(params: Record<string, string | number>) {
+	return Object.fromEntries(Object.keys(params).filter(k => /^reaction\d+$/.test(k)).map(k => [params[k], params[k.replace('reaction', 'count')]]));
+}
+
 describe('RemoteNoteReactionSyncService.syncReactions', () => {
 	let service: RemoteNoteReactionSyncService;
 	let current: MiNote;
@@ -47,12 +54,15 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		createQueryBuilder: ReturnType<typeof vi.fn>;
 	};
 	let usersRepository: { findOneBy: ReturnType<typeof vi.fn> };
-	let reactionService: { create: ReturnType<typeof vi.fn> };
+	let reactionService: { create: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 	let remoteUserResolveService: { resolveUser: ReturnType<typeof vi.fn> };
 	let reactionsBufferingService: { get: ReturnType<typeof vi.fn> };
 	let meta: { enableReactionsBuffering: boolean };
-	let knownUsers: Record<string, { id: string; host: string; isSuspended: boolean }>;
+	let knownUsers: Record<string, { id: string; host: string | null; isSuspended: boolean }>;
 	let createdReactions: Map<string, string>;
+	let remoteHostRows: { userId: string; usernameLower: string }[];
+	let usersById: Record<string, { id: string; host: string | null; isSuspended: boolean }>;
+	let rowQueryBuilders: Record<string, ReturnType<typeof vi.fn>>[];
 
 	beforeEach(() => {
 		current = makeRemoteNote();
@@ -90,26 +100,41 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 
 		rowCounts = [];
 		createdReactions = new Map();
-		const rowQueryBuilder: Record<string, ReturnType<typeof vi.fn>> = {};
-		for (const m of ['select', 'addSelect', 'where', 'groupBy']) rowQueryBuilder[m] = vi.fn(() => rowQueryBuilder);
-		rowQueryBuilder.getRawMany = vi.fn(async () => rowCounts);
+		remoteHostRows = [];
+		usersById = {};
+		rowQueryBuilders = [];
+		const makeRowQueryBuilder = () => {
+			// innerJoin(user) を使うのは「相手のホストのユーザーの行」の取得、使わないのはリアクションごとの行の数の集計
+			let joined = false;
+			const qb: Record<string, ReturnType<typeof vi.fn>> = {};
+			for (const m of ['select', 'addSelect', 'where', 'andWhere', 'groupBy']) qb[m] = vi.fn(() => qb);
+			qb.innerJoin = vi.fn(() => { joined = true; return qb; });
+			qb.getRawMany = vi.fn(async () => joined ? remoteHostRows : rowCounts);
+			rowQueryBuilders.push(qb);
+			return qb;
+		};
 		noteReactionsRepository = {
 			exists: vi.fn(async ({ where }: { where: { userId: string } }) => createdReactions.has(where.userId)),
 			findOneBy: vi.fn(async ({ userId }: { userId: string }) => {
 				const reaction = createdReactions.get(userId);
 				return reaction != null ? { userId, reaction } : null;
 			}),
-			createQueryBuilder: vi.fn(() => rowQueryBuilder),
+			createQueryBuilder: vi.fn(makeRowQueryBuilder),
 		};
 		knownUsers = {};
 		usersRepository = {
-			findOneBy: vi.fn(async ({ usernameLower, host }: { usernameLower: string; host: string }) => knownUsers[`${usernameLower}@${host}`] ?? null),
+			findOneBy: vi.fn(async ({ id, usernameLower, host }: { id?: string; usernameLower?: string; host?: string }) => (id != null
+				? usersById[id] ?? null
+				: knownUsers[`${usernameLower}@${host}`] ?? null)),
 		};
 		reactionService = {
 			create: vi.fn(async (user: { id: string; host: string }, _note: MiNote, reaction: string) => {
 				// ReactionService.create と同じく、付けたユーザーのホストの絵文字として保存する
 				const stored = reaction.match(/^:([\w+-]+):$/) ? `:${reaction.slice(1, -1)}@${user.host}:` : reaction;
 				createdReactions.set(user.id, stored);
+			}),
+			delete: vi.fn(async (user: { id: string }) => {
+				createdReactions.delete(user.id);
 			}),
 		};
 		remoteUserResolveService = {
@@ -149,7 +174,19 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		service.onModuleInit();
 	});
 
-	test('Misskey 系の相手: notes/show を読み、増えたキーを GREATEST で更新する', async () => {
+	function sqlCalls(): SqlCall[] {
+		return queryBuilder.set.mock.calls.map((c, i) => ({
+			sql: c[0].reactions() as string,
+			params: queryBuilder.setParameters.mock.calls[i][0] as Record<string, string | number>,
+		}));
+	}
+
+	/** 相手を正とする更新 (キーごと) の (reaction → 相手の数) */
+	function syncedKeys() {
+		return Object.fromEntries(sqlCalls().filter(c => c.sql.startsWith('CASE WHEN')).map(c => [c.params.reaction, c.params.remote]));
+	}
+
+	test('Misskey 系の相手: notes/show を読み、相手の数にそろえる (相手を正とし、下限は行の数)', async () => {
 		current = makeRemoteNote({ reactions: { '👍': 3 } });
 		const res = await service.syncReactions(makeRemoteNote(), { consumeBudget });
 		expect(res).toBe(true);
@@ -158,12 +195,44 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		expect(url).toBe('https://misskey.systems/api/notes/show');
 		expect(JSON.parse(args.body)).toEqual({ noteId: 'asq39a3cb0' });
 
-		const params = queryBuilder.setParameters.mock.calls[0][0];
-		const pairs = Object.fromEntries(Object.keys(params).filter(k => k.startsWith('reaction')).map(k => [params[k], params[k.replace('reaction', 'count')]]));
-		// 👍 は自分の数 (3) が多いので更新しない
-		expect(pairs).toEqual({ ':owa_desuwa@misskey.systems:': 2, ':blobcat@other.example:': 1 });
-		const sql = queryBuilder.set.mock.calls[0][0].reactions();
+		// 👍 は相手の数 (1) まで減らす。下限の行の数は SQL の中で数え直す
+		expect(syncedKeys()).toEqual({ ':owa_desuwa@misskey.systems:': 2, ':blobcat@other.example:': 1, '👍': 1 });
+		const sql = sqlCalls().find(c => c.params.reaction === '👍')!.sql;
+		expect(sql).toContain('SELECT COUNT(*) FROM "note_reaction"');
 		expect(sql).toContain('GREATEST');
+	});
+
+	test('相手で取り消されたリアクションは減り、相手に無いキーは消す (行が無いとき)', async () => {
+		current = makeRemoteNote({ reactions: { '👍': 5, '🎉': 2 } });
+		remoteApi['https://misskey.systems/api/notes/show'] = { reactions: { '👍': 1 } };
+		await service.syncReactions(makeRemoteNote(), { consumeBudget });
+		expect(syncedKeys()).toEqual({ '👍': 1, '🎉': 0 });
+		// 0 以下になるキーは jsonb から消す
+		expect(sqlCalls().find(c => c.params.reaction === '🎉')!.sql).toContain('"reactions" - CAST(:reaction AS text)');
+	});
+
+	test('自分のサーバーの行 (相手に未配送のリアクション) の数より下には減らさない', async () => {
+		current = makeRemoteNote({ reactions: { '👍': 3 } });
+		rowCounts = [{ reaction: '👍', count: '3' }];
+		remoteApi['https://misskey.systems/api/notes/show'] = { reactions: { '👍': 1 } };
+		const res = await service.syncReactions(makeRemoteNote(), { consumeBudget });
+		expect(res).toBe(false);
+		expect(syncedKeys()).toEqual({});
+	});
+
+	test('相手のキーを上限で切ったときは、増やす方向だけにする', async () => {
+		current = makeRemoteNote({ reactions: { '🎉': 2 } });
+		const many: Record<string, number> = {};
+		for (let i = 0; i < 300; i++) many[`:e${i}@.:`] = 1;
+		remoteApi['https://misskey.systems/api/notes/show'] = { reactions: many };
+		emojisRepository.findBy.mockImplementation(async ({ host }: { host: string }) => (host === 'misskey.systems'
+			? Array.from({ length: 300 }, (_, i) => ({ name: `e${i}` }))
+			: []));
+		await service.syncReactions(makeRemoteNote(), { consumeBudget });
+		expect(syncedKeys()).toEqual({});
+		const increase = sqlCalls().find(c => c.sql.startsWith('jsonb_set') && c.sql.includes('GREATEST'))!;
+		expect(Object.keys(pairsOf(increase.params))).toHaveLength(256);
+		expect(pairsOf(increase.params)['🎉']).toBeUndefined();
 	});
 
 	test('リアクションの絵文字を、その絵文字のホスト自身の emoji API から取って登録する', async () => {
@@ -188,8 +257,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		expect(inserted).toEqual([expect.objectContaining({ host: 'misskey.systems', name: 'owa_desuwa' })]);
 		expect(inserted.some((e: { originalUrl: string }) => e.originalUrl.includes('evil.example'))).toBe(false);
 		expect(httpRequestService.send.mock.calls.map(c => c[0])).not.toContain('https://other.example/api/emoji');
-		const params = queryBuilder.setParameters.mock.calls[0][0];
-		expect(Object.values(params)).toContain(':blobcat@other.example:');
+		expect(syncedKeys()).toEqual(expect.objectContaining({ ':blobcat@other.example:': 1 }));
 	});
 
 	test('第三のホストの上限に当たったら、その絵文字は取らない', async () => {
@@ -254,17 +322,6 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 	describe('誰が付けたか (notes/reactions)', () => {
 		const reactionsUrl = 'https://misskey.systems/api/notes/reactions';
 
-		function sqlCalls() {
-			return queryBuilder.set.mock.calls.map((c, i) => ({
-				sql: c[0].reactions() as string,
-				params: queryBuilder.setParameters.mock.calls[i][0] as Record<string, string | number>,
-			}));
-		}
-
-		function pairsOf(params: Record<string, string | number>) {
-			return Object.fromEntries(Object.keys(params).filter(k => k.startsWith('reaction')).map(k => [params[k], params[k.replace('reaction', 'count')]]));
-		}
-
 		beforeEach(() => {
 			knownUsers['alice@misskey.systems'] = { id: 'alice', host: 'misskey.systems', isSuspended: false };
 			remoteApi[reactionsUrl] = [
@@ -297,21 +354,19 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
 
 			const calls = sqlCalls();
-			expect(calls).toHaveLength(2);
 			// 1 回目: create で増やした分を引く
 			expect(calls[0].sql).toContain(' - :count');
 			expect(pairsOf(calls[0].params)).toEqual({ ':owa_desuwa@misskey.systems:': 1, '👍': 1 });
-			// 2 回目: 相手の数 (と行の数) の max に合わせる
-			expect(calls[1].sql).toContain('GREATEST');
-			expect(pairsOf(calls[1].params)).toEqual({ ':owa_desuwa@misskey.systems:': 2, '👍': 1, ':blobcat@other.example:': 1 });
+			// 2 回目以降: 相手の数 (と行の数) の max に合わせる
+			expect(syncedKeys()).toEqual({ ':owa_desuwa@misskey.systems:': 2, '👍': 1, ':blobcat@other.example:': 1 });
 		});
 
 		test('行の数が相手の数より多いときは、行の数に合わせる', async () => {
 			rowCounts = [{ reaction: '🎉', count: '3' }];
 			remoteApi[reactionsUrl] = [];
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
-			const calls = sqlCalls();
-			expect(pairsOf(calls.at(-1)!.params)['🎉']).toBe(3);
+			// 相手の数 (0) より行の数 (3) が多い。SQL の中で行の数を数え直して下限にする
+			expect(syncedKeys()['🎉']).toBe(0);
 		});
 
 		test('バッファリングが有効なときは、まだ書き込まれていない差分を引いて合わせる', async () => {
@@ -319,7 +374,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			reactionsBufferingService.get.mockImplementation(async () => ({ deltas: { ':owa_desuwa@misskey.systems:': 1 }, pairs: [] }));
 			remoteApi[reactionsUrl] = [];
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
-			expect(pairsOf(sqlCalls().at(-1)!.params)[':owa_desuwa@misskey.systems:']).toBe(1);
+			expect(sqlCalls().find(c => c.params.reaction === ':owa_desuwa@misskey.systems:')!.params.delta).toBe(1);
 		});
 
 		test('既にリアクションがあるユーザーは二重に作らない', async () => {
@@ -346,7 +401,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			expect(remoteUserResolveService.resolveUser).not.toHaveBeenCalled();
 			// bob で止まるので carol も取り込まない
 			expect(reactionService.create.mock.calls.map(c => c[0].id)).toEqual(['alice']);
-			expect(pairsOf(sqlCalls().at(-1)!.params)).toEqual(expect.objectContaining({ ':owa_desuwa@misskey.systems:': 2 }));
+			expect(syncedKeys()).toEqual(expect.objectContaining({ ':owa_desuwa@misskey.systems:': 2 }));
 		});
 
 		test('notes/reactions のページの前に上限に当たったら、取り込まずに数だけを反映する', async () => {
@@ -355,7 +410,8 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
 			expect(httpRequestService.send.mock.calls.map(c => c[0])).not.toContain(reactionsUrl);
 			expect(reactionService.create).not.toHaveBeenCalled();
-			expect(queryBuilder.execute).toHaveBeenCalledTimes(1);
+			// 数は相手にそろえる (キーごとに 1 回ずつ)
+			expect(Object.keys(syncedKeys())).toHaveLength(3);
 		});
 
 		test('100 件のページなら untilId で次のページを読む', async () => {
@@ -433,6 +489,73 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			const res = await service.syncReactions(makeRemoteNote(), { consumeBudget });
 			expect(res).toBe(true);
 			expect(reactionService.create).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('相手で取り消された行を消す', () => {
+		const reactionsUrl = 'https://misskey.systems/api/notes/reactions';
+
+		beforeEach(() => {
+			for (const id of ['alice', 'dave']) {
+				usersById[id] = { id, host: 'misskey.systems', isSuspended: false };
+				knownUsers[`${id}@misskey.systems`] = usersById[id];
+				createdReactions.set(id, '👍');
+			}
+			// 自分の側には alice と dave の行がある。相手の一覧には alice だけがいる (dave は取り消した)
+			remoteHostRows = [
+				{ userId: 'alice', usernameLower: 'alice' },
+				{ userId: 'dave', usernameLower: 'dave' },
+			];
+			remoteApi[reactionsUrl] = [{ id: 'r1', user: { username: 'Alice', host: null }, type: '👍' }];
+		});
+
+		test('相手の一覧に無いユーザーの行を ReactionService.delete で消す', async () => {
+			const res = await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(res).toBe(true);
+			expect(reactionService.delete).toHaveBeenCalledTimes(1);
+			expect(reactionService.delete.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'dave' }));
+			// 相手のホストのユーザーの行だけを対象にする
+			const joined = rowQueryBuilders.find(qb => qb.innerJoin.mock.calls.length > 0)!;
+			expect(joined.andWhere).toHaveBeenCalledWith('user.host = :host', { host: 'misskey.systems' });
+		});
+
+		test('一覧を最後まで読めなかったとき (上限で途中で止まったとき) は行を消さない', async () => {
+			remoteApi[reactionsUrl] = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, user: { username: `u${i}`, host: null }, type: '👍' }));
+			// notes/show・emoji・1 ページ目の 3 回で上限に当たる
+			let n = 0;
+			consumeBudget.mockImplementation(async (host: string) => host !== 'misskey.systems' || ++n <= 3);
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.delete).not.toHaveBeenCalled();
+		});
+
+		test('notes/reactions が失敗したときは行を消さない', async () => {
+			remoteApi[reactionsUrl] = { error: 'oops' };
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.delete).not.toHaveBeenCalled();
+		});
+
+		test('相手の数があるのに一覧が空のときは、怪しいので行を消さない', async () => {
+			remoteApi[reactionsUrl] = [];
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.delete).not.toHaveBeenCalled();
+		});
+
+		test('第三のホストのユーザー・自分のサーバーのユーザーの行は消さない', async () => {
+			// SQL の条件をすり抜けて別のホストのユーザーが混じっても、ユーザーのホストを確かめてから消す
+			usersById.dave = { id: 'dave', host: 'other.example', isSuspended: false };
+			remoteHostRows.push({ userId: 'local', usernameLower: 'local' });
+			usersById.local = { id: 'local', host: null, isSuspended: false };
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.delete).not.toHaveBeenCalled();
+		});
+
+		test('相手の一覧で他のホストを名乗るエントリは、一覧にいる扱いにしない', async () => {
+			remoteApi[reactionsUrl] = [
+				{ id: 'r1', user: { username: 'alice', host: null }, type: '👍' },
+				{ id: 'r2', user: { username: 'dave', host: 'other.example' }, type: '👍' },
+			];
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.delete.mock.calls.map(c => c[0].id)).toEqual(['dave']);
 		});
 	});
 });

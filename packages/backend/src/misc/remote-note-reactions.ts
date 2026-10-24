@@ -107,16 +107,20 @@ export function mapRemoteReactions(
 	remoteHost: string,
 	localHost: string,
 	opts?: { maxKeys?: number },
-): { reactions: Record<string, number>; emojis: RemoteReactionEmoji[] } {
+): { reactions: Record<string, number>; emojis: RemoteReactionEmoji[]; truncated: boolean } {
 	const reactions: Record<string, number> = {};
 	const emojis: RemoteReactionEmoji[] = [];
-	if (remote == null || typeof remote !== 'object' || Array.isArray(remote)) return { reactions, emojis };
+	let truncated = false;
+	if (remote == null || typeof remote !== 'object' || Array.isArray(remote)) return { reactions, emojis, truncated };
 
 	const maxKeys = opts?.maxKeys ?? REMOTE_REACTION_MAX_KEYS;
 	const seenEmojis = new Set<string>();
 
 	for (const [rawKey, rawCount] of Object.entries(remote)) {
-		if (Object.keys(reactions).length >= maxKeys) break;
+		if (Object.keys(reactions).length >= maxKeys) {
+			truncated = true;
+			break;
+		}
 		if (typeof rawCount !== 'number' || !Number.isInteger(rawCount) || rawCount <= 0) continue;
 		const mapped = mapRemoteReactionKey(rawKey, remoteHost, localHost);
 		if (mapped == null) continue;
@@ -133,7 +137,7 @@ export function mapRemoteReactions(
 		}
 	}
 
-	return { reactions, emojis };
+	return { reactions, emojis, truncated };
 }
 
 /**
@@ -180,4 +184,45 @@ export function toReactionForCreate(type: string, remoteHost: string, localHost:
 	if (mapped == null) return null;
 	if (mapped.emoji != null && mapped.emoji.host === reacterHost.toLowerCase()) return `:${mapped.emoji.name}:`;
 	return mapped.key;
+}
+
+/**
+ * `note.reactions` (DB) の、変わるキーとその目標の数を返す。0 はキーを消すことを表す。
+ *
+ * - `allowDecrease: false`: 増やす方向だけ。キーごとに max(自分の数, 相手の数, 行の数) にする
+ * - `allowDecrease: true`: 相手を正とし、下限を自分のサーバーにある行の数にする。
+ *   キーごとに max(相手の数, 行の数) にし、相手に無いキーは行の数まで減らす (行も無ければ消す)。
+ *   相手はノートの作者のサーバーなので、Like / Undo が届いており数が正しい。ただし、自分のサーバーの利用者の
+ *   リアクションは配送の遅れや失敗で相手にまだ無いことがあり、行は署名付きの Like で届いたものなので、行の数は下回らない
+ *
+ * どちらも、まだ DB に書き込まれていないバッファの差分を引いた値を DB の目標にする。
+ */
+export function planReactionCountUpdates(
+	current: Record<string, number>,
+	remote: Record<string, number>,
+	rows: Record<string, number>,
+	bufferedDeltas: Record<string, number>,
+	opts: { allowDecrease: boolean },
+): Record<string, number> {
+	const target = computeTargetReactionCounts(remote, rows, bufferedDeltas);
+	if (!opts.allowDecrease) return mergeRemoteReactions(current, target).changed;
+
+	const updates: Record<string, number> = {};
+	for (const key of new Set([...Object.keys(current), ...Object.keys(target)])) {
+		const next = target[key] ?? 0;
+		const now = current[key] ?? 0;
+		if (next !== now && !(next === 0 && !(key in current))) updates[key] = next;
+	}
+	return updates;
+}
+
+/**
+ * 相手のホストのユーザーの行のうち、相手の `notes/reactions` の一覧 (最後まで読めたもの) に無いもの
+ * = 相手で取り消されたもののユーザーの id を返す。
+ */
+export function selectStaleReactionUserIds(
+	rows: { userId: string; usernameLower: string }[],
+	listedUsernamesLower: Set<string>,
+): string[] {
+	return rows.filter(r => !listedUsernamesLower.has(r.usernameLower)).map(r => r.userId);
 }

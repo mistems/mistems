@@ -11,6 +11,8 @@ import {
 	mapRemoteReactions,
 	mergeRemoteReactions,
 	parseMisskeyNoteUri,
+	planReactionCountUpdates,
+	selectStaleReactionUserIds,
 	toReactionForCreate,
 } from '@/misc/remote-note-reactions.js';
 
@@ -100,12 +102,13 @@ describe('mapRemoteReactions', () => {
 			':owa_desuwa@misskey.systems:': 2,
 			'👍': 3,
 		});
+		expect(res.truncated).toBe(false);
 		expect(res.emojis).toEqual([{ name: 'owa_desuwa', host: REMOTE, isRemoteLocal: true }]);
 	});
 
 	test('オブジェクトでなければ空を返す', () => {
-		expect(mapRemoteReactions(null, REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [] });
-		expect(mapRemoteReactions(['👍'], REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [] });
+		expect(mapRemoteReactions(null, REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [], truncated: false });
+		expect(mapRemoteReactions(['👍'], REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [], truncated: false });
 	});
 
 	test('キーの数に上限がある', () => {
@@ -114,6 +117,8 @@ describe('mapRemoteReactions', () => {
 		const res = mapRemoteReactions(many, REMOTE, LOCAL, { maxKeys: 10 });
 		expect(Object.keys(res.reactions)).toHaveLength(10);
 		expect(res.emojis).toHaveLength(10);
+		// 上限で切ったときは、減らす方向の同期をしないために印を付ける
+		expect(res.truncated).toBe(true);
 	});
 });
 
@@ -169,5 +174,53 @@ describe('toReactionForCreate', () => {
 	test('Unicode の絵文字はそのまま、不正なものは null', () => {
 		expect(toReactionForCreate('👍', REMOTE, LOCAL, REMOTE)).toBe('👍');
 		expect(toReactionForCreate('bogus', REMOTE, LOCAL, REMOTE)).toBeNull();
+	});
+});
+
+describe('planReactionCountUpdates', () => {
+	test('増やす方向だけ: 相手の数か行の数が多いキーだけを増やす', () => {
+		expect(planReactionCountUpdates({ '👍': 5, '🎉': 1 }, { '👍': 3, '🎉': 4 }, { '🎉': 1 }, {}, { allowDecrease: false }))
+			.toEqual({ '🎉': 4 });
+	});
+
+	test('減らす方向も: 相手で取り消されたら相手の数まで減る', () => {
+		expect(planReactionCountUpdates({ '👍': 5 }, { '👍': 3 }, { '👍': 3 }, {}, { allowDecrease: true }))
+			.toEqual({ '👍': 3 });
+	});
+
+	test('減らす方向も: 自分のサーバーにある行の数より下には減らさない (相手にまだ届いていないリアクション)', () => {
+		expect(planReactionCountUpdates({ '👍': 5 }, { '👍': 1 }, { '👍': 2 }, {}, { allowDecrease: true }))
+			.toEqual({ '👍': 2 });
+	});
+
+	test('減らす方向も: 相手に無いキーは行の数まで減らし、行も無ければ消す (0)', () => {
+		expect(planReactionCountUpdates({ '🎉': 2, '😆': 3 }, {}, { '😆': 1 }, {}, { allowDecrease: true }))
+			.toEqual({ '🎉': 0, '😆': 1 });
+	});
+
+	test('減らす方向も: 変わらないキーは含めない', () => {
+		expect(planReactionCountUpdates({ '👍': 3 }, { '👍': 3 }, { '👍': 1 }, {}, { allowDecrease: true })).toEqual({});
+	});
+
+	test('バッファの差分を引いて合わせる', () => {
+		// 表示は DB + 差分なので、DB は max(相手, 行) - 差分 にする
+		expect(planReactionCountUpdates({ '👍': 4 }, { '👍': 2 }, { '👍': 2 }, { '👍': 1 }, { allowDecrease: true }))
+			.toEqual({ '👍': 1 });
+		expect(planReactionCountUpdates({}, { '👍': 2 }, {}, { '👍': 1 }, { allowDecrease: false }))
+			.toEqual({ '👍': 1 });
+	});
+});
+
+describe('selectStaleReactionUserIds', () => {
+	test('相手の一覧に無いユーザーの行を返す', () => {
+		const rows = [
+			{ userId: 'a', usernameLower: 'alice' },
+			{ userId: 'b', usernameLower: 'bob' },
+		];
+		expect(selectStaleReactionUserIds(rows, new Set(['alice']))).toEqual(['b']);
+	});
+
+	test('一覧に全員いれば空', () => {
+		expect(selectStaleReactionUserIds([{ userId: 'a', usernameLower: 'alice' }], new Set(['alice']))).toEqual([]);
 	});
 });
