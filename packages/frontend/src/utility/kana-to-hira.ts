@@ -122,11 +122,42 @@ export function searchEmojiNormalized(query: string | null, emojiDb: EmojiDef[],
 	return results.map(x => originalOf.get(x) ?? x);
 }
 
+// 入力補助の検索語を区切るスペース。半角・全角のどちらでもよい
+const EMOJI_QUERY_SEPARATOR = /[ \u3000]/;
+const EMOJI_QUERY_DOUBLE_SEPARATOR = /[ \u3000]{2}/;
+
+export type EmojiSuggestionState = {
+	/** 絵文字の候補をすでに開いているか (候補が 0 件で一覧を出していないときも含む) */
+	open: boolean;
+	/** 開いている候補で最後に検索した検索語と、その候補の件数。まだ検索していなければ null */
+	lastSearch?: { query: string; count: number } | null;
+	/** IME で変換中か */
+	composing?: boolean;
+	/** IME の変換を確定した直後の判定か */
+	committed?: boolean;
+};
+
 /**
  * 入力補助 (`:` に続けて打った文字列) で、絵文字の候補を開いておくかどうか。
- * スペースで区切って AND 検索できるよう、スペース 1 つでは閉じない。
- * `:` の直後がスペースのとき (`注意: …` など普通の文章) は開かず、スペースが 2 つ続いたら閉じる。
+ * スペース (半角・全角) で区切って AND 検索できるよう、スペース 1 つでは閉じない。
+ * 候補が 0 件になっても閉じずに、一覧を出さないまま検索を続ける (IME の変換途中の `neko かw` などで閉じないように)。
+ *
+ * 次のときは開かない・閉じる。
+ * - `:` の直後がスペースのとき (`注意: …` など普通の文章)
+ * - スペースが 2 つ続いたとき
+ * - 閉じている状態で、スペースを含む検索語になったとき (一度閉じたら開き直さない)
+ * - 候補が 0 件の語のあとにスペースを打ったとき (`12:30 の会議` など、絵文字を探していない文章とみなす)。IME で変換中は判定しない
+ * - スペースを含む検索語で、IME の変換を確定した結果が 0 件のとき (確定した語が何にも当たらない = 普通の文章とみなす)
  */
-export function shouldOpenEmojiSuggestion(query: string): boolean {
-	return !query.startsWith(' ') && !query.includes('  ');
+export function shouldOpenEmojiSuggestion(query: string, state: EmojiSuggestionState): boolean {
+	if (query !== '' && EMOJI_QUERY_SEPARATOR.test(query[0])) return false;
+	if (EMOJI_QUERY_DOUBLE_SEPARATOR.test(query)) return false;
+	if (!EMOJI_QUERY_SEPARATOR.test(query)) return true;
+	if (!state.open) return false;
+
+	const last = state.lastSearch;
+	if (state.committed && last != null && last.query === query && last.count === 0) return false;
+	const endsWithSeparator = EMOJI_QUERY_SEPARATOR.test(query.at(-1) ?? '');
+	if (!state.composing && endsWithSeparator && last != null && last.query === query.slice(0, -1) && last.count === 0) return false;
+	return true;
 }

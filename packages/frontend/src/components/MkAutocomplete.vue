@@ -20,7 +20,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span class="name">{{ hashtag }}</span>
 		</li>
 	</ol>
-	<ol v-else-if="type === 'emoji' || type === 'emojiComplete' && emojis.length > 0" ref="suggests" :class="$style.list">
+	<!-- MISTEMS: 絵文字の候補が 0 件のときは一覧を出さない (閉じずに検索を続ける) -->
+	<ol v-else-if="(type === 'emoji' || type === 'emojiComplete') && emojis.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="emoji in emojis" :key="emoji.emoji" :class="$style.item" tabindex="-1" @click="complete(type, emoji.emoji)" @keydown="onKeydown">
 			<MkCustomEmoji v-if="'isCustomEmoji' in emoji && emoji.isCustomEmoji" :name="emoji.emoji" :class="$style.emoji" :fallbackToImage="true"/>
 			<MkEmoji v-else :emoji="emoji.emoji" :class="$style.emoji"/>
@@ -183,6 +184,8 @@ const props = defineProps<PropsType<'user'> | PropsType<'hashtag'> | PropsType<'
 const emit = defineEmits<{
 	<T extends keyof CompleteInfo>(event: 'done', value: { type: T; value: CompleteInfo[T]['payload'] }): void;
 	(event: 'closed'): void;
+	// MISTEMS: 絵文字の候補を検索したら、検索語と件数を知らせる (autocomplete.ts が開閉の判定に使う)
+	(event: 'emojiSearched', value: { query: string; count: number }): void;
 }>();
 
 const suggests = ref<Element>();
@@ -314,16 +317,15 @@ function exec() {
 		if (!props.q || props.q === '') {
 			// 最近使った絵文字をサジェスト
 			emojis.value = store.s.recentlyUsedEmojis.map(emoji => emojiDb.value.find(dbEmoji => dbEmoji.emoji === emoji)).filter(x => x) as EmojiDef[];
+			emit('emojiSearched', { query: '', count: emojis.value.length });
 			return;
 		}
 
 		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。スペース区切りなら AND 検索
 		emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
 		lastEmojiQuery = props.q;
-		// スペースを含むのに候補がない = 絵文字を探していない普通の文章 (`12:30 の会議` など) なので閉じる
-		if (props.q.includes(' ') && emojis.value.length === 0) {
-			props.close();
-		}
+		// 0 件でもここでは閉じない。閉じるかどうかは、次の入力で autocomplete.ts が件数を見て決める
+		emit('emojiSearched', { query: props.q, count: emojis.value.length });
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {
@@ -352,6 +354,18 @@ function onKeydown(event: KeyboardEvent) {
 		event.preventDefault();
 		event.stopPropagation();
 	};
+
+	// MISTEMS: IME で変換中のキー (変換の確定の Enter、候補の選択の ↑ ↓ など) は IME に任せる
+	if (event.isComposing || event.keyCode === 229) return;
+
+	// MISTEMS: 絵文字の候補が 0 件で一覧を出していない間は、Esc で閉じる以外のキーを横取りしない
+	if (props.type === 'emoji' && emojis.value.length === 0) {
+		if (event.key === 'Escape') {
+			cancel();
+			props.close();
+		}
+		return;
+	}
 
 	switch (event.key) {
 		case 'Enter':
