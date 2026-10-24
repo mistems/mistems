@@ -31,8 +31,8 @@ const REMOTE_API_RESPONSE_MAX_SIZE = 1024 * 256;
 const REMOTE_API_TIMEOUT = 5000;
 
 export type RemoteNoteReactionSyncOptions = {
-	/** 相手のホストへ 1 回リクエストする前に呼ぶ。false を返したら (上限に当たったら) そこで止める */
-	consumeBudget: () => Promise<boolean>;
+	/** ホストへ 1 回リクエストする前に、そのホストを渡して呼ぶ。false を返したら (上限に当たったら) そこで止める */
+	consumeBudget: (host: string) => Promise<boolean>;
 };
 
 /**
@@ -109,14 +109,14 @@ export class RemoteNoteReactionSyncService {
 		if (target == null) return false;
 		const { host, remoteNoteId } = target;
 
-		if (!await opts.consumeBudget()) {
+		if (!await opts.consumeBudget(host)) {
 			this.logger.debug(`host budget exhausted for ${host}, skip reaction sync of ${note.uri}`);
 			return false;
 		}
 
 		const remote = await this.postRemoteApi(host, 'notes/show', { noteId: remoteNoteId });
 		if (remote == null || typeof remote !== 'object') throw new Error('invalid notes/show response');
-		const { reactions: remoteReactions, reactionEmojis } = remote as { reactions?: unknown; reactionEmojis?: unknown };
+		const { reactions: remoteReactions } = remote as { reactions?: unknown };
 
 		const mapped = mapRemoteReactions(remoteReactions, host, this.config.host);
 
@@ -128,7 +128,7 @@ export class RemoteNoteReactionSyncService {
 		}
 		const emojis = mapped.emojis.filter(e => e.isRemoteLocal || this.utilityService.isFederationAllowedHost(e.host));
 
-		await this.registerEmojis(host, emojis, reactionEmojis, opts).catch(err => {
+		await this.registerEmojis(emojis, opts).catch(err => {
 			// 絵文字が取れなくても、数の同期は続ける (表示は :name@host: の文字列になる)
 			this.logger.warn(`failed to register reaction emojis of ${note.uri}: ${err}`);
 		});
@@ -168,17 +168,20 @@ export class RemoteNoteReactionSyncService {
 
 	/**
 	 * リアクションに使われたリモート絵文字のうち、自分のサーバーに無いものを登録する。
-	 * 形は ApNoteService.extractEmojis の新規登録と同じにする (uri は分からないので null。後で AP のタグが来れば埋まる)。
+	 *
+	 * 絵文字は (name, host) でサーバー全体に共有されるので、URL は必ずその絵文字のホスト自身の
+	 * `emoji` API から取る。相手の `reactionEmojis` に書かれた第三のホストの URL は使わない
+	 * (相手が嘘の URL を返すと、第三のホストの絵文字を差し替えられてしまうため)。
+	 * 第三のホストが Misskey 系でないときは登録せず、数だけを反映する。
+	 * 既にある (name, host) は上書きしない。形は ApNoteService.extractEmojis の新規登録と同じにする
+	 * (uri は分からないので null。後で AP のタグが来れば埋まる)。
 	 */
 	@bindThis
 	private async registerEmojis(
-		remoteHost: string,
 		emojis: RemoteReactionEmoji[],
-		reactionEmojis: unknown,
 		opts: RemoteNoteReactionSyncOptions,
 	): Promise<void> {
 		if (emojis.length === 0) return;
-		const urlMap = (reactionEmojis != null && typeof reactionEmojis === 'object') ? reactionEmojis as Record<string, unknown> : {};
 
 		const byHost = new Map<string, RemoteReactionEmoji[]>();
 		for (const e of emojis) byHost.set(e.host, [...(byHost.get(e.host) ?? []), e]);
@@ -186,30 +189,27 @@ export class RemoteNoteReactionSyncService {
 		for (const [host, list] of byHost) {
 			const existing = await this.emojisRepository.findBy({ host, name: In(list.map(e => e.name)) });
 			const existingNames = new Set(existing.map(e => e.name));
+			const missing = list.filter(e => !existingNames.has(e.name));
+			if (missing.length === 0) continue;
 
-			for (const emoji of list) {
-				if (existingNames.has(emoji.name)) continue;
+			// 第三のホストは、Misskey 系のときだけそのホスト自身の emoji API を読む
+			if (!missing[0].isRemoteLocal) {
+				const instance = await this.federatedInstanceService.fetch(host);
+				if (!isMisskeyCompatibleSoftware(instance?.softwareName)) continue;
+			}
 
-				let url: string | null = null;
-				let license: string | null = null;
-				if (emoji.isRemoteLocal) {
-					// 相手のサーバー自身の絵文字は reactionEmojis に入らないので、相手の emoji API で取る
-					if (!await opts.consumeBudget()) {
-						this.logger.debug(`host budget exhausted for ${remoteHost}, skip emoji ${emoji.name}`);
-						return;
-					}
-					const res = await this.postRemoteApi(remoteHost, 'emoji', { name: emoji.name }).catch(err => {
-						this.logger.warn(`failed to fetch emoji ${emoji.name}@${remoteHost}: ${err}`);
-						return null;
-					}) as { url?: unknown; license?: unknown } | null;
-					if (res != null && typeof res.url === 'string') url = res.url;
-					if (res != null && typeof res.license === 'string') license = res.license;
-				} else {
-					const v = urlMap[`${emoji.name}@${emoji.host}`];
-					if (typeof v === 'string') url = v;
+			for (const emoji of missing) {
+				if (!await opts.consumeBudget(host)) {
+					this.logger.debug(`host budget exhausted for ${host}, skip emoji ${emoji.name}`);
+					break;
 				}
-
-				if (url == null || !checkHttps(url)) continue;
+				const res = await this.postRemoteApi(host, 'emoji', { name: emoji.name }).catch(err => {
+					this.logger.warn(`failed to fetch emoji ${emoji.name}@${host}: ${err}`);
+					return null;
+				}) as { name?: unknown; url?: unknown; license?: unknown } | null;
+				if (res == null || res.name !== emoji.name || typeof res.url !== 'string' || !checkHttps(res.url)) continue;
+				const url = res.url;
+				const license = typeof res.license === 'string' ? res.license : null;
 
 				this.logger.info(`register emoji host=${host}, name=${emoji.name} (from reactions)`);
 				try {
@@ -225,7 +225,7 @@ export class RemoteNoteReactionSyncService {
 						license,
 					});
 				} catch (err) {
-					// 同時に他の処理が登録したとき (host, name の一意制約) は無視する
+					// 同時に他の処理が登録したとき (host, name の一意制約) は上書きせずに無視する
 					this.logger.debug(`emoji insert skipped ${emoji.name}@${host}: ${err}`);
 				}
 				// 「無い」をキャッシュしているかもしれないので消す

@@ -227,7 +227,7 @@ describe('ApNoteService.updateNoteIfStale', () => {
 
 	test('リアクションの同期で使う上限は、再取得と同じホストごとの上限', async () => {
 		remoteNoteReactionSyncService.syncReactionCounts.mockImplementationOnce(async (_note, opts) => {
-			await opts.consumeBudget();
+			await opts.consumeBudget('remote.example.com');
 			return false;
 		});
 		await service.updateNoteIfStale(makeRemoteNote({ lastFetchedAt: null }));

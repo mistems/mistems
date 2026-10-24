@@ -458,7 +458,7 @@ export class ApNoteService {
 			let updated = await this.updateNote(note, object);
 			// リアクションの同期 (相手が Misskey 系のときだけ)。失敗しても再取得は成功として扱う。
 			const reactionsSynced = await this.remoteNoteReactionSyncService.syncReactionCounts(updated, {
-				consumeBudget: () => this.consumeRefetchHostBudget(host),
+				consumeBudget: (budgetHost) => this.consumeRefetchHostBudget(budgetHost),
 			}).catch(err => {
 				this.logger.warn(`reaction sync failed for ${note.uri}: ${err}`);
 				return false;

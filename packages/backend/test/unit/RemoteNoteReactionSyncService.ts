@@ -38,7 +38,7 @@ describe('RemoteNoteReactionSyncService.syncReactionCounts', () => {
 	let httpRequestService: { send: ReturnType<typeof vi.fn> };
 	let federatedInstanceService: { fetch: ReturnType<typeof vi.fn> };
 	let customEmojiService: { invalidateRemoteEmojiCache: ReturnType<typeof vi.fn> };
-	let consumeBudget: Mock<() => Promise<boolean>>;
+	let consumeBudget: Mock<(host: string) => Promise<boolean>>;
 	let remoteApi: Record<string, unknown>;
 
 	beforeEach(() => {
@@ -56,24 +56,23 @@ describe('RemoteNoteReactionSyncService.syncReactionCounts', () => {
 			insert: vi.fn(async () => undefined),
 		};
 		remoteApi = {
-			'notes/show': {
+			'https://misskey.systems/api/notes/show': {
 				id: 'asq39a3cb0',
 				reactions: { ':owa_desuwa@.:': 2, '👍': 1, ':blobcat@other.example:': 1 },
-				reactionEmojis: { 'blobcat@other.example': 'https://other.example/emoji/blobcat.png' },
+				// 第三のホストの絵文字の URL は相手の言い分なので使わない
+				reactionEmojis: { 'blobcat@other.example': 'https://evil.example/fake.png' },
 			},
-			'emoji': { name: 'owa_desuwa', url: 'https://misskey.systems/files/owa_desuwa.png', license: null },
+			'https://misskey.systems/api/emoji': { name: 'owa_desuwa', url: 'https://misskey.systems/files/owa_desuwa.png', license: null },
+			'https://other.example/api/emoji': { name: 'blobcat', url: 'https://other.example/files/blobcat.png', license: 'CC0' },
 		};
 		httpRequestService = {
-			send: vi.fn(async (url: string) => {
-				const endpoint = url.replace('https://misskey.systems/api/', '');
-				return jsonResponse(remoteApi[endpoint]);
-			}),
+			send: vi.fn(async (url: string) => jsonResponse(remoteApi[url])),
 		};
 		federatedInstanceService = {
 			fetch: vi.fn(async () => ({ softwareName: 'misskey' })),
 		};
 		customEmojiService = { invalidateRemoteEmojiCache: vi.fn() };
-		consumeBudget = vi.fn(async () => true);
+		consumeBudget = vi.fn(async (_host: string) => true);
 
 		const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 		service = new RemoteNoteReactionSyncService(
@@ -109,16 +108,44 @@ describe('RemoteNoteReactionSyncService.syncReactionCounts', () => {
 		expect(sql).toContain('GREATEST');
 	});
 
-	test('リアクションの絵文字を登録する (相手自身の絵文字は emoji API から URL を取る)', async () => {
+	test('リアクションの絵文字を、その絵文字のホスト自身の emoji API から取って登録する', async () => {
 		await service.syncReactionCounts(makeRemoteNote(), { consumeBudget });
 		const inserted = emojisRepository.insert.mock.calls.map(c => c[0]);
 		expect(inserted).toEqual(expect.arrayContaining([
 			expect.objectContaining({ host: 'misskey.systems', name: 'owa_desuwa', originalUrl: 'https://misskey.systems/files/owa_desuwa.png' }),
-			expect.objectContaining({ host: 'other.example', name: 'blobcat', originalUrl: 'https://other.example/emoji/blobcat.png' }),
+			expect.objectContaining({ host: 'other.example', name: 'blobcat', originalUrl: 'https://other.example/files/blobcat.png', license: 'CC0' }),
 		]));
+		expect(inserted).toHaveLength(2);
 		expect(customEmojiService.invalidateRemoteEmojiCache).toHaveBeenCalledWith('owa_desuwa', 'misskey.systems');
-		// notes/show と emoji の 2 回を上限に数える
-		expect(consumeBudget).toHaveBeenCalledTimes(2);
+		// 上限は、リクエストを送るホストごとに数える
+		expect(consumeBudget.mock.calls.map(c => c[0])).toEqual(['misskey.systems', 'misskey.systems', 'other.example']);
+	});
+
+	test('第三のホストの絵文字を、相手の reactionEmojis の URL では登録しない', async () => {
+		// 第三のホストが Misskey 系でないときは、登録せずに数だけを反映する
+		federatedInstanceService.fetch.mockImplementation(async (host: string) => ({ softwareName: host === 'other.example' ? 'mastodon' : 'misskey' }));
+		const res = await service.syncReactionCounts(makeRemoteNote(), { consumeBudget });
+		expect(res).toBe(true);
+		const inserted = emojisRepository.insert.mock.calls.map(c => c[0]);
+		expect(inserted).toEqual([expect.objectContaining({ host: 'misskey.systems', name: 'owa_desuwa' })]);
+		expect(inserted.some((e: { originalUrl: string }) => e.originalUrl.includes('evil.example'))).toBe(false);
+		expect(httpRequestService.send.mock.calls.map(c => c[0])).not.toContain('https://other.example/api/emoji');
+		const params = queryBuilder.setParameters.mock.calls[0][0];
+		expect(Object.values(params)).toContain(':blobcat@other.example:');
+	});
+
+	test('第三のホストの上限に当たったら、その絵文字は取らない', async () => {
+		consumeBudget.mockImplementation(async (host: string) => host !== 'other.example');
+		await service.syncReactionCounts(makeRemoteNote(), { consumeBudget });
+		expect(httpRequestService.send.mock.calls.map(c => c[0])).not.toContain('https://other.example/api/emoji');
+		expect(emojisRepository.insert).toHaveBeenCalledTimes(1);
+	});
+
+	test('emoji API が別の名前を返したら登録しない', async () => {
+		remoteApi['https://misskey.systems/api/emoji'] = { name: 'other', url: 'https://misskey.systems/files/x.png' };
+		await service.syncReactionCounts(makeRemoteNote(), { consumeBudget });
+		const inserted = emojisRepository.insert.mock.calls.map(c => c[0]);
+		expect(inserted.some((e: { host: string }) => e.host === 'misskey.systems')).toBe(false);
 	});
 
 	test('登録済みの絵文字は取り直さない', async () => {
