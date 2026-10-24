@@ -584,6 +584,14 @@ function trySameInstanceReorder(clientX: number, clientY: number, ghostRect: DOM
 	const ghostCrossCenter = (crossRange(ghostRect)[0] + crossRange(ghostRect)[1]) / 2;
 	const ghostMainCenter = (mainRange(ghostRect)[0] + mainRange(ghostRect)[1]) / 2;
 	const [draggedCrossStart, draggedCrossEnd] = crossRange(draggedRect);
+	// 行の間隔がアイテムの高さより小数点以下ぶん狭く、隣の行と 1px ほど重なることがある
+	// (Android Chrome など、devicePixelRatio が整数でない端末)。少しでも重なれば同じ行と
+	// みなすと隣の行のアイテムともスワップし、行をまたいで入れ替わり続ける (振動する) ので、
+	// 小さいほうの半分を超えて重なるときだけ同じ行とする。
+	const isSameLine = ([start, end]: [number, number]) => {
+		const overlap = Math.min(end, draggedCrossEnd) - Math.max(start, draggedCrossStart);
+		return overlap > Math.min(end - start, draggedCrossEnd - draggedCrossStart) / 2;
+	};
 
 	const candidates: { index: number; item: T; rect: DOMRect; sameLine: boolean }[] = [];
 	for (let i = 0; i < props.modelValue.length; i++) {
@@ -593,8 +601,7 @@ function trySameInstanceReorder(clientX: number, clientY: number, ghostRect: DOM
 		const itemEl = findItemEl(item.id);
 		if (itemEl == null) continue;
 		const rect = itemEl.getBoundingClientRect();
-		const [crossStart, crossEnd] = crossRange(rect);
-		candidates.push({ index: i, item, rect, sameLine: crossStart < draggedCrossEnd && draggedCrossStart < crossEnd });
+		candidates.push({ index: i, item, rect, sameLine: isSameLine(crossRange(rect)) });
 	}
 
 	// 同じ行のアイテムは、ゴーストが行から上下にはみ出していても対象にする (指でアイテムが隠れない
