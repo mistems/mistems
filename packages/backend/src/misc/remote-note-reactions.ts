@@ -150,3 +150,34 @@ export function mergeRemoteReactions(
 	}
 	return { merged: { ...local, ...changed }, changed };
 }
+
+/**
+ * `note.reactions` (DB) の目標の数を決める。キーごとに max(相手の数, note_reaction の行の数) を取り、
+ * まだ DB に書き込まれていないバッファの差分を引く (後で書き込まれる分を二重に数えないため)。
+ */
+export function computeTargetReactionCounts(
+	remote: Record<string, number>,
+	rows: Record<string, number>,
+	bufferedDeltas: Record<string, number> = {},
+): Record<string, number> {
+	const result: Record<string, number> = {};
+	for (const key of new Set([...Object.keys(remote), ...Object.keys(rows)])) {
+		const target = Math.max(remote[key] ?? 0, rows[key] ?? 0) - (bufferedDeltas[key] ?? 0);
+		if (target > 0) result[key] = target;
+	}
+	return result;
+}
+
+/**
+ * 相手の `notes/reactions` の `type` を、`ReactionService.create` に渡すリアクションに変える。
+ * Like を受け取ったときと同じく、付けたユーザーのホストの絵文字は `:name:` で渡す
+ * (`ReactionService.create` が、付けたユーザーのホストの絵文字として引く)。
+ * それ以外のカスタム絵文字は変換後のキーのまま渡す (`create` の中で `❤` に置き換わる)。
+ * 不正なときは null を返す。
+ */
+export function toReactionForCreate(type: string, remoteHost: string, localHost: string, reacterHost: string): string | null {
+	const mapped = mapRemoteReactionKey(type, remoteHost, localHost);
+	if (mapped == null) return null;
+	if (mapped.emoji != null && mapped.emoji.host === reacterHost.toLowerCase()) return `:${mapped.emoji.name}:`;
+	return mapped.key;
+}

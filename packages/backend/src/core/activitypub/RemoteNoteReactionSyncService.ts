@@ -3,20 +3,25 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
-import type { EmojisRepository, NotesRepository } from '@/models/_.js';
+import type { EmojisRepository, MiMeta, NoteReactionsRepository, NotesRepository, UsersRepository } from '@/models/_.js';
 import type { MiNote } from '@/models/Note.js';
+import type { MiUser } from '@/models/User.js';
 import type Logger from '@/logger.js';
 import { bindThis } from '@/decorators.js';
 import { checkHttps } from '@/misc/check-https.js';
+import { IdentifiableError } from '@/misc/identifiable-error.js';
 import {
+	computeTargetReactionCounts,
 	isMisskeyCompatibleSoftware,
 	mapRemoteReactions,
 	mergeRemoteReactions,
 	parseMisskeyNoteUri,
+	toReactionForCreate,
 } from '@/misc/remote-note-reactions.js';
 import type { RemoteReactionEmoji } from '@/misc/remote-note-reactions.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
@@ -24,11 +29,16 @@ import { FederatedInstanceService } from '@/core/FederatedInstanceService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { IdService } from '@/core/IdService.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
+import type { ReactionService } from '@/core/ReactionService.js';
+import type { ReactionsBufferingService } from '@/core/ReactionsBufferingService.js';
+import type { RemoteUserResolveService } from '@/core/RemoteUserResolveService.js';
 import { ApLoggerService } from './ApLoggerService.js';
 
 /** 相手の API の応答の大きさの上限 */
 const REMOTE_API_RESPONSE_MAX_SIZE = 1024 * 256;
 const REMOTE_API_TIMEOUT = 5000;
+/** notes/reactions の 1 ページの件数 (相手の API の上限) */
+const REMOTE_REACTIONS_PAGE_SIZE = 100;
 
 export type RemoteNoteReactionSyncOptions = {
 	/** ホストへ 1 回リクエストする前に、そのホストを渡して呼ぶ。false を返したら (上限に当たったら) そこで止める */
@@ -37,18 +47,33 @@ export type RemoteNoteReactionSyncOptions = {
 
 /**
  * リモートのノートのリアクションを、相手の公開 API (Misskey 系だけ) から読んで同期する。
- * ActivityPub の Note にはリアクションの情報が無いため、`notes/show` を読む。
+ * ActivityPub の Note にはリアクションの情報が無いため、`notes/show` (種類と数) と
+ * `notes/reactions` (誰が付けたか) を読む。
  */
 @Injectable()
-export class RemoteNoteReactionSyncService {
+export class RemoteNoteReactionSyncService implements OnModuleInit {
 	private logger: Logger;
+	private reactionService: ReactionService;
+	private reactionsBufferingService: ReactionsBufferingService;
+	private remoteUserResolveService: RemoteUserResolveService;
 
 	constructor(
+		private moduleRef: ModuleRef,
+
 		@Inject(DI.config)
 		private config: Config,
 
+		@Inject(DI.meta)
+		private meta: MiMeta,
+
 		@Inject(DI.notesRepository)
 		private notesRepository: NotesRepository,
+
+		@Inject(DI.noteReactionsRepository)
+		private noteReactionsRepository: NoteReactionsRepository,
+
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
 
 		@Inject(DI.emojisRepository)
 		private emojisRepository: EmojisRepository,
@@ -61,6 +86,14 @@ export class RemoteNoteReactionSyncService {
 		private apLoggerService: ApLoggerService,
 	) {
 		this.logger = this.apLoggerService.logger.createSubLogger('reaction-sync');
+	}
+
+	onModuleInit(): void {
+		// ApNoteService → 本サービス → ReactionService / RemoteUserResolveService → ApPersonService → ApNoteService の
+		// 循環を避けるため、遅延して解決する
+		this.reactionService = this.moduleRef.get('ReactionService');
+		this.reactionsBufferingService = this.moduleRef.get('ReactionsBufferingService');
+		this.remoteUserResolveService = this.moduleRef.get('RemoteUserResolveService');
 	}
 
 	/**
@@ -100,11 +133,16 @@ export class RemoteNoteReactionSyncService {
 	}
 
 	/**
-	 * リアクションの種類と数を同期する。`note.reactions` を更新したら true を返す。
-	 * 失敗したときは例外を投げる (呼び出し元で warn に残し、再取得そのものは成功として扱う)。
+	 * リアクションを同期する。`note.reactions` か `note_reaction` を変えたら true を返す。
+	 *
+	 * 1. `notes/show` で種類と数を読み、リアクションの絵文字を登録する
+	 * 2. `notes/reactions` で付けたユーザーを読み、`note_reaction` を作る (上限に当たったらそこで止める)
+	 * 3. キーごとに max(自分の数, 相手の数, 行の数) にする
+	 *
+	 * `notes/show` が失敗したときは例外を投げる (呼び出し元で warn に残し、再取得そのものは成功として扱う)。
 	 */
 	@bindThis
-	public async syncReactionCounts(note: MiNote, opts: RemoteNoteReactionSyncOptions): Promise<boolean> {
+	public async syncReactions(note: MiNote, opts: RemoteNoteReactionSyncOptions): Promise<boolean> {
 		const target = await this.getSyncTarget(note);
 		if (target == null) return false;
 		const { host, remoteNoteId } = target;
@@ -133,11 +171,157 @@ export class RemoteNoteReactionSyncService {
 			this.logger.warn(`failed to register reaction emojis of ${note.uri}: ${err}`);
 		});
 
-		return await this.applyReactionCounts(note.id, mapped.reactions);
+		const imported = await this.importReactionUsers(note, host, remoteNoteId, opts).catch(err => {
+			// 誰が付けたかが取れなくても、数の同期は続ける
+			this.logger.warn(`failed to import reaction users of ${note.uri}: ${err}`);
+			return 0;
+		});
+
+		const countsChanged = await this.applyReactionCounts(note.id, mapped.reactions);
+		return countsChanged || imported > 0;
 	}
 
 	/**
-	 * 自分のサーバーの数と比べて増えるキーだけを、キーごとに GREATEST で更新する。
+	 * 相手の `notes/reactions` を読み、付けたユーザーを解決して `note_reaction` を作る。作った行の数を返す。
+	 *
+	 * 行は Like を受け取ったときと同じ `ReactionService.create` で作るので、ブロック・公開範囲・
+	 * `reactionAcceptance`・使えない絵文字などは同じように弾かれる。付けたユーザーはリモートなので配送はしない。
+	 * `create` は数を 1 増やすが、数は最後に相手の数に合わせるので、増やした分はここで引き戻す。
+	 */
+	@bindThis
+	private async importReactionUsers(note: MiNote, remoteHost: string, remoteNoteId: string, opts: RemoteNoteReactionSyncOptions): Promise<number> {
+		const localHost = this.utilityService.toPuny(this.config.host);
+		const incremented: Record<string, number> = {};
+		let imported = 0;
+
+		try {
+			let untilId: string | undefined;
+			pages: while (true) {
+				if (!await opts.consumeBudget(remoteHost)) {
+					this.logger.debug(`host budget exhausted for ${remoteHost}, stop importing reaction users of ${note.uri}`);
+					break;
+				}
+
+				const page = await this.postRemoteApi(remoteHost, 'notes/reactions', {
+					noteId: remoteNoteId,
+					limit: REMOTE_REACTIONS_PAGE_SIZE,
+					...(untilId != null ? { untilId } : {}),
+				});
+				if (!Array.isArray(page)) throw new Error('invalid notes/reactions response');
+
+				for (const entry of page as unknown[]) {
+					const result = await this.importReactionUser(note, entry, remoteHost, localHost, opts);
+					if (result === 'budget-exhausted') break pages;
+					if (result != null) {
+						incremented[result] = (incremented[result] ?? 0) + 1;
+						imported++;
+					}
+				}
+
+				const last = page.at(-1) as { id?: unknown } | undefined;
+				if (page.length < REMOTE_REACTIONS_PAGE_SIZE || typeof last?.id !== 'string' || last.id === untilId) break;
+				untilId = last.id;
+			}
+		} finally {
+			// create で増やした数を引き戻す (数は applyReactionCounts で相手の数に合わせる)
+			await this.revertIncrements(note.id, incremented);
+		}
+
+		return imported;
+	}
+
+	/**
+	 * 1 件のリアクションを取り込む。作った行のリアクションを返す。取り込まなかったときは null を返す。
+	 */
+	@bindThis
+	private async importReactionUser(
+		note: MiNote,
+		entry: unknown,
+		remoteHost: string,
+		localHost: string,
+		opts: RemoteNoteReactionSyncOptions,
+	): Promise<string | null | 'budget-exhausted'> {
+		if (entry == null || typeof entry !== 'object') return null;
+		const { user: remoteUser, type } = entry as { user?: unknown; type?: unknown };
+		if (remoteUser == null || typeof remoteUser !== 'object' || typeof type !== 'string') return null;
+		const { username, host: rawHost } = remoteUser as { username?: unknown; host?: unknown };
+		if (typeof username !== 'string' || (rawHost != null && typeof rawHost !== 'string')) return null;
+
+		let userHost: string;
+		try {
+			userHost = this.utilityService.toPuny(rawHost ?? remoteHost);
+		} catch {
+			return null;
+		}
+
+		// ローカルのユーザーのリアクションは自分のサーバーが正なので、取り込まない
+		if (userHost === localHost) return null;
+		if (!this.utilityService.isFederationAllowedHost(userHost)) return null;
+
+		const reaction = toReactionForCreate(type, remoteHost, localHost, userHost);
+		if (reaction == null) return null;
+
+		// 既に自分のサーバーにいるユーザーは DB から引くだけにする (resolveUser は古いユーザーを取り直すため)
+		let user: MiUser | null = await this.usersRepository.findOneBy({ usernameLower: username.toLowerCase(), host: userHost });
+		if (user == null) {
+			if (!await opts.consumeBudget(userHost)) {
+				this.logger.debug(`host budget exhausted for ${userHost}, stop importing reaction users of ${note.uri}`);
+				return 'budget-exhausted';
+			}
+			user = await this.remoteUserResolveService.resolveUser(username, userHost).catch(err => {
+				this.logger.warn(`failed to resolve ${username}@${userHost}: ${err}`);
+				return null;
+			});
+			if (user == null) return null;
+		}
+
+		if (user.host == null) return null;
+		if (user.isSuspended) return null;
+
+		// 既にリアクションがあるユーザーは何もしない (別のリアクションへの置き換えもしない)
+		if (await this.noteReactionsRepository.exists({ where: { noteId: note.id, userId: user.id } })) return null;
+
+		try {
+			await this.reactionService.create(user, note, reaction);
+		} catch (err) {
+			// ブロック・公開範囲などで弾かれたもの。Like を受け取ったときと同じく捨てる
+			if (err instanceof IdentifiableError) {
+				this.logger.debug(`skip reaction of ${username}@${userHost}: ${err.id}`);
+				return null;
+			}
+			throw err;
+		}
+
+		const created = await this.noteReactionsRepository.findOneBy({ noteId: note.id, userId: user.id });
+		return created?.reaction ?? null;
+	}
+
+	/**
+	 * `ReactionService.create` で増やした数を引き戻す。
+	 * バッファリングが有効なときは、create はバッファに差分を積むので、DB から引いておけば後で書き込まれたときに相殺される。
+	 */
+	@bindThis
+	private async revertIncrements(noteId: MiNote['id'], incremented: Record<string, number>): Promise<void> {
+		const entries = Object.entries(incremented);
+		if (entries.length === 0) return;
+
+		let sql = '"reactions"';
+		const parameters: Record<string, string | number> = {};
+		entries.forEach(([reaction, count], i) => {
+			sql = `jsonb_set(${sql}, ARRAY[:reaction${i}], (COALESCE("reactions"->>:reaction${i}, '0')::int - :count${i})::text::jsonb)`;
+			parameters[`reaction${i}`] = reaction;
+			parameters[`count${i}`] = count;
+		});
+
+		await this.notesRepository.createQueryBuilder().update()
+			.set({ reactions: () => sql })
+			.where('id = :id', { id: noteId })
+			.setParameters(parameters)
+			.execute();
+	}
+
+	/**
+	 * キーごとに `GREATEST(自分の数, 相手の数, note_reaction の行の数)` にする。増えるキーだけを更新する。
 	 * 読んでから書くまでの間に Like が届いても加算を失わないよう、SQL の中で max を取る。
 	 */
 	@bindThis
@@ -145,7 +329,20 @@ export class RemoteNoteReactionSyncService {
 		const current = await this.notesRepository.findOneBy({ id: noteId });
 		if (current == null) return false;
 
-		const { changed } = mergeRemoteReactions(current.reactions, remoteReactions);
+		const rows = await this.noteReactionsRepository.createQueryBuilder('reaction')
+			.select('reaction.reaction', 'reaction')
+			.addSelect('COUNT(*)', 'count')
+			.where('reaction.noteId = :noteId', { noteId })
+			.groupBy('reaction.reaction')
+			.getRawMany<{ reaction: string; count: string }>();
+		const rowCounts = Object.fromEntries(rows.map(r => [r.reaction, Number(r.count)]));
+
+		const deltas = this.meta.enableReactionsBuffering
+			? (await this.reactionsBufferingService.get(noteId)).deltas
+			: {};
+
+		const target = computeTargetReactionCounts(remoteReactions, rowCounts, deltas);
+		const { changed } = mergeRemoteReactions(current.reactions, target);
 		const entries = Object.entries(changed);
 		if (entries.length === 0) return false;
 

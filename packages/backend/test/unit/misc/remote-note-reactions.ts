@@ -5,11 +5,13 @@
 
 import { describe, expect, test } from 'vitest';
 import {
+	computeTargetReactionCounts,
 	isMisskeyCompatibleSoftware,
 	mapRemoteReactionKey,
 	mapRemoteReactions,
 	mergeRemoteReactions,
 	parseMisskeyNoteUri,
+	toReactionForCreate,
 } from '@/misc/remote-note-reactions.js';
 
 const REMOTE = 'misskey.systems';
@@ -138,5 +140,34 @@ describe('mergeRemoteReactions', () => {
 		const local = { '👍': 1 };
 		mergeRemoteReactions(local, { '👍': 2 });
 		expect(local).toEqual({ '👍': 1 });
+	});
+});
+
+describe('computeTargetReactionCounts', () => {
+	test('キーごとに max(相手の数, 行の数) を取る', () => {
+		expect(computeTargetReactionCounts({ '👍': 3, '🎉': 1 }, { '👍': 1, '🎉': 2, '😆': 1 })).toEqual({ '👍': 3, '🎉': 2, '😆': 1 });
+	});
+
+	test('まだ書き込まれていないバッファの差分を引く', () => {
+		expect(computeTargetReactionCounts({ '👍': 3 }, { '👍': 3 }, { '👍': 1 })).toEqual({ '👍': 2 });
+		expect(computeTargetReactionCounts({ '👍': 1 }, {}, { '👍': 1 })).toEqual({});
+	});
+});
+
+describe('toReactionForCreate', () => {
+	test('付けたユーザーのホストの絵文字は :name: で渡す', () => {
+		// 相手のサーバーのユーザーが、相手のサーバーの絵文字を付けた
+		expect(toReactionForCreate(':owa_desuwa@.:', REMOTE, LOCAL, REMOTE)).toBe(':owa_desuwa:');
+		// 第三のサーバーのユーザーが、そのサーバーの絵文字を付けた
+		expect(toReactionForCreate(':blobcat@other.example:', REMOTE, LOCAL, 'other.example')).toBe(':blobcat:');
+	});
+
+	test('付けたユーザーのホストと違う絵文字は変換後のキーのまま渡す', () => {
+		expect(toReactionForCreate(':blobcat@other.example:', REMOTE, LOCAL, REMOTE)).toBe(':blobcat@other.example:');
+	});
+
+	test('Unicode の絵文字はそのまま、不正なものは null', () => {
+		expect(toReactionForCreate('👍', REMOTE, LOCAL, REMOTE)).toBe('👍');
+		expect(toReactionForCreate('bogus', REMOTE, LOCAL, REMOTE)).toBeNull();
 	});
 });
