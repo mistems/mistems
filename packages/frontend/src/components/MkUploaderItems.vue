@@ -256,6 +256,9 @@ async function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
 		text-align: center;
 		width: 100%;
 		min-width: 0;
+		// 右端のドラッグハンドルと文字が重ならないよう、左右対称に余白を取る
+		box-sizing: border-box;
+		padding: 0 40px;
 	}
 
 	.itemActionWrapper {
@@ -274,10 +277,16 @@ async function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
 		right: 8px;
 	}
 
+	// 縦積みのレイアウトでは右端の上下中央に置き、指で掴みやすい大きさにする
 	.itemDragHandle {
 		position: absolute;
-		right: 8px;
-		bottom: 8px;
+		top: 50%;
+		right: 4px;
+		transform: translateY(-50%);
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		padding: 0;
 	}
 }
 </style>

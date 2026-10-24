@@ -269,6 +269,8 @@ function teardownAutoScroll() {
 
 const LONG_PRESS_MS = 400;
 const MOVE_THRESHOLD_PX = 8;
+// 指はマウスよりぶれるので、タップのつもりの操作がドラッグにならないよう大きめに取る
+const TOUCH_MOVE_THRESHOLD_PX = 12;
 
 type Pending = {
 	pointerId: number;
@@ -303,9 +305,11 @@ const SILENT_AFTER_SWAP_MS = 30;
 let silentUntil = 0;
 
 // アニメーション中のアイテム ID を保持。TransitionGroup の move アニメーション
-// (150ms) が完了するまで、そのアイテムをスワップ対象から除外する。
+// (150ms) が完了するまで、それらのアイテムをスワップ対象から除外する。
 const ANIMATION_DURATION_MS = 150;
-let animatingItemId: string | null = null;
+// move アニメーションは描画の 1 フレーム後に始まるので、終わるまで少し余裕を見る
+const ANIMATION_SETTLE_MS = ANIMATION_DURATION_MS + 50;
+let animatingItemIds = new Set<string>();
 let animatingTimer: number | null = null;
 
 function noop() {}
@@ -376,7 +380,7 @@ function cleanup() {
 	lastSwapDeadZone = 0;
 	silentUntil = 0;
 	if (animatingTimer != null) { window.clearTimeout(animatingTimer); animatingTimer = null; }
-	animatingItemId = null;
+	animatingItemIds = new Set();
 	draggingItemForGhost.value = null;
 	ghostBaseStyle.value = {};
 	if (wasTouch) {
@@ -485,12 +489,16 @@ function onPointerDown(ev: PointerEvent, item: T) {
 		// 行全体掴み × touch では touch-action: pan-y がスクロールを横取りするため、
 		// 動かしてから開始する方式は構造的に成立しない。SortableJS や iOS の編集モード
 		// 等と同じ「長押しで並び替え、動かせばスクロール」の挙動に統一する。
-		longPressTimer = window.setTimeout(startDrag, LONG_PRESS_MS);
+		// ただしスクロールと競合しない動き (noTouchScroll、horizontal での横向きの動き) なら、
+		// 長押しに加えて動かした時点でも開始する (onPointerMove 参照)。
+		longPressTimer = window.setTimeout(() => startDrag(), LONG_PRESS_MS);
 	}
 	// それ以外 (mouse / pen): pointermove で MOVE_THRESHOLD_PX を超えたら開始
 }
 
-function startDrag() {
+// vibrate: touch で長押しが成立したことを知らせる。動かして開始した場合は指の動きで
+// 分かるので鳴らさない。
+function startDrag({ vibrate = true }: { vibrate?: boolean } = {}) {
 	if (pending == null) return;
 	dragActive = true;
 	const item = pending.item;
@@ -523,7 +531,7 @@ function startDrag() {
 		autoScrollStickyTopPx = offsets.top;
 		autoScrollStickyBottomPx = offsets.bottom;
 	}
-	if (pending.pointerType === 'touch' && 'vibrate' in navigator) {
+	if (vibrate && pending.pointerType === 'touch' && 'vibrate' in navigator) {
 		try {
 			navigator.vibrate(30);
 		} catch {
@@ -537,6 +545,7 @@ function startDrag() {
 // elementFromPoint を使わないため、透明 overlay の z-index 問題が発生しない。
 
 const OVERLAP_RATIO = 0.3;
+const CROSS_LINE_INSET_RATIO = 0.25;
 
 function computeOverlap(ghostRect: DOMRect, targetRect: DOMRect, backward: boolean): number {
 	if (props.direction === 'horizontal') {
@@ -558,51 +567,107 @@ function trySameInstanceReorder(clientX: number, clientY: number, ghostRect: DOM
 	const draggedIndex = props.modelValue.findIndex(x => x.id === draggedId);
 	if (draggedIndex === -1) return false;
 
+	// :scope > で直下の子に限定 (canNest でネストした別インスタンスの item root を誤って拾わない)
+	const findItemEl = (id: string) => container.querySelector<HTMLElement>(
+		`:scope > [data-mk-draggable-item-root="${CSS.escape(id)}"]`,
+	);
+	const draggedEl = findItemEl(draggedId);
+	if (draggedEl == null) return false;
+	const draggedRect = draggedEl.getBoundingClientRect();
+
+	// flex-wrap で折り返している場合に備えて、並び方向と直交する軸 (horizontal なら縦) でも判定する。
+	// 並び方向の重なりだけで判定すると、別の行にあって横位置が重なるだけのアイテムとも
+	// スワップしてしまい、行をまたいで入れ替わり続ける (振動する)。
+	const isHorizontal = props.direction === 'horizontal';
+	const crossRange = (rect: DOMRect): [number, number] => isHorizontal ? [rect.top, rect.bottom] : [rect.left, rect.right];
+	const mainRange = (rect: DOMRect): [number, number] => isHorizontal ? [rect.left, rect.right] : [rect.top, rect.bottom];
+	const ghostCrossCenter = (crossRange(ghostRect)[0] + crossRange(ghostRect)[1]) / 2;
+	const ghostMainCenter = (mainRange(ghostRect)[0] + mainRange(ghostRect)[1]) / 2;
+	const [draggedCrossStart, draggedCrossEnd] = crossRange(draggedRect);
+
+	const candidates: { index: number; item: T; rect: DOMRect; sameLine: boolean }[] = [];
 	for (let i = 0; i < props.modelValue.length; i++) {
 		if (i === draggedIndex) continue;
 		const item = props.modelValue[i];
-		if (item.id === animatingItemId) continue;
-
-		// :scope > で直下の子に限定 (canNest でネストした別インスタンスの item root を誤って拾わない)
-		const itemEl = container.querySelector<HTMLElement>(
-			`:scope > [data-mk-draggable-item-root="${CSS.escape(item.id)}"]`,
-		);
+		if (animatingItemIds.has(item.id)) continue;
+		const itemEl = findItemEl(item.id);
 		if (itemEl == null) continue;
+		const rect = itemEl.getBoundingClientRect();
+		const [crossStart, crossEnd] = crossRange(rect);
+		candidates.push({ index: i, item, rect, sameLine: crossStart < draggedCrossEnd && draggedCrossStart < crossEnd });
+	}
 
-		const itemRect = itemEl.getBoundingClientRect();
+	// 同じ行のアイテムは、ゴーストが行から上下にはみ出していても対象にする (指でアイテムが隠れない
+	// よう少しずらして動かすことが多いため)。ただし中心が別の行に入ったときと、コンテナの外に
+	// 出たとき (別インスタンスへのドロップを判定させる) は対象にしない。
+	const isInside = (pos: number, [start, end]: [number, number], inset = 0) => pos >= start + inset && pos <= end - inset;
+	const inOtherLine = candidates.some(c => !c.sameLine && isInside(ghostCrossCenter, crossRange(c.rect)));
+	// コンテナの内側は、直交軸方向にアイテムの半分ぶん広げて扱う (1 行だけのときに指を少し
+	// ずらしても並べ替えられるように)
+	const containerRect = container.getBoundingClientRect();
+	const crossMargin = (draggedCrossEnd - draggedCrossStart) / 2;
+	const [containerCrossStart, containerCrossEnd] = crossRange(containerRect);
+	const inContainer = isInside(ghostCrossCenter, [containerCrossStart - crossMargin, containerCrossEnd + crossMargin])
+		&& isInside(ghostMainCenter, mainRange(containerRect));
+	const sameLineActive = isInside(ghostCrossCenter, [draggedCrossStart, draggedCrossEnd]) || (!inOtherLine && inContainer);
+
+	for (const { index: i, item, rect: itemRect, sameLine } of candidates) {
 		const backward = draggedIndex < i;
 
-		const size = props.direction === 'horizontal'
-			? Math.min(ghostRect.width, itemRect.width)
-			: Math.min(ghostRect.height, itemRect.height);
-		const threshold = size * OVERLAP_RATIO;
-		const overlap = computeOverlap(ghostRect, itemRect, backward);
-		if (overlap < threshold) continue;
+		if (sameLine) {
+			if (!sameLineActive) continue;
+			const size = isHorizontal
+				? Math.min(ghostRect.width, itemRect.width)
+				: Math.min(ghostRect.height, itemRect.height);
+			const threshold = size * OVERLAP_RATIO;
+			const overlap = computeOverlap(ghostRect, itemRect, backward);
+			if (overlap < threshold) continue;
+		} else {
+			// 別の行 (列) へ移るときは、ゴーストの中心が乗ったアイテムとだけスワップする。
+			// 並び方向の重なり量は行ごとに基準がずれるので使えない。
+			// 行の境目で指が揺れると行をまたいで入れ替わり続けるので、行の端の
+			// CROSS_LINE_INSET_RATIO ぶんは判定から外して余裕を持たせる。
+			const [crossStart, crossEnd] = crossRange(itemRect);
+			const inset = (crossEnd - crossStart) * CROSS_LINE_INSET_RATIO;
+			if (!isInside(ghostCrossCenter, [crossStart, crossEnd], inset)) continue;
+			if (!isInside(ghostMainCenter, mainRange(itemRect))) continue;
+		}
 
 		// オシレーション防止: 同じ相手への逆方向スワップはデッドゾーン内ならブロック
 		if (lastSwapTargetId === item.id && lastSwapBackward !== backward) {
-			const dist = props.direction === 'horizontal'
-				? Math.abs(clientX - lastSwapPointerX)
-				: Math.abs(clientY - lastSwapPointerY);
+			const dist = sameLine
+				? (isHorizontal
+					? Math.abs(clientX - lastSwapPointerX)
+					: Math.abs(clientY - lastSwapPointerY))
+				: Math.hypot(clientX - lastSwapPointerX, clientY - lastSwapPointerY);
 			if (dist < lastSwapDeadZone) return true;
 		}
 
 		if (!applyDrop(dragSession.item as T, group, item.id, backward)) continue;
 
 		const now = performance.now();
-		silentUntil = now + SILENT_AFTER_SWAP_MS;
+		// 行をまたいだ直後は dragged 自身も移動アニメーション中で、sameLine の判定に使う
+		// rect が元の行を指してしまう。アニメーションが終わるまで判定を止める。
+		silentUntil = now + (sameLine ? SILENT_AFTER_SWAP_MS : ANIMATION_SETTLE_MS);
 		lastSwapTargetId = item.id;
 		lastSwapBackward = backward;
 		lastSwapPointerX = clientX;
 		lastSwapPointerY = clientY;
-		lastSwapDeadZone = props.direction === 'horizontal' ? itemRect.width : itemRect.height;
+		lastSwapDeadZone = isHorizontal ? itemRect.width : itemRect.height;
 
+		// 動いたアイテムは移動アニメーション中、元の位置の rect を返すので、まとめて判定から外す。
+		// 同じ行なら dragged と相手の間だけが動く。行をまたぐと間のアイテムが 1 つずつずれ、
+		// 幅がそろっていなければ折り返す位置も変わるので、それより後ろもすべて外す。
 		if (animatingTimer != null) window.clearTimeout(animatingTimer);
-		animatingItemId = item.id;
+		const movedEnd = sameLine ? Math.max(draggedIndex, i) + 1 : props.modelValue.length;
+		animatingItemIds = new Set(props.modelValue
+			.slice(Math.min(draggedIndex, i), movedEnd)
+			.map(x => x.id)
+			.filter(id => id !== draggedId));
 		animatingTimer = window.setTimeout(() => {
-			animatingItemId = null;
+			animatingItemIds = new Set();
 			animatingTimer = null;
-		}, ANIMATION_DURATION_MS);
+		}, ANIMATION_SETTLE_MS);
 
 		return true;
 	}
@@ -615,18 +680,28 @@ function onPointerMove(ev: PointerEvent) {
 	if (pending == null || ev.pointerId !== pending.pointerId) return;
 
 	if (!dragActive) {
+		const isTouch = pending.pointerType === 'touch';
 		const dx = Math.abs(ev.clientX - pending.x);
 		const dy = Math.abs(ev.clientY - pending.y);
-		const moved = dx > MOVE_THRESHOLD_PX || dy > MOVE_THRESHOLD_PX;
+		const threshold = isTouch ? TOUCH_MOVE_THRESHOLD_PX : MOVE_THRESHOLD_PX;
+		const moved = dx > threshold || dy > threshold;
 		if (!moved) return;
 
-		if (pending.pointerType === 'touch') {
+		// touch で動かした時点から開始してよいのは、その動きがスクロールにならない場合だけ。
+		// - noTouchScroll: touch-action: none なのでスクロールが起きない
+		// - horizontal で横向きの動き: .item は touch-action: pan-y なので横にはスクロールしない
+		// どちらも、ここで cleanup すると指を動かしても何も起きない操作になってしまう。
+		// ※ horizontal の判定は .item の touch-action: pan-y が前提。利用側で touch-action を
+		//   上書きして横スクロールさせる場合は、この条件も見直す必要がある。
+		const touchCanStart = props.noTouchScroll || (props.direction === 'horizontal' && dx > dy);
+		if (isTouch && !touchCanStart) {
 			// 長押し成立前に動いたら通常スクロールに譲る (タッチのみ)
 			cleanup();
 		} else {
-			// mouse / pen: 動き出した瞬間がドラッグ開始トリガー。
+			// mouse / pen と touchCanStart の touch: 動き出した瞬間がドラッグ開始トリガー。
 			// 動かさず pointerup (=click) は dragActive=false のまま素通し。
-			startDrag();
+			clearLongPress();
+			startDrag({ vibrate: false });
 		}
 		return;
 	}
