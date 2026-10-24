@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { defineAsyncComponent } from 'vue';
 import * as Misskey from 'misskey-js';
 import { $i, iAmModerator } from '@/i.js';
 import { i18n } from '@/i18n.js';
@@ -32,6 +33,22 @@ export function getFileMenu(file: Misskey.entities.DriveFile, onHideStateUpdated
 			copyToClipboard(file.url);
 		},
 	});
+
+	if (file.type.startsWith('image/')) {
+		menuItems.push({
+			text: i18n.ts._emojiPreview.title,
+			icon: 'ti ti-mood-smile',
+			action: () => {
+				const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkEmojiPreviewDialog.vue')), {
+					url: file.url,
+					name: file.name,
+					user: $i,
+				}, {
+					closed: () => dispose(),
+				});
+			},
+		});
+	}
 
 	if (iAmModerator) {
 		menuItems.push({
