@@ -25,6 +25,14 @@ export function getFileMenu(file: Misskey.entities.DriveFile, onHideStateUpdated
 		});
 	}
 
+	menuItems.push({
+		text: i18n.ts.copyLink,
+		icon: 'ti ti-link',
+		action: () => {
+			copyToClipboard(file.url);
+		},
+	});
+
 	if (iAmModerator) {
 		menuItems.push({
 			text: file.isSensitive ? i18n.ts.unmarkAsSensitive : i18n.ts.markAsSensitive,
