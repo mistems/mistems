@@ -45,6 +45,8 @@ import { FeedService } from './FeedService.js';
 import { UrlPreviewService } from './UrlPreviewService.js';
 import { ClientLoggerService } from './ClientLoggerService.js';
 import { HtmlTemplateService } from './HtmlTemplateService.js';
+import { buildVariantCookie, listVariants, readVariantIndex } from './frontend-variant.js';
+import type { VariantEntry } from './frontend-variant.js';
 
 import { BasePage } from './views/base.js';
 import { htmlToPlainText } from '@/misc/html-to-plain-text.js';
@@ -207,6 +209,23 @@ export class ClientServerService {
 	public createServer(fastify: FastifyInstance, options: FastifyPluginOptions, done: (err?: Error) => void) {
 		const configUrl = new URL(this.config.url);
 
+		// variant 表示中の HTML を共有キャッシュに載せない。
+		// variant が 1 つでもあるときは、Cookie で内容が変わることをキャッシュに伝える
+		fastify.addHook('onSend', async (request, reply, payload) => {
+			const contentType = String(reply.getHeader('Content-Type') ?? '');
+			if (!contentType.startsWith('text/html')) return payload;
+			if (this.htmlTemplateService.hasVariants()) {
+				const vary = String(reply.getHeader('Vary') ?? '');
+				if (!vary.split(',').some(v => ['cookie', '*'].includes(v.trim().toLowerCase()))) {
+					reply.header('Vary', vary === '' ? 'Cookie' : `${vary}, Cookie`);
+				}
+			}
+			if (this.htmlTemplateService.resolveVariant(request.headers.cookie) != null) {
+				reply.header('Cache-Control', 'private, no-store');
+			}
+			return payload;
+		});
+
 		fastify.addHook('onRequest', (request, reply, done) => {
 			// クリックジャッキング防止のためiFrameの中に入れられないようにする
 			reply.header('X-Frame-Options', 'DENY');
@@ -216,9 +235,20 @@ export class ClientServerService {
 		//#region vite assets
 		if (this.config.frontendEmbedManifestExists) {
 			this.clientLoggerService.logger.info(`[ClientServerService] Using built frontend vite assets. ${this.frontendViteOut}`);
+			// 本線が先頭なので、ハッシュなしのファイル（loader/boot.js など）は本線のものが返る
+			let variantRoots: string[] = [];
+			try {
+				const variantsRoot = this.htmlTemplateService.frontendVariantsRoot;
+				variantRoots = listVariants(variantsRoot).map(name => resolve(variantsRoot, name));
+			} catch (err) {
+				this.clientLoggerService.logger.warn(`[ClientServerService] Failed to list frontend variants: ${err instanceof Error ? err.message : String(err)}`);
+			}
 			fastify.register((fastify, options, done) => {
 				fastify.register(fastifyStatic, {
-					root: this.frontendViteOut,
+					root: [
+						this.frontendViteOut,
+						...variantRoots,
+					],
 					prefix: '/vite/',
 					maxAge: ms('30 days'),
 					immutable: true,
@@ -436,13 +466,35 @@ export class ClientServerService {
 
 		//#endregion
 
+		//#region frontend variants
+		fastify.get('/__fe/variants.json', async (request, reply) => {
+			const available = await this.htmlTemplateService.getAvailableVariants();
+			const index = readVariantIndex(this.htmlTemplateService.frontendVariantsRoot);
+			const variants: VariantEntry[] = available.map(name => index.variants.find(v => v.name === name) ?? { name, branch: '', mode: 'as-is' });
+			reply.header('Cache-Control', 'private, no-store');
+			reply.header('Content-Type', 'application/json; charset=utf-8');
+			return JSON.stringify({
+				current: this.htmlTemplateService.resolveVariant(request.headers.cookie),
+				variants,
+				skipped: index.skipped,
+			});
+		});
+
+		// 本線に戻す専用。variant の指定は受け取らない（切り替えは管理画面が Cookie を直接書く）
+		fastify.get('/__fe/switch', async (request, reply) => {
+			reply.header('Set-Cookie', buildVariantCookie(null, this.config.url.startsWith('https://')));
+			reply.header('Cache-Control', 'private, no-store');
+			return reply.redirect('/');
+		});
+		//#endregion
+
 		const renderBase = async (reply: FastifyReply, data: Partial<Parameters<typeof BasePage>[0]> = {}) => {
 			reply.header('Cache-Control', 'public, max-age=30');
 			return await HtmlTemplateService.replyHtml(reply, BasePage({
 				img: this.meta.bannerUrl ?? undefined,
 				title: this.meta.name ?? 'Misskey',
 				desc: this.meta.description == null ? undefined : htmlToPlainText(this.meta.description),
-				...(await this.htmlTemplateService.getCommonData()),
+				...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				...data,
 			}));
 		};
@@ -548,7 +600,7 @@ export class ClientServerService {
 					user: _user,
 					profile,
 					sub: request.params.sub,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 					clientCtxJson: htmlSafeJsonStringify({
 						user: _user,
 					}),
@@ -610,7 +662,7 @@ export class ClientServerService {
 				return await HtmlTemplateService.replyHtml(reply, NotePage({
 					note: _note,
 					profile,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 					clientCtxJson: htmlSafeJsonStringify({
 						note: _note,
 					}),
@@ -650,7 +702,7 @@ export class ClientServerService {
 				return await HtmlTemplateService.replyHtml(reply, PagePage({
 					page: _page,
 					profile,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -674,7 +726,7 @@ export class ClientServerService {
 				return await HtmlTemplateService.replyHtml(reply, FlashPage({
 					flash: _flash,
 					profile,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -698,7 +750,7 @@ export class ClientServerService {
 				return await HtmlTemplateService.replyHtml(reply, ClipPage({
 					clip: _clip,
 					profile,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 					clientCtxJson: htmlSafeJsonStringify({
 						clip: _clip,
 					}),
@@ -723,7 +775,7 @@ export class ClientServerService {
 				return await HtmlTemplateService.replyHtml(reply, GalleryPostPage({
 					galleryPost: _post,
 					profile,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -741,7 +793,7 @@ export class ClientServerService {
 				reply.header('Cache-Control', 'public, max-age=15');
 				return await HtmlTemplateService.replyHtml(reply, ChannelPage({
 					channel: _channel,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -759,7 +811,7 @@ export class ClientServerService {
 				reply.header('Cache-Control', 'public, max-age=3600');
 				return await HtmlTemplateService.replyHtml(reply, ReversiGamePage({
 					reversiGame: _game,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -778,7 +830,7 @@ export class ClientServerService {
 				reply.header('Cache-Control', 'public, max-age=3600');
 				return await HtmlTemplateService.replyHtml(reply, AnnouncementPage({
 					announcement: _announcement,
-					...(await this.htmlTemplateService.getCommonData()),
+					...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				}));
 			} else {
 				return await renderBase(reply);
@@ -814,7 +866,7 @@ export class ClientServerService {
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await HtmlTemplateService.replyHtml(reply, BaseEmbed({
 				title: this.meta.name ?? 'Misskey',
-				...(await this.htmlTemplateService.getCommonData()),
+				...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				embedCtxJson: htmlSafeJsonStringify({
 					user: _user,
 				}),
@@ -844,7 +896,7 @@ export class ClientServerService {
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await HtmlTemplateService.replyHtml(reply, BaseEmbed({
 				title: this.meta.name ?? 'Misskey',
-				...(await this.htmlTemplateService.getCommonData()),
+				...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				embedCtxJson: htmlSafeJsonStringify({
 					note: _note,
 				}),
@@ -865,7 +917,7 @@ export class ClientServerService {
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await HtmlTemplateService.replyHtml(reply, BaseEmbed({
 				title: this.meta.name ?? 'Misskey',
-				...(await this.htmlTemplateService.getCommonData()),
+				...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 				embedCtxJson: htmlSafeJsonStringify({
 					clip: _clip,
 				}),
@@ -878,7 +930,7 @@ export class ClientServerService {
 			reply.header('Cache-Control', 'public, max-age=3600');
 			return await HtmlTemplateService.replyHtml(reply, BaseEmbed({
 				title: this.meta.name ?? 'Misskey',
-				...(await this.htmlTemplateService.getCommonData()),
+				...(await this.htmlTemplateService.getCommonData(reply.request.headers.cookie)),
 			}));
 		});
 
