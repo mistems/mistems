@@ -238,6 +238,7 @@ export const queueTypes = [
 	'system',
 	'endedPollNotification',
 	'postScheduledNote',
+	'refetchNote',
 	'deliver',
 	'inbox',
 	'db',

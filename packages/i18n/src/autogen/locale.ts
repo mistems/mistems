@@ -773,6 +773,22 @@ export interface Locale extends ILocale {
      */
     "showOnRemote": string;
     /**
+     * または再取得
+     */
+    "orRefetch": string;
+    /**
+     * 再取得は{time}に利用できます
+     */
+    "refetchAvailableIn": ParameterizedString<"time">;
+    /**
+     * これまで{n}回再取得
+     */
+    "refetchedNTimes": ParameterizedString<"n">;
+    /**
+     * 更新を予約しました
+     */
+    "refetchQueued": string;
+    /**
      * リモートで続行
      */
     "continueOnRemote": string;
