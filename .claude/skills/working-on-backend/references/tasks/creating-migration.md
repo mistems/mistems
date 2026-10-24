@@ -4,7 +4,7 @@
 
 ## 大前提 (絶対 NG)
 
-- **既にマージ済み (develop / master) のマイグレーションファイルを編集しない** ([AGENTS.md](../../../../../AGENTS.md))。本番履歴の改変は深刻なデータ不整合を引き起こす。スキーマ変更は **常に新しいタイムスタンプで新規ファイル** を作る
+- **既にマージ済み (develop / master) のマイグレーションファイルを編集しない** ([CLAUDE.md](../../../../../CLAUDE.md))。本番履歴の改変は深刻なデータ不整合を引き起こす。スキーマ変更は **常に新しいタイムスタンプで新規ファイル** を作る
 - ファイル名のタイムスタンプ部分を後から書き換えない (順序が壊れる)
 - マージ済 migration の `up()` / `down()` 本文も触らない (たとえ "明らかなバグ" であっても、新しい migration で打ち消すこと)
 
@@ -57,7 +57,7 @@ export class PascalCaseName1234567890123 {
 pnpm --filter backend exec typeorm migration:generate -d ormconfig.js -o --esm migration/<PascalName>
 ```
 
-**CONTRIBUTING.md との違い**: CONTRIBUTING.md は `pnpm dlx typeorm ...` を案内しているが、`dlx` はパッケージを一時ダウンロードするため、バージョンが backend の依存関係と揃わない可能性がある。`pnpm --filter backend exec typeorm` はワークスペースにインストール済みの typeorm を使うため **こちらを推奨**。
+**上流の CONTRIBUTING.md との違い**: 上流の CONTRIBUTING.md は `pnpm dlx typeorm ...` を案内しているが、`dlx` はパッケージを一時ダウンロードするため、バージョンが backend の依存関係と揃わない可能性がある。`pnpm --filter backend exec typeorm` はワークスペースにインストール済みの typeorm を使うため **こちらを推奨**。
 
 **`-o --esm` について**: `-o` (`--outputJs`) は「TS ではなく JS を出力する」オプション、`--esm` は「ESM 形式 (`export class ...`) で出力する」オプション。Misskey の既存 migration はすべて ESM JS であるため **両方が必須**。`--esm` を省略すると CommonJS 形式の JS が生成されスタイルが揃わない。
 

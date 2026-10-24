@@ -150,4 +150,4 @@ git diff --name-only --diff-filter=A "$BASE"...HEAD -- \
 - [MkButton.vue](../../packages/frontend/src/components/MkButton.vue)
 - [MkInput.vue](../../packages/frontend/src/components/MkInput.vue) — generic SFC 例
 - [MkButton.stories.impl.ts](../../packages/frontend/src/components/MkButton.stories.impl.ts) — Storybook 雛形
-- [AGENTS.md](../../AGENTS.md) — 共通の安全規約と検証方針
+- [CLAUDE.md](../../CLAUDE.md) — MISTEMS 開発の規約と検証方針

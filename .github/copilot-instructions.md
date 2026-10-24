@@ -1,8 +1,8 @@
 # Copilot Instructions for Misskey
 
-このファイルは GitHub Copilot の repository-wide instructions として使われる。Copilot code review では `AGENTS.md` が読まれない環境があるため、レビューや軽微な実装判断に必要な規約はこのファイル単体で満たすこと。
+このファイルは GitHub Copilot の repository-wide instructions として使われる。Copilot code review では `CLAUDE.md` が読まれない環境があるため、レビューや軽微な実装判断に必要な規約はこのファイル単体で満たすこと。
 
-リポジトリは Misskey の pnpm workspace モノレポ。主要な実装は `packages/backend` (NestJS / TypeORM) と `packages/frontend` (Vue 3) にある。より詳しいガイドはリポジトリルートの `AGENTS.md` を参照してよいが、このファイルの要件を省略してそちらへの参照だけで済ませないこと。
+リポジトリは Misskey の pnpm workspace モノレポ。主要な実装は `packages/backend` (NestJS / TypeORM) と `packages/frontend` (Vue 3) にある。より詳しいガイドはリポジトリルートの `CLAUDE.md` を参照してよいが、このファイルの要件を省略してそちらへの参照だけで済ませないこと。
 
 ## 絶対にやってはいけない事
 
@@ -80,6 +80,6 @@
 
 - Backend の API / migration / TypeORM 変更は `packages/backend` を見る
 - Frontend の Vue コンポーネントやページ変更は `packages/frontend` を見る
-- `AGENTS.md` 内の相対リンクはリポジトリルート起点で解決する想定
+- `CLAUDE.md` 内の相対リンクはリポジトリルート起点で解決する想定
 
-**補足:** `AGENTS.md` はより詳細な正典 (Codex / Claude Code が読み込む)。Copilot code review ではこのファイルが主な入口になる。両方が読まれる環境では `AGENTS.md` を補助情報として使ってよい。
+**補足:** `CLAUDE.md` はより詳細な正典 (Claude Code が読み込む MISTEMS 開発の規約)。Copilot code review ではこのファイルが主な入口になる。両方が読まれる環境では `CLAUDE.md` を補助情報として使ってよい。
