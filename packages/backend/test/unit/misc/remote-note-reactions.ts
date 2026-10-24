@@ -1,0 +1,142 @@
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { describe, expect, test } from 'vitest';
+import {
+	isMisskeyCompatibleSoftware,
+	mapRemoteReactionKey,
+	mapRemoteReactions,
+	mergeRemoteReactions,
+	parseMisskeyNoteUri,
+} from '@/misc/remote-note-reactions.js';
+
+const REMOTE = 'misskey.systems';
+const LOCAL = 'gamelore.example';
+
+describe('isMisskeyCompatibleSoftware', () => {
+	test('Misskey 系のソフトウェアは true を返す', () => {
+		for (const name of ['misskey', 'sharkey', 'cherrypick', 'firefish', 'iceshrimp', 'foundkey']) {
+			expect(isMisskeyCompatibleSoftware(name)).toBe(true);
+		}
+	});
+
+	test('大文字が混じっていても判定できる', () => {
+		expect(isMisskeyCompatibleSoftware('Misskey')).toBe(true);
+	});
+
+	test('Mastodon などは false を返す', () => {
+		expect(isMisskeyCompatibleSoftware('mastodon')).toBe(false);
+		expect(isMisskeyCompatibleSoftware('pleroma')).toBe(false);
+		expect(isMisskeyCompatibleSoftware(null)).toBe(false);
+		expect(isMisskeyCompatibleSoftware(undefined)).toBe(false);
+	});
+});
+
+describe('parseMisskeyNoteUri', () => {
+	test('https://<host>/notes/<id> から id を取り出す', () => {
+		expect(parseMisskeyNoteUri('https://misskey.systems/notes/asq39a3cb0', REMOTE)).toBe('asq39a3cb0');
+	});
+
+	test('ホストが違うときは null を返す', () => {
+		expect(parseMisskeyNoteUri('https://evil.example/notes/asq39a3cb0', REMOTE)).toBeNull();
+	});
+
+	test('形が違うときは null を返す', () => {
+		expect(parseMisskeyNoteUri('https://misskey.systems/users/abc/statuses/1', REMOTE)).toBeNull();
+		expect(parseMisskeyNoteUri('https://misskey.systems/notes/abc/extra', REMOTE)).toBeNull();
+		expect(parseMisskeyNoteUri('https://misskey.systems/notes/abc?x=1', REMOTE)).toBeNull();
+		expect(parseMisskeyNoteUri('http://misskey.systems/notes/abc', REMOTE)).toBeNull();
+		expect(parseMisskeyNoteUri('not a url', REMOTE)).toBeNull();
+	});
+});
+
+describe('mapRemoteReactionKey', () => {
+	test('Unicode の絵文字はそのまま', () => {
+		expect(mapRemoteReactionKey('👍', REMOTE, LOCAL)).toEqual({ key: '👍', emoji: null });
+		expect(mapRemoteReactionKey('❤', REMOTE, LOCAL)).toEqual({ key: '❤', emoji: null });
+	});
+
+	test(':name@.: は相手のホストの絵文字にする', () => {
+		expect(mapRemoteReactionKey(':owa_desuwa@.:', REMOTE, LOCAL)).toEqual({
+			key: ':owa_desuwa@misskey.systems:',
+			emoji: { name: 'owa_desuwa', host: REMOTE, isRemoteLocal: true },
+		});
+	});
+
+	test(':name@other.host: はそのまま (第三のサーバーの絵文字)', () => {
+		expect(mapRemoteReactionKey(':blobcat@other.example:', REMOTE, LOCAL)).toEqual({
+			key: ':blobcat@other.example:',
+			emoji: { name: 'blobcat', host: 'other.example', isRemoteLocal: false },
+		});
+	});
+
+	test(':name@<自分のホスト>: は自分のサーバーの絵文字 (DB 上の形 :name:) にする', () => {
+		expect(mapRemoteReactionKey(':mine@gamelore.example:', REMOTE, LOCAL)).toEqual({ key: ':mine:', emoji: null });
+	});
+
+	test('不正なキーは null を返す', () => {
+		expect(mapRemoteReactionKey('hello', REMOTE, LOCAL)).toBeNull();
+		expect(mapRemoteReactionKey(':bad name@.:', REMOTE, LOCAL)).toBeNull();
+		expect(mapRemoteReactionKey('', REMOTE, LOCAL)).toBeNull();
+		expect(mapRemoteReactionKey('👍👍', REMOTE, LOCAL)).toBeNull();
+	});
+});
+
+describe('mapRemoteReactions', () => {
+	test('キーを変換し、不正な値は捨てる', () => {
+		const res = mapRemoteReactions({
+			':owa_desuwa@.:': 2,
+			'👍': 3,
+			'bogus': 5,
+			'🎉': -1,
+			'😆': 1.5,
+			'🤔': 'x',
+		}, REMOTE, LOCAL);
+		expect(res.reactions).toEqual({
+			':owa_desuwa@misskey.systems:': 2,
+			'👍': 3,
+		});
+		expect(res.emojis).toEqual([{ name: 'owa_desuwa', host: REMOTE, isRemoteLocal: true }]);
+	});
+
+	test('オブジェクトでなければ空を返す', () => {
+		expect(mapRemoteReactions(null, REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [] });
+		expect(mapRemoteReactions(['👍'], REMOTE, LOCAL)).toEqual({ reactions: {}, emojis: [] });
+	});
+
+	test('キーの数に上限がある', () => {
+		const many: Record<string, number> = {};
+		for (let i = 0; i < 300; i++) many[`:e${i}@.:`] = 1;
+		const res = mapRemoteReactions(many, REMOTE, LOCAL, { maxKeys: 10 });
+		expect(Object.keys(res.reactions)).toHaveLength(10);
+		expect(res.emojis).toHaveLength(10);
+	});
+});
+
+describe('mergeRemoteReactions', () => {
+	test('キーごとに max(自分の数, 相手の数) を取る', () => {
+		const res = mergeRemoteReactions({ '👍': 5, '🎉': 1 }, { '👍': 3, '🎉': 4 });
+		expect(res.merged).toEqual({ '👍': 5, '🎉': 4 });
+		expect(res.changed).toEqual({ '🎉': 4 });
+	});
+
+	test('自分のサーバーにしか無いキーは残す', () => {
+		const res = mergeRemoteReactions({ ':mine:': 2 }, { ':owa_desuwa@misskey.systems:': 2 });
+		expect(res.merged).toEqual({ ':mine:': 2, ':owa_desuwa@misskey.systems:': 2 });
+		expect(res.changed).toEqual({ ':owa_desuwa@misskey.systems:': 2 });
+	});
+
+	test('変わらないときは changed が空', () => {
+		const res = mergeRemoteReactions({ '👍': 3 }, { '👍': 3 });
+		expect(res.changed).toEqual({});
+		expect(res.merged).toEqual({ '👍': 3 });
+	});
+
+	test('元のオブジェクトを変更しない', () => {
+		const local = { '👍': 1 };
+		mergeRemoteReactions(local, { '👍': 2 });
+		expect(local).toEqual({ '👍': 1 });
+	});
+});

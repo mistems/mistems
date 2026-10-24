@@ -37,6 +37,7 @@ import { extractApHashtags } from './tag.js';
 import { ApMentionService } from './ApMentionService.js';
 import { ApQuestionService } from './ApQuestionService.js';
 import { ApImageService } from './ApImageService.js';
+import { RemoteNoteReactionSyncService } from '../RemoteNoteReactionSyncService.js';
 import type { Resolver } from '../ApResolverService.js';
 import type { IObject, IPost } from '../type.js';
 
@@ -89,6 +90,7 @@ export class ApNoteService {
 		private apDbResolverService: ApDbResolverService,
 		private customEmojiService: CustomEmojiService,
 		private globalEventService: GlobalEventService,
+		private remoteNoteReactionSyncService: RemoteNoteReactionSyncService,
 		private apLoggerService: ApLoggerService,
 	) {
 		this.logger = this.apLoggerService.logger;
@@ -453,7 +455,17 @@ export class ApNoteService {
 			const object = await resolver.resolve(note.uri);
 			// resolve 成功 = 再フェッチ成功とみなして refetchedCount を加算する。
 			await this.notesRepository.increment({ id: note.id }, 'refetchedCount', 1);
-			const updated = await this.updateNote(note, object);
+			let updated = await this.updateNote(note, object);
+			// リアクションの同期 (相手が Misskey 系のときだけ)。失敗しても再取得は成功として扱う。
+			const reactionsSynced = await this.remoteNoteReactionSyncService.syncReactionCounts(updated, {
+				consumeBudget: () => this.consumeRefetchHostBudget(host),
+			}).catch(err => {
+				this.logger.warn(`reaction sync failed for ${note.uri}: ${err}`);
+				return false;
+			});
+			if (reactionsSynced) {
+				updated = await this.notesRepository.findOneByOrFail({ id: note.id });
+			}
 			// 購読中クライアントへ通知。クライアントは 'updated' を受けて notes/show を取り直す (§7-2 streaming 化)。
 			this.globalEventService.publishNoteStream(updated, 'updated', { cw: updated.cw, text: updated.text ?? '' });
 			return updated;

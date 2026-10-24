@@ -61,7 +61,8 @@ describe('ApNoteService.updateNoteIfStale', () => {
 	let resolver: { resolve: ReturnType<typeof vi.fn> };
 	let apResolverService: { createResolver: ReturnType<typeof vi.fn> };
 	let globalEventService: { publishNoteStream: ReturnType<typeof vi.fn> };
-	let apLoggerService: { logger: { debug: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> } };
+	let remoteNoteReactionSyncService: { syncReactionCounts: ReturnType<typeof vi.fn> };
+	let apLoggerService: { logger: { debug: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> } };
 
 	beforeEach(() => {
 		const resolvedObject = {
@@ -109,8 +110,12 @@ describe('ApNoteService.updateNoteIfStale', () => {
 			publishNoteStream: vi.fn(),
 		};
 
+		remoteNoteReactionSyncService = {
+			syncReactionCounts: vi.fn(async () => false),
+		};
+
 		apLoggerService = {
-			logger: { debug: vi.fn(), error: vi.fn() },
+			logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
 		};
 
 		// updateNoteIfStale / updateNote が参照する依存のみ注入する。
@@ -136,6 +141,7 @@ describe('ApNoteService.updateNoteIfStale', () => {
 			{} as never, // apDbResolverService
 			{} as never, // customEmojiService
 			globalEventService as never,
+			remoteNoteReactionSyncService as never,
 			apLoggerService as never,
 		);
 	});
@@ -205,5 +211,38 @@ describe('ApNoteService.updateNoteIfStale', () => {
 		const fresh = makeRemoteNote({ lastFetchedAt: new Date() });
 		await service.updateNoteIfStale(fresh, { force: true });
 		expect(resolver.resolve).toHaveBeenCalledTimes(1);
+	});
+
+	test('成功時にリアクションの同期を呼び、同期したら最新のノートを流す', async () => {
+		remoteNoteReactionSyncService.syncReactionCounts.mockImplementationOnce(async () => true);
+		notesRepository.findOneByOrFail
+			.mockImplementationOnce(async () => makeRemoteNote({ text: 'updated' }))
+			.mockImplementationOnce(async () => makeRemoteNote({ text: 'updated', reactions: { '👍': 2 } }));
+		const stale = makeRemoteNote({ lastFetchedAt: null });
+		const res = await service.updateNoteIfStale(stale);
+		expect(remoteNoteReactionSyncService.syncReactionCounts).toHaveBeenCalledTimes(1);
+		expect(res?.reactions).toEqual({ '👍': 2 });
+		expect(globalEventService.publishNoteStream).toHaveBeenCalledTimes(1);
+	});
+
+	test('リアクションの同期で使う上限は、再取得と同じホストごとの上限', async () => {
+		remoteNoteReactionSyncService.syncReactionCounts.mockImplementationOnce(async (_note, opts) => {
+			await opts.consumeBudget();
+			return false;
+		});
+		await service.updateNoteIfStale(makeRemoteNote({ lastFetchedAt: null }));
+		// 再取得で 1 回、同期で 1 回
+		expect(redisClient.incr).toHaveBeenCalledTimes(2);
+		expect(redisClient.incr).toHaveBeenCalledWith('refetch:host:remote.example.com');
+	});
+
+	test('リアクションの同期が失敗しても、再取得は成功として扱う', async () => {
+		remoteNoteReactionSyncService.syncReactionCounts.mockImplementationOnce(async () => { throw new Error('boom'); });
+		const stale = makeRemoteNote({ lastFetchedAt: null });
+		const res = await service.updateNoteIfStale(stale);
+		expect(notesRepository.increment).toHaveBeenCalledTimes(1);
+		expect(globalEventService.publishNoteStream).toHaveBeenCalledTimes(1);
+		expect(res).toEqual(expect.objectContaining({ text: 'updated' }));
+		expect(apLoggerService.logger.warn).toHaveBeenCalled();
 	});
 });
