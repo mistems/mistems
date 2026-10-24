@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkUserName v-if="user" :user="user"/>
 					<template v-else>{{ host }}</template>
 				</div>
-				<div v-if="user" :class="$style.username">@{{ user.username }}</div>
+				<div v-if="user" :class="$style.username"><MkAcct :user="user"/></div>
 				<div :class="$style.time"><MkTime :time="time"/></div>
 			</header>
 			<div :class="$style.text">
