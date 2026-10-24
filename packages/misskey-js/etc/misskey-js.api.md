@@ -1433,6 +1433,9 @@ type EmojiSimple = components['schemas']['EmojiSimple'];
 type EmojisResponse = operations['emojis']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type EmojisStatsResponse = operations['emojis___stats']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type EmojiUpdated = {
     emojis: EmojiDetailed[];
 };
@@ -1872,6 +1875,7 @@ declare namespace entities {
         EmojiRequest,
         EmojiResponse,
         EmojisResponse,
+        EmojisStatsResponse,
         EndpointRequest,
         EndpointResponse,
         EndpointsResponse,
