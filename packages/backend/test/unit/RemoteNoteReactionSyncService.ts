@@ -269,7 +269,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			knownUsers['alice@misskey.systems'] = { id: 'alice', host: 'misskey.systems', isSuspended: false };
 			remoteApi[reactionsUrl] = [
 				{ id: 'r1', user: { username: 'alice', host: null }, type: ':owa_desuwa@.:' },
-				{ id: 'r2', user: { username: 'bob', host: 'other.example' }, type: ':blobcat@other.example:' },
+				{ id: 'r2', user: { username: 'bob', host: null }, type: '👍' },
 			];
 		});
 
@@ -278,12 +278,12 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 
 			// 既にいるユーザーは解決しない。知らないユーザーだけ解決する
 			expect(remoteUserResolveService.resolveUser).toHaveBeenCalledTimes(1);
-			expect(remoteUserResolveService.resolveUser).toHaveBeenCalledWith('bob', 'other.example');
+			expect(remoteUserResolveService.resolveUser).toHaveBeenCalledWith('bob', 'misskey.systems');
 
 			expect(reactionService.create).toHaveBeenCalledTimes(2);
 			expect(reactionService.create.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'alice' }));
 			expect(reactionService.create.mock.calls[0][2]).toBe(':owa_desuwa:');
-			expect(reactionService.create.mock.calls[1][2]).toBe(':blobcat:');
+			expect(reactionService.create.mock.calls[1][2]).toBe('👍');
 
 			const [, args] = httpRequestService.send.mock.calls.find(c => c[0] === reactionsUrl)!;
 			expect(JSON.parse(args.body)).toEqual({ noteId: 'asq39a3cb0', limit: 100 });
@@ -292,7 +292,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		test('数を二重に数えない (create で増えた分を引き戻してから、相手の数に合わせる)', async () => {
 			rowCounts = [
 				{ reaction: ':owa_desuwa@misskey.systems:', count: '1' },
-				{ reaction: ':blobcat@other.example:', count: '1' },
+				{ reaction: '👍', count: '1' },
 			];
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
 
@@ -300,7 +300,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			expect(calls).toHaveLength(2);
 			// 1 回目: create で増やした分を引く
 			expect(calls[0].sql).toContain(' - :count');
-			expect(pairsOf(calls[0].params)).toEqual({ ':owa_desuwa@misskey.systems:': 1, ':blobcat@other.example:': 1 });
+			expect(pairsOf(calls[0].params)).toEqual({ ':owa_desuwa@misskey.systems:': 1, '👍': 1 });
 			// 2 回目: 相手の数 (と行の数) の max に合わせる
 			expect(calls[1].sql).toContain('GREATEST');
 			expect(pairsOf(calls[1].params)).toEqual({ ':owa_desuwa@misskey.systems:': 2, '👍': 1, ':blobcat@other.example:': 1 });
@@ -325,7 +325,7 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		test('既にリアクションがあるユーザーは二重に作らない', async () => {
 			createdReactions.set('alice', ':owa_desuwa@misskey.systems:');
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
-			expect(reactionService.create.mock.calls.map(c => c[0].id)).toEqual(['resolved-bob@other.example']);
+			expect(reactionService.create.mock.calls.map(c => c[0].id)).toEqual(['resolved-bob@misskey.systems']);
 		});
 
 		test('2 回同期しても行を二重に作らない', async () => {
@@ -337,7 +337,9 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 		test('ホストの上限に当たったら、そこで取り込みを止めて数だけを反映する', async () => {
 			knownUsers['carol@misskey.systems'] = { id: 'carol', host: 'misskey.systems', isSuspended: false };
 			(remoteApi[reactionsUrl] as unknown[]).push({ id: 'r3', user: { username: 'carol', host: null }, type: '👍' });
-			consumeBudget.mockImplementation(async (host: string) => host !== 'other.example');
+			// notes/show・emoji・notes/reactions の 3 回で misskey.systems の上限に当たる
+			let n = 0;
+			consumeBudget.mockImplementation(async (host: string) => host !== 'misskey.systems' || ++n <= 3);
 
 			const res = await service.syncReactions(makeRemoteNote(), { consumeBudget });
 			expect(res).toBe(true);
@@ -380,6 +382,42 @@ describe('RemoteNoteReactionSyncService.syncReactions', () => {
 			await service.syncReactions(makeRemoteNote(), { consumeBudget });
 			expect(reactionService.create).not.toHaveBeenCalled();
 			expect(remoteUserResolveService.resolveUser).not.toHaveBeenCalled();
+		});
+
+		test('第三のホストのユーザーを名乗るエントリは、行を作らない (なりすまし対策)', async () => {
+			knownUsers['bob@other.example'] = { id: 'bob-other', host: 'other.example', isSuspended: false };
+			remoteApi[reactionsUrl] = [
+				{ id: 'r1', user: { username: 'bob', host: 'other.example' }, type: ':blobcat@other.example:' },
+				{ id: 'r2', user: { username: 'carol', host: 'third.example' }, type: '👍' },
+			];
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.create).not.toHaveBeenCalled();
+			expect(remoteUserResolveService.resolveUser).not.toHaveBeenCalled();
+			expect(consumeBudget.mock.calls.map(c => c[0])).not.toContain('third.example');
+		});
+
+		test('自分のサーバーのローカルユーザーを名乗るエントリは、行を作らない (なりすまし対策)', async () => {
+			knownUsers['admin@gamelore.example'] = { id: 'local-admin', host: null as never, isSuspended: false };
+			remoteApi[reactionsUrl] = [
+				{ id: 'r1', user: { username: 'admin', host: 'gamelore.example' }, type: '👍' },
+				{ id: 'r2', user: { username: 'admin', host: 'GAMELORE.example' }, type: '👍' },
+			];
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(reactionService.create).not.toHaveBeenCalled();
+			expect(usersRepository.findOneBy).not.toHaveBeenCalled();
+		});
+
+		test('WebFinger で別のホスト (自分のサーバーを含む) のユーザーに解決されたときは、行を作らない', async () => {
+			remoteApi[reactionsUrl] = [
+				{ id: 'r1', user: { username: 'eve', host: null }, type: '👍' },
+				{ id: 'r2', user: { username: 'mallet', host: null }, type: '👍' },
+			];
+			remoteUserResolveService.resolveUser.mockImplementation(async (username: string) => (username === 'eve'
+				? { id: 'eve', host: 'other.example', isSuspended: false }
+				: { id: 'local-mallet', host: null, isSuspended: false }));
+			await service.syncReactions(makeRemoteNote(), { consumeBudget });
+			expect(remoteUserResolveService.resolveUser).toHaveBeenCalledTimes(2);
+			expect(reactionService.create).not.toHaveBeenCalled();
 		});
 
 		test('create が弾いたもの (ブロックなど) は捨て、数も引き戻さない', async () => {

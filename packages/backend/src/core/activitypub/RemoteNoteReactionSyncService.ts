@@ -184,8 +184,10 @@ export class RemoteNoteReactionSyncService implements OnModuleInit {
 	/**
 	 * 相手の `notes/reactions` を読み、付けたユーザーを解決して `note_reaction` を作る。作った行の数を返す。
 	 *
+	 * 取り込むのは、応答したホスト自身のユーザーのリアクションだけである (なりすましを防ぐため)。
 	 * 行は Like を受け取ったときと同じ `ReactionService.create` で作るので、ブロック・公開範囲・
-	 * `reactionAcceptance`・使えない絵文字などは同じように弾かれる。付けたユーザーはリモートなので配送はしない。
+	 * `reactionAcceptance`・使えない絵文字などは同じように弾かれる。付けたユーザーはリモートなので配送はせず、
+	 * ノートの作者もリモートなので通知も作らない。
 	 * `create` は数を 1 増やすが、数は最後に相手の数に合わせるので、増やした分はここで引き戻す。
 	 */
 	@bindThis
@@ -247,16 +249,21 @@ export class RemoteNoteReactionSyncService implements OnModuleInit {
 		const { username, host: rawHost } = remoteUser as { username?: unknown; host?: unknown };
 		if (typeof username !== 'string' || (rawHost != null && typeof rawHost !== 'string')) return null;
 
-		let userHost: string;
-		try {
-			userHost = this.utilityService.toPuny(rawHost ?? remoteHost);
-		} catch {
-			return null;
+		// 行を作るのは、応答したホスト自身のユーザー (host が null) のリアクションだけにする。
+		// 相手は署名なしで他のホストのユーザー (自分のサーバーのユーザーを含む) を名乗れるので、
+		// 第三のホストのユーザーのリアクションは、そのユーザーの署名付きの Like で届いたものだけを信じる。
+		// (数は notes/show の集計で反映済みなので、ここで行を作らなくても数はずれない)
+		if (rawHost != null) {
+			let claimedHost: string;
+			try {
+				claimedHost = this.utilityService.toPuny(rawHost);
+			} catch {
+				return null;
+			}
+			if (claimedHost !== remoteHost) return null;
 		}
-
-		// ローカルのユーザーのリアクションは自分のサーバーが正なので、取り込まない
+		const userHost = remoteHost;
 		if (userHost === localHost) return null;
-		if (!this.utilityService.isFederationAllowedHost(userHost)) return null;
 
 		const reaction = toReactionForCreate(type, remoteHost, localHost, userHost);
 		if (reaction == null) return null;
@@ -275,7 +282,8 @@ export class RemoteNoteReactionSyncService implements OnModuleInit {
 			if (user == null) return null;
 		}
 
-		if (user.host == null) return null;
+		// WebFinger の結果が別のホスト (自分のサーバーを含む) を指していたときも取り込まない
+		if (user.host !== remoteHost) return null;
 		if (user.isSuspended) return null;
 
 		// 既にリアクションがあるユーザーは何もしない (別のリアクションへの置き換えもしない)
