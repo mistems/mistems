@@ -605,6 +605,14 @@ export const packedMeDetailedOnlySchema = {
 				nullable: false, optional: false,
 			},
 		},
+		mutedAnnouncementGroupIds: {
+			type: 'array',
+			nullable: false, optional: false,
+			items: {
+				type: 'string',
+				nullable: false, optional: false,
+			},
+		},
 		notificationRecieveConfig: {
 			type: 'object',
 			nullable: false, optional: false,

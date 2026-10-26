@@ -15,6 +15,7 @@ import { AnnouncementEntityService } from '@/core/entities/AnnouncementEntitySer
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { QueueService } from '@/core/QueueService.js';
+import { UNGROUPED_ANNOUNCEMENT_GROUP_ID } from '@/core/AnnouncementGroupService.js';
 
 @Injectable()
 export class AnnouncementService implements OnModuleInit {
@@ -70,6 +71,13 @@ export class AnnouncementService implements OnModuleInit {
 				qb.orWhere('announcement.autoArchiveAt > :now', { now });
 			}))
 			.andWhere('announcement.silence = false')
+			// 利用者が非通知にしたグループのお知らせは数えない。
+			// ただし、既読の確認が必要なものと特定の利用者向けのものは、確実に届けるため非通知の対象にしない
+			.andWhere(new Brackets(qb => {
+				qb.orWhere('announcement.needConfirmationToRead = true');
+				qb.orWhere('announcement.userId IS NOT NULL');
+				qb.orWhere(`NOT (COALESCE(announcement.groupId, :ungroupedId) = ANY(COALESCE((SELECT "mutedAnnouncementGroupIds" FROM "user_profile" WHERE "userId" = :userId), '{}')))`, { ungroupedId: UNGROUPED_ANNOUNCEMENT_GROUP_ID });
+			}))
 			.andWhere(new Brackets(qb => {
 				qb.orWhere('announcement.userId = :userId', { userId: user.id });
 				qb.orWhere('announcement.userId IS NULL');
