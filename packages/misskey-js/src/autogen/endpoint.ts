@@ -34,6 +34,7 @@ import type {
 	AdminAnnouncementsGroupsUpdateResponse,
 	AdminAnnouncementsListRequest,
 	AdminAnnouncementsListResponse,
+	AdminAnnouncementsReorderRequest,
 	AdminAnnouncementsUpdateRequest,
 	AdminAvatarDecorationsCreateRequest,
 	AdminAvatarDecorationsCreateResponse,
@@ -695,6 +696,7 @@ export type Endpoints = {
 	'admin/announcements/groups/list': { req: EmptyRequest; res: AdminAnnouncementsGroupsListResponse };
 	'admin/announcements/groups/update': { req: AdminAnnouncementsGroupsUpdateRequest; res: AdminAnnouncementsGroupsUpdateResponse };
 	'admin/announcements/list': { req: AdminAnnouncementsListRequest; res: AdminAnnouncementsListResponse };
+	'admin/announcements/reorder': { req: AdminAnnouncementsReorderRequest; res: EmptyResponse };
 	'admin/announcements/update': { req: AdminAnnouncementsUpdateRequest; res: EmptyResponse };
 	'admin/avatar-decorations/create': { req: AdminAvatarDecorationsCreateRequest; res: AdminAvatarDecorationsCreateResponse };
 	'admin/avatar-decorations/delete': { req: AdminAvatarDecorationsDeleteRequest; res: EmptyResponse };

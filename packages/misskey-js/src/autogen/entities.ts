@@ -37,6 +37,7 @@ export type AdminAnnouncementsGroupsUpdateRequest = operations['admin___announce
 export type AdminAnnouncementsGroupsUpdateResponse = operations['admin___announcements___groups___update']['responses']['200']['content']['application/json'];
 export type AdminAnnouncementsListRequest = operations['admin___announcements___list']['requestBody']['content']['application/json'];
 export type AdminAnnouncementsListResponse = operations['admin___announcements___list']['responses']['200']['content']['application/json'];
+export type AdminAnnouncementsReorderRequest = operations['admin___announcements___reorder']['requestBody']['content']['application/json'];
 export type AdminAnnouncementsUpdateRequest = operations['admin___announcements___update']['requestBody']['content']['application/json'];
 export type AdminAvatarDecorationsCreateRequest = operations['admin___avatar-decorations___create']['requestBody']['content']['application/json'];
 export type AdminAvatarDecorationsCreateResponse = operations['admin___avatar-decorations___create']['responses']['200']['content']['application/json'];

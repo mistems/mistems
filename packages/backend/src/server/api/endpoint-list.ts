@@ -27,6 +27,7 @@ export * as 'admin/announcements/create' from './endpoints/admin/announcements/c
 export * as 'admin/announcements/delete' from './endpoints/admin/announcements/delete.js';
 export * as 'admin/announcements/list' from './endpoints/admin/announcements/list.js';
 export * as 'admin/announcements/update' from './endpoints/admin/announcements/update.js';
+export * as 'admin/announcements/reorder' from './endpoints/admin/announcements/reorder.js';
 export * as 'admin/announcements/groups/create' from './endpoints/admin/announcements/groups/create.js';
 export * as 'admin/announcements/groups/delete' from './endpoints/admin/announcements/groups/delete.js';
 export * as 'admin/announcements/groups/list' from './endpoints/admin/announcements/groups/list.js';

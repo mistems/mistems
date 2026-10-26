@@ -233,6 +233,17 @@ declare module '../api.js' {
      * 
      * **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
      */
+    request<E extends 'admin/announcements/reorder', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
+     */
     request<E extends 'admin/announcements/update', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,

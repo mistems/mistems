@@ -7,7 +7,8 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { Brackets, EntityNotFoundError, IsNull, Not } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { MiUser } from '@/models/User.js';
-import type { AnnouncementReadsRepository, AnnouncementsRepository, MiAnnouncement, MiAnnouncementRead, UsersRepository } from '@/models/_.js';
+import { MiAnnouncement } from '@/models/_.js';
+import type { AnnouncementReadsRepository, AnnouncementsRepository, MiAnnouncementRead, UsersRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { Packed } from '@/misc/json-schema.js';
 import { IdService } from '@/core/IdService.js';
@@ -93,8 +94,30 @@ export class AnnouncementService implements OnModuleInit {
 		return q.getMany();
 	}
 
+	/**
+	 * グループ (null はグループなし) の先頭に置くための表示順を返す
+	 */
+	@bindThis
+	private async getHeadDisplayOrder(groupId: MiAnnouncement['groupId']): Promise<number> {
+		const query = this.announcementsRepository.createQueryBuilder('announcement')
+			.select('MIN(announcement.displayOrder)', 'min')
+			.where('announcement.userId IS NULL');
+
+		if (groupId == null) {
+			query.andWhere('announcement.groupId IS NULL');
+		} else {
+			query.andWhere('announcement.groupId = :groupId', { groupId });
+		}
+
+		const result = await query.getRawOne<{ min: number | null }>();
+		return result?.min == null ? 0 : result.min - 1;
+	}
+
 	@bindThis
 	public async create(values: Partial<MiAnnouncement>, moderator?: MiUser): Promise<{ raw: MiAnnouncement; packed: Packed<'Announcement'> }> {
+		// 新しいお知らせはグループの先頭に置く
+		const displayOrder = values.userId ? 0 : await this.getHeadDisplayOrder(values.groupId ?? null);
+
 		const announcement = await this.announcementsRepository.insertOne({
 			id: this.idService.gen(),
 			updatedAt: null,
@@ -109,6 +132,7 @@ export class AnnouncementService implements OnModuleInit {
 			userId: values.userId,
 			autoArchiveAt: values.autoArchiveAt ?? null,
 			groupId: values.groupId ?? null,
+			displayOrder,
 			isActive: values.isActive ?? (values.autoArchiveAt == null || values.autoArchiveAt > new Date()),
 		});
 
@@ -159,6 +183,11 @@ export class AnnouncementService implements OnModuleInit {
 
 	@bindThis
 	public async update(announcement: MiAnnouncement, values: Partial<MiAnnouncement>, moderator?: MiUser): Promise<void> {
+		// 別のグループへ移したお知らせは、移った先のグループの先頭に置く
+		const displayOrder = values.groupId !== undefined && values.groupId !== announcement.groupId && announcement.userId == null
+			? await this.getHeadDisplayOrder(values.groupId)
+			: undefined;
+
 		// レプリカから古い値を読まないよう、更新後の値はRETURNINGで取得する
 		const after: MiAnnouncement | undefined = await this.announcementsRepository.createQueryBuilder().update()
 			.set({
@@ -175,6 +204,7 @@ export class AnnouncementService implements OnModuleInit {
 				isActive: values.isActive,
 				autoArchiveAt: values.autoArchiveAt,
 				groupId: values.groupId,
+				displayOrder,
 			})
 			.where('id = :id', { id: announcement.id })
 			.returning('*')
@@ -213,6 +243,25 @@ export class AnnouncementService implements OnModuleInit {
 					after: after,
 				});
 			}
+		}
+	}
+
+	/**
+	 * グループ (null はグループなし) の中のお知らせを、渡した順に並べ替える
+	 */
+	@bindThis
+	public async reorder(groupId: MiAnnouncement['groupId'], announcementIds: MiAnnouncement['id'][], moderator?: MiUser): Promise<void> {
+		await this.announcementsRepository.manager.transaction(async (em) => {
+			for (const [i, id] of announcementIds.entries()) {
+				await em.update(MiAnnouncement, { id, groupId: groupId ?? IsNull(), userId: IsNull() }, { displayOrder: i });
+			}
+		});
+
+		if (moderator) {
+			this.moderationLogService.log(moderator, 'reorderAnnouncements', {
+				groupId,
+				announcementIds,
+			});
 		}
 	}
 

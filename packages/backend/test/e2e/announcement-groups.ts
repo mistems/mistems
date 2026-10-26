@@ -209,4 +209,81 @@ describe('お知らせのグループ', () => {
 			assert.deepStrictEqual(me.body.mutedAnnouncementGroupIds, ['ungrouped']);
 		});
 	});
+
+	describe('グループの中の表示順', () => {
+		test('新しいお知らせはグループの先頭に来て、並べ替えるとその順で返る', async () => {
+			const group = await createGroup('表示順のグループ');
+			const a = await createAnnouncement({ title: 'a', groupId: group.id });
+			const b = await createAnnouncement({ title: 'b', groupId: group.id });
+			const c = await createAnnouncement({ title: 'c', groupId: group.id });
+
+			const before = await api('announcements', { groupId: group.id }, alice);
+			assert.deepStrictEqual(before.body.map(x => x.id), [c.id, b.id, a.id]);
+
+			const reorder = await api('admin/announcements/reorder', { groupId: group.id, announcementIds: [a.id, c.id, b.id] }, admin);
+			assert.strictEqual(reorder.status, 204);
+
+			const after = await api('announcements', { groupId: group.id }, alice);
+			assert.deepStrictEqual(after.body.map(x => x.id), [a.id, c.id, b.id]);
+
+			const adminList = await api('admin/announcements/list', { groupId: group.id }, admin);
+			assert.deepStrictEqual(adminList.body.map(x => x.id), [a.id, c.id, b.id]);
+
+			// offset でページを送れる
+			const page2 = await api('announcements', { groupId: group.id, limit: 2, offset: 2 }, alice);
+			assert.deepStrictEqual(page2.body.map(x => x.id), [b.id]);
+
+			// 並べ替えたあとに作ったものも先頭に来る
+			const d = await createAnnouncement({ title: 'd', groupId: group.id });
+			const afterCreate = await api('announcements', { groupId: group.id }, alice);
+			assert.deepStrictEqual(afterCreate.body.map(x => x.id), [d.id, a.id, c.id, b.id]);
+
+			// 「すべて」は新しい順のまま
+			const all = await api('announcements', { limit: 100 }, alice);
+			const ids = all.body.map(x => x.id).filter(id => [a.id, b.id, c.id, d.id].includes(id));
+			assert.deepStrictEqual(ids, [d.id, c.id, b.id, a.id]);
+
+			const logs = await api('admin/show-moderation-logs', { limit: 10, type: 'reorderAnnouncements' }, admin);
+			assert.ok(logs.body.length > 0);
+		});
+
+		test('別のグループへ移したお知らせは、移った先の先頭に来る', async () => {
+			const from = await createGroup('移す元');
+			const to = await createGroup('移す先');
+			const x = await createAnnouncement({ title: 'x', groupId: to.id });
+			const y = await createAnnouncement({ title: 'y', groupId: to.id });
+			await api('admin/announcements/reorder', { groupId: to.id, announcementIds: [x.id, y.id] }, admin);
+			const moved = await createAnnouncement({ title: 'moved', groupId: from.id });
+
+			await api('admin/announcements/update', { id: moved.id, groupId: to.id }, admin);
+
+			const list = await api('announcements', { groupId: to.id }, alice);
+			assert.deepStrictEqual(list.body.map(x => x.id), [moved.id, x.id, y.id]);
+		});
+
+		test('他のグループのお知らせを混ぜると弾く', async () => {
+			const g1 = await createGroup('g1');
+			const g2 = await createGroup('g2');
+			const a1 = await createAnnouncement({ groupId: g1.id });
+			const a2 = await createAnnouncement({ groupId: g2.id });
+			const ungrouped = await createAnnouncement({});
+			const forAlice = await createAnnouncement({ userId: alice.id });
+
+			const mixed = await api('admin/announcements/reorder', { groupId: g1.id, announcementIds: [a1.id, a2.id] }, admin);
+			assert.strictEqual(mixed.status, 400);
+			assert.strictEqual(castAsError(mixed.body as any).error.code, 'ANNOUNCEMENT_NOT_IN_GROUP');
+
+			const mixedUngrouped = await api('admin/announcements/reorder', { groupId: null, announcementIds: [ungrouped.id, a1.id] }, admin);
+			assert.strictEqual(castAsError(mixedUngrouped.body as any).error.code, 'ANNOUNCEMENT_NOT_IN_GROUP');
+
+			const userTargeted = await api('admin/announcements/reorder', { groupId: null, announcementIds: [ungrouped.id, forAlice.id] }, admin);
+			assert.strictEqual(castAsError(userTargeted.body as any).error.code, 'ANNOUNCEMENT_NOT_IN_GROUP');
+
+			const missing = await api('admin/announcements/reorder', { groupId: g1.id, announcementIds: [a1.id, '000000000000000000000000'] }, admin);
+			assert.strictEqual(castAsError(missing.body as any).error.code, 'NO_SUCH_ANNOUNCEMENT');
+
+			const byUser = await api('admin/announcements/reorder', { groupId: g1.id, announcementIds: [a1.id] }, alice);
+			assert.strictEqual(byUser.status, 403);
+		});
+	});
 });

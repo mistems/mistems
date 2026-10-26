@@ -138,6 +138,7 @@ export const moderationLogTypes = [
 	'createAnnouncementGroup',
 	'updateAnnouncementGroup',
 	'deleteAnnouncementGroup',
+	'reorderAnnouncements',
 ] as const;
 
 export type ModerationLogPayloads = {
@@ -417,6 +418,10 @@ export type ModerationLogPayloads = {
 	deleteAnnouncementGroup: {
 		groupId: string;
 		group: any;
+	};
+	reorderAnnouncements: {
+		groupId: string | null;
+		announcementIds: string[];
 	};
 };
 

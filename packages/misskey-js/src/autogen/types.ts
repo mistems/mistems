@@ -187,6 +187,15 @@ export type paths = {
          */
         post: operations['admin___announcements___list'];
     };
+    '/admin/announcements/reorder': {
+        /**
+         * admin/announcements/reorder
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
+         */
+        post: operations['admin___announcements___reorder'];
+    };
     '/admin/announcements/update': {
         /**
          * admin/announcements/update
@@ -7176,6 +7185,7 @@ export interface operations {
                     status?: 'all' | 'active' | 'archived';
                     /** Format: misskey:id */
                     groupId?: string | null;
+                    offset?: number;
                 };
             };
         };
@@ -7211,8 +7221,73 @@ export interface operations {
                         userId: string | null;
                         imageUrl: string | null;
                         groupId: string | null;
+                        displayOrder: number;
                         reads: number;
                     }[];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___announcements___reorder: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    groupId: string | null;
+                    announcementIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
                 };
             };
             /** @description Client error */
@@ -13634,6 +13709,7 @@ export interface operations {
                     isActive?: boolean;
                     /** Format: misskey:id */
                     groupId?: string | null;
+                    offset?: number;
                 };
             };
         };
