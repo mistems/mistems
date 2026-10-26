@@ -249,6 +249,12 @@ export class MiUserProfile {
 	})
 	public mutedInstances: string[];
 
+	@Column('varchar', {
+		length: 32, array: true, default: '{}',
+		comment: 'List of announcement group IDs muted by the user. \'ungrouped\' means announcements without group.',
+	})
+	public mutedAnnouncementGroupIds: string[];
+
 	@Column('jsonb', {
 		default: {},
 	})
