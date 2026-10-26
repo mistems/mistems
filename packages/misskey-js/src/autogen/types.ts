@@ -142,6 +142,42 @@ export type paths = {
          */
         post: operations['admin___announcements___delete'];
     };
+    '/admin/announcements/groups/create': {
+        /**
+         * admin/announcements/groups/create
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
+         */
+        post: operations['admin___announcements___groups___create'];
+    };
+    '/admin/announcements/groups/delete': {
+        /**
+         * admin/announcements/groups/delete
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
+         */
+        post: operations['admin___announcements___groups___delete'];
+    };
+    '/admin/announcements/groups/list': {
+        /**
+         * admin/announcements/groups/list
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:announcements*
+         */
+        post: operations['admin___announcements___groups___list'];
+    };
+    '/admin/announcements/groups/update': {
+        /**
+         * admin/announcements/groups/update
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:announcements*
+         */
+        post: operations['admin___announcements___groups___update'];
+    };
     '/admin/announcements/list': {
         /**
          * admin/announcements/list
@@ -940,6 +976,15 @@ export type paths = {
          *     **Credential required**: *No*
          */
         post: operations['announcements'];
+    };
+    '/announcements/groups': {
+        /**
+         * announcements/groups
+         * @description No description provided.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['announcements___groups'];
     };
     '/announcements/show': {
         /**
@@ -4433,8 +4478,24 @@ export type components = {
             display: 'dialog' | 'normal' | 'banner';
             needConfirmationToRead: boolean;
             silence: boolean;
+            /** Format: id */
+            groupId: string | null;
             forYou: boolean;
             isRead?: boolean;
+        };
+        AnnouncementGroup: {
+            /**
+             * Format: id
+             * @example xxxxxxxxxx
+             */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string | null;
+            name: string;
+            icon: string | null;
+            order: number;
         };
         App: {
             id: string;
@@ -6693,6 +6754,11 @@ export interface operations {
                     userId?: string | null;
                     /** @default null */
                     autoArchiveAt?: number | null;
+                    /**
+                     * Format: misskey:id
+                     * @default null
+                     */
+                    groupId?: string | null;
                 };
             };
         };
@@ -6829,6 +6895,265 @@ export interface operations {
             };
         };
     };
+    admin___announcements___groups___create: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    name: string;
+                    /** @default null */
+                    icon?: string | null;
+                    /** @default 0 */
+                    order?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AnnouncementGroup'];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___announcements___groups___delete: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___announcements___groups___list: {
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AnnouncementGroup'][];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___announcements___groups___update: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    id: string;
+                    name?: string;
+                    icon?: string | null;
+                    order?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AnnouncementGroup'];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     admin___announcements___list: {
         requestBody: {
             content: {
@@ -6848,6 +7173,8 @@ export interface operations {
                      * @enum {string}
                      */
                     status?: 'all' | 'active' | 'archived';
+                    /** Format: misskey:id */
+                    groupId?: string | null;
                 };
             };
         };
@@ -6882,6 +7209,7 @@ export interface operations {
                         needConfirmationToRead: boolean;
                         userId: string | null;
                         imageUrl: string | null;
+                        groupId: string | null;
                         reads: number;
                     }[];
                 };
@@ -6951,6 +7279,8 @@ export interface operations {
                     needConfirmationToRead?: boolean;
                     isActive?: boolean;
                     autoArchiveAt?: number | null;
+                    /** Format: misskey:id */
+                    groupId?: string | null;
                 };
             };
         };
@@ -13301,6 +13631,8 @@ export interface operations {
                     untilDate?: number;
                     /** @default true */
                     isActive?: boolean;
+                    /** Format: misskey:id */
+                    groupId?: string | null;
                 };
             };
         };
@@ -13312,6 +13644,64 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['Announcement'][];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    announcements___groups: {
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AnnouncementGroup'][];
                 };
             };
             /** @description Client error */

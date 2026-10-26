@@ -36,6 +36,8 @@ export const paramDef = {
 		sinceDate: { type: 'integer' },
 		untilDate: { type: 'integer' },
 		isActive: { type: 'boolean', default: true },
+		// 省略するとすべて、null はグループに入っていないもの
+		groupId: { type: 'string', format: 'misskey:id', nullable: true },
 	},
 	required: [],
 } as const;
@@ -68,6 +70,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					qb.where('announcement.isActive = false');
 					qb.orWhere('announcement.autoArchiveAt <= :now', { now });
 				}));
+			}
+
+			if (ps.groupId === null) {
+				query.andWhere('announcement.groupId IS NULL');
+			} else if (ps.groupId !== undefined) {
+				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
 			}
 
 			const announcements = await query.limit(ps.limit).getMany();

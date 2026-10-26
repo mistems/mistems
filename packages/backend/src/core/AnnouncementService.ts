@@ -100,6 +100,7 @@ export class AnnouncementService implements OnModuleInit {
 			needConfirmationToRead: values.needConfirmationToRead,
 			userId: values.userId,
 			autoArchiveAt: values.autoArchiveAt ?? null,
+			groupId: values.groupId ?? null,
 			isActive: values.isActive ?? (values.autoArchiveAt == null || values.autoArchiveAt > new Date()),
 		});
 
@@ -165,6 +166,7 @@ export class AnnouncementService implements OnModuleInit {
 				needConfirmationToRead: values.needConfirmationToRead,
 				isActive: values.isActive,
 				autoArchiveAt: values.autoArchiveAt,
+				groupId: values.groupId,
 			})
 			.where('id = :id', { id: announcement.id })
 			.returning('*')

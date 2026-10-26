@@ -119,6 +119,24 @@ type AdminAnnouncementsCreateResponse = operations['admin___announcements___crea
 type AdminAnnouncementsDeleteRequest = operations['admin___announcements___delete']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
+type AdminAnnouncementsGroupsCreateRequest = operations['admin___announcements___groups___create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminAnnouncementsGroupsCreateResponse = operations['admin___announcements___groups___create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminAnnouncementsGroupsDeleteRequest = operations['admin___announcements___groups___delete']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminAnnouncementsGroupsListResponse = operations['admin___announcements___groups___list']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminAnnouncementsGroupsUpdateRequest = operations['admin___announcements___groups___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminAnnouncementsGroupsUpdateResponse = operations['admin___announcements___groups___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminAnnouncementsListRequest = operations['admin___announcements___list']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -467,6 +485,12 @@ type Announcement = components['schemas']['Announcement'];
 type AnnouncementCreated = {
     announcement: Announcement;
 };
+
+// @public (undocumented)
+type AnnouncementGroup = components['schemas']['AnnouncementGroup'];
+
+// @public (undocumented)
+type AnnouncementsGroupsResponse = operations['announcements___groups']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type AnnouncementsRequest = operations['announcements']['requestBody']['content']['application/json'];
@@ -1572,6 +1596,12 @@ declare namespace entities {
         AdminAnnouncementsCreateRequest,
         AdminAnnouncementsCreateResponse,
         AdminAnnouncementsDeleteRequest,
+        AdminAnnouncementsGroupsCreateRequest,
+        AdminAnnouncementsGroupsCreateResponse,
+        AdminAnnouncementsGroupsDeleteRequest,
+        AdminAnnouncementsGroupsListResponse,
+        AdminAnnouncementsGroupsUpdateRequest,
+        AdminAnnouncementsGroupsUpdateResponse,
         AdminAnnouncementsListRequest,
         AdminAnnouncementsListResponse,
         AdminAnnouncementsUpdateRequest,
@@ -1688,6 +1718,7 @@ declare namespace entities {
         AdminUpdateUserNoteRequest,
         AnnouncementsRequest,
         AnnouncementsResponse,
+        AnnouncementsGroupsResponse,
         AnnouncementsShowRequest,
         AnnouncementsShowResponse,
         AntennasCreateRequest,
@@ -2222,6 +2253,7 @@ declare namespace entities {
         AchievementName,
         Ad,
         Announcement,
+        AnnouncementGroup,
         App,
         Note,
         NoteDraft,

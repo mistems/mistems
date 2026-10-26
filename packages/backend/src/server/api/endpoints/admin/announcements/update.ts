@@ -8,6 +8,7 @@ import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { AnnouncementsRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
 import { AnnouncementService } from '@/core/AnnouncementService.js';
+import { AnnouncementGroupService } from '@/core/AnnouncementGroupService.js';
 import { ApiError } from '../../../error.js';
 
 export const meta = {
@@ -28,6 +29,11 @@ export const meta = {
 			code: 'INVALID_AUTO_ARCHIVE_AT',
 			id: '01b83d7b-2fd5-4d7c-86c4-d03144d16355',
 		},
+		noSuchGroup: {
+			message: 'No such announcement group.',
+			code: 'NO_SUCH_GROUP',
+			id: '6743e203-c371-4f8e-aae8-0a7760642029',
+		},
 	},
 } as const;
 
@@ -45,6 +51,7 @@ export const paramDef = {
 		needConfirmationToRead: { type: 'boolean' },
 		isActive: { type: 'boolean' },
 		autoArchiveAt: { type: 'integer', nullable: true },
+		groupId: { type: 'string', format: 'misskey:id', nullable: true },
 	},
 	required: ['id'],
 } as const;
@@ -56,6 +63,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private announcementsRepository: AnnouncementsRepository,
 
 		private announcementService: AnnouncementService,
+		private announcementGroupService: AnnouncementGroupService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const autoArchiveAt = ps.autoArchiveAt != null ? new Date(ps.autoArchiveAt) : ps.autoArchiveAt;
@@ -66,6 +74,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const announcement = await this.announcementsRepository.findOneBy({ id: ps.id });
 
 			if (announcement == null) throw new ApiError(meta.errors.noSuchAnnouncement);
+
+			if (ps.groupId != null && !(await this.announcementGroupService.exists(ps.groupId))) {
+				throw new ApiError(meta.errors.noSuchGroup);
+			}
 
 			await this.announcementService.update(announcement, {
 				updatedAt: new Date(),
@@ -80,6 +92,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				needConfirmationToRead: ps.needConfirmationToRead,
 				isActive: ps.isActive,
 				autoArchiveAt,
+				groupId: ps.groupId,
 			}, me);
 		});
 	}

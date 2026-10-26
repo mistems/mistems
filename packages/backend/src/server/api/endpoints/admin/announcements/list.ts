@@ -89,6 +89,10 @@ export const meta = {
 					type: 'string',
 					optional: false, nullable: true,
 				},
+				groupId: {
+					type: 'string',
+					optional: false, nullable: true,
+				},
 				reads: {
 					type: 'number',
 					optional: false, nullable: false,
@@ -108,6 +112,8 @@ export const paramDef = {
 		untilDate: { type: 'integer' },
 		userId: { type: 'string', format: 'misskey:id', nullable: true },
 		status: { type: 'string', enum: ['all', 'active', 'archived'], default: 'active' },
+		// 省略するとすべて、null はグループに入っていないもの
+		groupId: { type: 'string', format: 'misskey:id', nullable: true },
 	},
 	required: [],
 } as const;
@@ -147,6 +153,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				query.andWhere('announcement.userId IS NULL');
 			}
 
+			if (ps.groupId === null) {
+				query.andWhere('announcement.groupId IS NULL');
+			} else if (ps.groupId !== undefined) {
+				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
+			}
+
 			const announcements = await query.limit(ps.limit).getMany();
 
 			const reads = new Map<MiAnnouncement, number>();
@@ -172,6 +184,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				silence: announcement.silence,
 				needConfirmationToRead: announcement.needConfirmationToRead,
 				userId: announcement.userId,
+				groupId: announcement.groupId,
 				reads: reads.get(announcement)!,
 			}));
 		});
