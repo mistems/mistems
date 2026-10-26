@@ -4,19 +4,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<PageWithHeader :actions="headerActions" :tabs="headerTabs">
+<PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs">
 	<div class="_spacer" style="--MI_SPACER-w: 900px;">
-		<div class="_gaps">
+		<XGroups v-if="tab === 'groups'" @changed="fetchGroups"/>
+		<div v-else class="_gaps">
 			<MkInfo>{{ i18n.ts._announcement.shouldNotBeUsedToPresentPermanentInfo }}</MkInfo>
 			<MkInfo v-if="announcementsStatus === 'active' && announcements.length > 5" warn>{{ i18n.ts._announcement.tooManyActiveAnnouncementDescription }}</MkInfo>
 
-			<MkSelect v-model="announcementsStatus" :items="announcementsStatusDef">
-				<template #label>{{ i18n.ts.filter }}</template>
-			</MkSelect>
+			<div :class="$style.filters">
+				<MkSelect v-model="announcementsStatus" :items="announcementsStatusDef">
+					<template #label>{{ i18n.ts.filter }}</template>
+				</MkSelect>
+				<MkSelect v-if="groups.length > 0" v-model="groupFilter" :items="groupFilterItems">
+					<template #label>{{ i18n.ts._announcement.filterByGroup }}</template>
+				</MkSelect>
+			</div>
 
 			<MkLoading v-if="loading"/>
 
 			<template v-else>
+				<XReorder
+					v-if="groupFilterId !== undefined && announcementsStatus === 'active' && savedAnnouncements.length > 1"
+					:groupId="groupFilterId"
+					:announcements="savedAnnouncements"
+					@saved="refresh"
+				/>
 				<MkFolder v-for="announcement in announcements" :key="announcement.id ?? announcement._id" :defaultOpen="announcement.id == null">
 					<template #label>{{ announcement.title }}</template>
 					<template #icon>
@@ -46,6 +58,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkInput v-model="announcement.title">
 							<template #label>{{ i18n.ts.title }}</template>
 						</MkInput>
+						<MkSelect v-if="groups.length > 0" v-model="announcement.groupId" :items="groupSelectItems">
+							<template #label>{{ i18n.ts._announcement.group }}</template>
+						</MkSelect>
 						<MkTextarea v-model="announcement.text" mfmAutocomplete :mfmPreview="true">
 							<template #label>{{ i18n.ts.text }}</template>
 						</MkTextarea>
@@ -119,6 +134,9 @@ import MkTextarea from '@/components/MkTextarea.vue';
 import { genId } from '@/utility/id.js';
 import { useMkSelect } from '@/composables/use-mkselect.js';
 import { formatDateTimeString } from '@/utility/format-time-string.js';
+import XGroups from './announcements.groups.vue';
+import XReorder from './announcements.reorder.vue';
+import type { MkSelectItem } from '@/components/MkSelect.vue';
 
 const {
 	model: announcementsStatus,
@@ -133,6 +151,47 @@ const {
 
 const loading = ref(true);
 const loadingMore = ref(false);
+
+const tab = ref<'announcements' | 'groups'>('announcements');
+
+const groups = ref<Misskey.entities.AnnouncementGroup[]>([]);
+
+async function fetchGroups() {
+	groups.value = await misskeyApi('admin/announcements/groups/list', {});
+}
+
+fetchGroups();
+
+const ALL_GROUPS = '__all__';
+const UNGROUPED = '__ungrouped__';
+
+// グループで絞り込む。ALL_GROUPS はすべて、UNGROUPED はグループに入っていないもの
+const groupFilter = ref<string>(ALL_GROUPS);
+
+const groupFilterItems = computed<MkSelectItem<string>[]>(() => [
+	{ label: i18n.ts.all, value: ALL_GROUPS },
+	...groups.value.map(g => ({ label: g.name, value: g.id })),
+	{ label: i18n.ts.other, value: UNGROUPED },
+]);
+
+const groupSelectItems = computed<MkSelectItem<string | null>[]>(() => [
+	{ label: i18n.ts._announcement.noGroup, value: null },
+	...groups.value.map(g => ({ label: g.name, value: g.id })),
+]);
+
+// API に渡す groupId。undefined はすべて、null はグループに入っていないもの
+const groupFilterId = computed<string | null | undefined>(() => {
+	if (groupFilter.value === ALL_GROUPS) return undefined;
+	if (groupFilter.value === UNGROUPED) return null;
+	return groupFilter.value;
+});
+
+function listParams() {
+	return {
+		status: announcementsStatus.value,
+		...(groupFilterId.value !== undefined ? { groupId: groupFilterId.value } : {}),
+	};
+}
 
 const createAnnouncementErrors: ApiWithDialogCustomErrors = {
 	'2a892bd5-487d-46a2-a5fe-3d85ad51defe': {
@@ -168,14 +227,10 @@ function toAutoArchiveAt(value: string, originalValue: Misskey.entities.AdminAnn
 	return value === '' ? null : new Date(value).getTime();
 }
 
-watch(announcementsStatus, (to) => {
-	loading.value = true;
-	misskeyApi('admin/announcements/list', {
-		status: to,
-	}).then(announcementResponse => {
-		announcements.value = announcementResponse.map(toEditableAnnouncement);
-		loading.value = false;
-	});
+const savedAnnouncements = computed(() => announcements.value.filter((a): a is EditableAnnouncement & { id: string } => a.id != null));
+
+watch([announcementsStatus, groupFilter], () => {
+	refresh();
 }, { immediate: true });
 
 function add() {
@@ -193,6 +248,8 @@ function add() {
 		autoArchiveAt: '',
 		originalAutoArchiveAt: null,
 		userId: null,
+		groupId: groupFilterId.value ?? null,
+		displayOrder: 0,
 	});
 }
 
@@ -211,7 +268,7 @@ async function del(announcement: (typeof announcements)['value'][number]) {
 
 async function archive(announcement: (typeof announcements)['value'][number]) {
 	if (announcement.id == null) return;
-	const { _id, id, autoArchiveAt, originalAutoArchiveAt, ...data } = announcement; // APIに不要な項目を消す
+	const { _id, id, autoArchiveAt, originalAutoArchiveAt, displayOrder, ...data } = announcement; // APIに不要な項目を消す
 	await os.apiWithDialog('admin/announcements/update', {
 		...data,
 		id,
@@ -223,7 +280,7 @@ async function archive(announcement: (typeof announcements)['value'][number]) {
 
 async function unarchive(announcement: (typeof announcements)['value'][number]) {
 	if (announcement.id == null) return;
-	const { _id, id, autoArchiveAt, originalAutoArchiveAt, ...data } = announcement; // APIに不要な項目を消す
+	const { _id, id, autoArchiveAt, originalAutoArchiveAt, displayOrder, ...data } = announcement; // APIに不要な項目を消す
 	const autoArchiveAtMs = toAutoArchiveAt(autoArchiveAt, originalAutoArchiveAt);
 	await os.apiWithDialog('admin/announcements/update', {
 		...data,
@@ -235,7 +292,7 @@ async function unarchive(announcement: (typeof announcements)['value'][number]) 
 }
 
 async function save(announcement: (typeof announcements)['value'][number]) {
-	const { _id, id, isActive, reads, autoArchiveAt, originalAutoArchiveAt, ...data } = announcement; // APIに不要な項目を消す
+	const { _id, id, isActive, reads, autoArchiveAt, originalAutoArchiveAt, displayOrder, ...data } = announcement; // APIに不要な項目を消す
 	const autoArchiveAtMs = toAutoArchiveAt(autoArchiveAt, originalAutoArchiveAt);
 	if (id == null) {
 		if (autoArchiveAtMs != null && (Number.isNaN(autoArchiveAtMs) || autoArchiveAtMs <= Date.now())) {
@@ -265,8 +322,13 @@ async function save(announcement: (typeof announcements)['value'][number]) {
 function more() {
 	loadingMore.value = true;
 	misskeyApi('admin/announcements/list', {
-		status: announcementsStatus.value,
-		untilId: announcements.value.reduce((acc, announcement) => announcement.id != null ? announcement : acc).id!,
+		...listParams(),
+		// グループで絞り込んでいるときは表示順で並ぶので、offset でページを送る
+		...(groupFilterId.value !== undefined ? {
+			offset: savedAnnouncements.value.length,
+		} : {
+			untilId: announcements.value.reduce((acc, announcement) => announcement.id != null ? announcement : acc).id!,
+		}),
 	}).then(announcementResponse => {
 		announcements.value = announcements.value.concat(announcementResponse.map(toEditableAnnouncement));
 		loadingMore.value = false;
@@ -275,15 +337,13 @@ function more() {
 
 function refresh() {
 	loading.value = true;
-	misskeyApi('admin/announcements/list', {
-		status: announcementsStatus.value,
-	}).then(announcementResponse => {
+	misskeyApi('admin/announcements/list', listParams()).then(announcementResponse => {
 		announcements.value = announcementResponse.map(toEditableAnnouncement);
 		loading.value = false;
 	});
 }
 
-const headerActions = computed(() => [{
+const headerActions = computed(() => tab.value === 'groups' ? [] : [{
 	asFullButton: true,
 	icon: 'ti ti-plus',
 	text: i18n.ts.add,
@@ -291,7 +351,15 @@ const headerActions = computed(() => [{
 	disabled: announcementsStatus.value === 'archived',
 }]);
 
-const headerTabs = computed(() => []);
+const headerTabs = computed(() => [{
+	key: 'announcements',
+	title: i18n.ts.announcements,
+	icon: 'ti ti-speakerphone',
+}, {
+	key: 'groups',
+	title: i18n.ts._announcement.groups,
+	icon: 'ti ti-folders',
+}]);
 
 definePage(() => ({
 	title: i18n.ts.announcements,
@@ -300,6 +368,12 @@ definePage(() => ({
 </script>
 
 <style lang="scss" module>
+.filters {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 12px;
+}
+
 .announcementText {
 	display: block;
 	overflow: hidden;
