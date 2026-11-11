@@ -94,16 +94,8 @@ class ThemeManager extends EventEmitter<ThemeManagerEvents> {
 		this.applyTheme();
 	}
 
-	/** 通常のテーマのコンパイルに加え、ベースとなるテーマの値を解決し代入します。 */
 	private compile(theme: Theme) {
-		const _theme = deepClone(theme);
-
-		if (_theme.base != null) {
-			const base = [lightTheme, darkTheme].find(x => x.id === _theme.base);
-			if (base) _theme.props = Object.assign({}, base.props, _theme.props);
-		}
-
-		return compile(_theme);
+		return compileTheme(theme);
 	}
 
 	/** currentThemeを適用します。 */
@@ -169,6 +161,28 @@ class ThemeManager extends EventEmitter<ThemeManagerEvents> {
 
 		this.emit('themeChanging');
 	}
+}
+
+/** 通常のテーマのコンパイルに加え、ベースとなるテーマの値を解決し代入します。 */
+export function compileTheme(theme: Theme): CompiledTheme {
+	const _theme = deepClone(theme);
+
+	if (_theme.base != null) {
+		const base = [lightTheme, darkTheme].find(x => x.id === _theme.base);
+		if (base) _theme.props = Object.assign({}, base.props, _theme.props);
+	}
+
+	return compile(_theme);
+}
+
+/** コンパイル済みのテーマを、要素の style に渡せる CSS 変数の組にします。 */
+export function compiledThemeToCssVars(compiled: CompiledTheme): Record<string, string> {
+	const vars: Record<string, string> = {};
+	for (const key of themeProps) {
+		const value = compiled[key];
+		if (value) vars[`--MI_THEME-${key}`] = value.toString();
+	}
+	return vars;
 }
 
 export const themeManager = new ThemeManager();
