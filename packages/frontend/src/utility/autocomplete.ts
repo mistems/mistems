@@ -46,6 +46,8 @@ export class Autocomplete {
 	}
 
 	private set text(text: string) {
+		// MISTEMS: IME で変換中は v-model が textarea に値を書き戻さない (Vue の vModelText は el.composing の間は更新を捨てる) ので、textarea にも直接書く
+		this.textarea.value = text;
 		// Use ref value to notify other watchers
 		// (Because .value setter never fires input/change events)
 		this.textRef.value = text;
@@ -308,9 +310,21 @@ export class Autocomplete {
 	}
 
 	/**
+	 * MISTEMS: IME で変換中なら、フォーカスを外して変換を確定させる (フォーカスは close() で戻す)
+	 */
+	private commitComposition() {
+		const vModelComposing = (this.textarea as { composing?: boolean }).composing === true;
+		if (!this.composing && !vModelComposing) return;
+		this.textarea.blur();
+	}
+
+	/**
 	 * オートコンプリートする
 	 */
 	private complete<T extends keyof CompleteInfo>(props: CompleteProps<T>) {
+		// MISTEMS: 変換中に候補を選んだら (iOS では候補をタップしても変換が続く)、先に変換を確定させてから置き換える。
+		// 変換中のまま置き換えると、あとで IME が確定した文字列で上書きし、置き換えが消える
+		this.commitComposition();
 		this.close();
 
 		const caret = Number(this.textarea.selectionStart);
