@@ -11,7 +11,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 const MAX_ITEMS = 30;
 const MAX_QUEUE_ITEMS = 100;
 const FIRST_FETCH_LIMIT = 15;
-const SECOND_FETCH_LIMIT = 30;
+export const SECOND_FETCH_LIMIT = 30;
 
 export type MisskeyEntity = {
 	id: string;
@@ -55,14 +55,25 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	noPaging: boolean;
 	searchQuery: Ref<null | string>;
 	order: Ref<'newest' | 'oldest'>;
+	allowPartial: boolean;
 
+	/**
+	 * 先読みキューが上限を超えて最古側が捨てられたときに呼ばれる。
+	 * 引数は捨てた後にキューへ残っている最古の id (タイムラインの歯抜け検知用)。
+	 * fetchRange / insertItemsBefore と共に order === 'newest' のタイムライン用で、'oldest' では使わないこと
+	 */
+	onQueueOverflow: ((oldestRemainingQueuedId: string) => void) | null;
+
+	getNewestId(): string | null | undefined;
 	init(): Promise<void>;
 	reload(): Promise<void>;
 	fetchOlder(): Promise<void>;
 	fetchNewer(options?: { toQueue?: boolean }): Promise<void>;
+	fetchRange(range: { sinceId: string; untilId?: string | null; limit?: number }): Promise<_T[] | null>;
 	trim(trigger?: boolean): void;
 	unshiftItems(newItems: (_T)[]): void;
 	pushItems(oldItems: (_T)[]): void;
+	insertItemsBefore(anchorId: string, newItems: (_T)[]): number;
 	prepend(item: _T): void;
 	enqueue(item: _T): void;
 	releaseQueue(): void;
@@ -103,12 +114,15 @@ export class Paginator<
 	public initialDirection: 'newer' | 'older';
 
 	private offsetMode: boolean;
+	
 	public noPaging: boolean;
 	public searchQuery = ref<null | string>('');
 	private searchParamName: keyof E['req'] | 'search';
 	private canFetchDetection: 'safe' | 'limit' | null = null;
 	private aheadQueue: T[] = [];
 	private useShallowRef: SRef;
+	public allowPartial: boolean;
+	public onQueueOverflow: ((oldestRemainingQueuedId: string) => void) | null = null;
 
 	// 配列内の要素をどのような順序で並べるか
 	// newest: 新しいものが先頭 (default)
@@ -139,6 +153,7 @@ export class Paginator<
 		canFetchDetection?: 'safe' | 'limit';
 
 		useShallowRef?: SRef;
+		allowPartial?: boolean;
 
 		canSearch?: boolean;
 		searchParamName?: keyof E['req'];
@@ -163,6 +178,7 @@ export class Paginator<
 		this.offsetMode = props.offsetMode ?? false;
 		this.canSearch = props.canSearch ?? false;
 		this.searchParamName = props.searchParamName ?? 'search';
+		this.allowPartial = props.allowPartial ?? true;
 
 		this.getNewestId = this.getNewestId.bind(this);
 		this.getOldestId = this.getOldestId.bind(this);
@@ -170,8 +186,10 @@ export class Paginator<
 		this.reload = this.reload.bind(this);
 		this.fetchOlder = this.fetchOlder.bind(this);
 		this.fetchNewer = this.fetchNewer.bind(this);
+		this.fetchRange = this.fetchRange.bind(this);
 		this.unshiftItems = this.unshiftItems.bind(this);
 		this.pushItems = this.pushItems.bind(this);
+		this.insertItemsBefore = this.insertItemsBefore.bind(this);
 		this.prepend = this.prepend.bind(this);
 		this.enqueue = this.enqueue.bind(this);
 		this.releaseQueue = this.releaseQueue.bind(this);
@@ -179,7 +197,10 @@ export class Paginator<
 		this.updateItem = this.updateItem.bind(this);
 	}
 
-	private getNewestId(): string | null | undefined {
+	/**
+	 * items と先読みキューを合わせた中で最も新しい id (キュー優先)
+	 */
+	public getNewestId(): string | null | undefined {
 		// 様々な要因により並び順は保証されないのでソートが必要
 		if (this.aheadQueue.length > 0) {
 			return this.aheadQueue.map(x => x.id).sort().at(-1);
@@ -203,7 +224,7 @@ export class Paginator<
 			...(this.computedParams ? this.computedParams.value : {}),
 			...(this.searchQuery.value != null && this.searchQuery.value.trim() !== '' ? { [this.searchParamName]: this.searchQuery.value } : {}),
 			limit: this.limit ?? FIRST_FETCH_LIMIT,
-			allowPartial: true,
+			allowPartial: this.allowPartial,
 			...((this.initialId == null && this.initialDate == null) && this.initialDirection === 'newer' ? {
 				sinceId: '0',
 			} : this.initialDirection === 'newer' ? {
@@ -352,6 +373,7 @@ export class Paginator<
 			this.aheadQueue.unshift(...apiRes.toReversed());
 			if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 				this.aheadQueue = this.aheadQueue.slice(0, MAX_QUEUE_ITEMS);
+				this.notifyQueueOverflow();
 			}
 			this.queuedAheadItemsCount.value = this.aheadQueue.length;
 		} else {
@@ -392,6 +414,55 @@ export class Paginator<
 		if (this.useShallowRef) triggerRef(this.items);
 	}
 
+	/**
+	 * anchorId のアイテムの直前 (新しい側) に newItems を差し込む。
+	 * 既に存在する id は除外する。戻り値は実際に挿入した件数。
+	 * anchorId が items に無い場合は何もせず 0 を返す。
+	 *
+	 * NOTE: order === 'newest' (新しいものが先頭) を前提にしている。newItems は新しい順に並べて渡すこと。
+	 * order === 'oldest' では配列上の「直前」が古い側になるため、そのままでは並びが崩れる
+	 */
+	public insertItemsBefore(anchorId: string, newItems: T[]): number {
+		const index = this.items.value.findIndex(x => x.id === anchorId);
+		if (index === -1) return 0;
+		const filtered = newItems.filter(x => !this.items.value.some(y => y.id === x.id));
+		if (filtered.length === 0) return 0; // これやらないと余計なre-renderが走る
+		this.items.value.splice(index, 0, ...filtered);
+		if (this.useShallowRef) triggerRef(this.items);
+		return filtered.length;
+	}
+
+	/**
+	 * sinceId (と untilId) で区切られた区間のアイテムを取得する。items には反映しない。
+	 * 並び順は endpoint によって異なる (多くは untilId 指定時に降順、未指定時に昇順だが例外あり) ので呼び出し側でソートすること。
+	 * 失敗時は null。
+	 *
+	 * NOTE: 区間内のノートが漏れなく返ることは backend 側の補完処理 (FanoutTimelineEndpointService の
+	 * 全範囲 DB フォールバック、MISTEMS の FTTL 歯抜け対策パッチ) に依存している。
+	 * それが無い環境では Redis 上の欠損がそのまま返り、補給しても穴が残りうる
+	 */
+	public async fetchRange(range: { sinceId: string; untilId?: string | null; limit?: number }): Promise<T[] | null> {
+		const data: E['req'] = {
+			...(typeof this.params === 'function' ? this.params() : this.params),
+			...(this.computedParams ? this.computedParams.value : {}),
+			...(this.searchQuery.value != null && this.searchQuery.value.trim() !== '' ? { [this.searchParamName]: this.searchQuery.value } : {}),
+			limit: range.limit ?? SECOND_FETCH_LIMIT,
+			sinceId: range.sinceId,
+			...(range.untilId != null ? { untilId: range.untilId } : {}),
+		};
+
+		return (await misskeyApi<T[]>(this.endpoint, data).catch(_ => {
+			return null;
+		})) as T[] | null;
+	}
+
+	private notifyQueueOverflow(): void {
+		if (this.onQueueOverflow == null || this.aheadQueue.length === 0) return;
+		// 様々な要因により並び順は保証されないのでソートが必要
+		const oldestRemaining = this.aheadQueue.map(x => x.id).sort().at(0);
+		if (oldestRemaining != null) this.onQueueOverflow(oldestRemaining);
+	}
+
 	public prepend(item: T): void {
 		if (this.items.value.some(x => x.id === item.id)) return;
 		this.items.value.unshift(item);
@@ -403,6 +474,7 @@ export class Paginator<
 		this.aheadQueue.unshift(item);
 		if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 			this.aheadQueue.pop();
+			this.notifyQueueOverflow();
 		}
 		this.queuedAheadItemsCount.value = this.aheadQueue.length;
 	}
