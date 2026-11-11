@@ -6,7 +6,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/vue';
 import { nextTick } from 'vue';
-import './init.js';
 import { components } from '@/components/index.js';
 import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
