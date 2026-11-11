@@ -26,8 +26,15 @@ import type {
 	AdminAnnouncementsCreateRequest,
 	AdminAnnouncementsCreateResponse,
 	AdminAnnouncementsDeleteRequest,
+	AdminAnnouncementsGroupsCreateRequest,
+	AdminAnnouncementsGroupsCreateResponse,
+	AdminAnnouncementsGroupsDeleteRequest,
+	AdminAnnouncementsGroupsListResponse,
+	AdminAnnouncementsGroupsUpdateRequest,
+	AdminAnnouncementsGroupsUpdateResponse,
 	AdminAnnouncementsListRequest,
 	AdminAnnouncementsListResponse,
+	AdminAnnouncementsReorderRequest,
 	AdminAnnouncementsResetReadsRequest,
 	AdminAnnouncementsUpdateRequest,
 	AdminAvatarDecorationsCreateRequest,
@@ -145,6 +152,7 @@ import type {
 	AdminUpdateUserNoteRequest,
 	AnnouncementsRequest,
 	AnnouncementsResponse,
+	AnnouncementsGroupsResponse,
 	AnnouncementsShowRequest,
 	AnnouncementsShowResponse,
 	AntennasCreateRequest,
@@ -691,7 +699,12 @@ export type Endpoints = {
 	'admin/ad/update': { req: AdminAdUpdateRequest; res: EmptyResponse };
 	'admin/announcements/create': { req: AdminAnnouncementsCreateRequest; res: AdminAnnouncementsCreateResponse };
 	'admin/announcements/delete': { req: AdminAnnouncementsDeleteRequest; res: EmptyResponse };
+	'admin/announcements/groups/create': { req: AdminAnnouncementsGroupsCreateRequest; res: AdminAnnouncementsGroupsCreateResponse };
+	'admin/announcements/groups/delete': { req: AdminAnnouncementsGroupsDeleteRequest; res: EmptyResponse };
+	'admin/announcements/groups/list': { req: EmptyRequest; res: AdminAnnouncementsGroupsListResponse };
+	'admin/announcements/groups/update': { req: AdminAnnouncementsGroupsUpdateRequest; res: AdminAnnouncementsGroupsUpdateResponse };
 	'admin/announcements/list': { req: AdminAnnouncementsListRequest; res: AdminAnnouncementsListResponse };
+	'admin/announcements/reorder': { req: AdminAnnouncementsReorderRequest; res: EmptyResponse };
 	'admin/announcements/reset-reads': { req: AdminAnnouncementsResetReadsRequest; res: EmptyResponse };
 	'admin/announcements/update': { req: AdminAnnouncementsUpdateRequest; res: EmptyResponse };
 	'admin/avatar-decorations/create': { req: AdminAvatarDecorationsCreateRequest; res: AdminAvatarDecorationsCreateResponse };
@@ -782,6 +795,7 @@ export type Endpoints = {
 	'admin/update-proxy-account': { req: AdminUpdateProxyAccountRequest; res: AdminUpdateProxyAccountResponse };
 	'admin/update-user-note': { req: AdminUpdateUserNoteRequest; res: EmptyResponse };
 	'announcements': { req: AnnouncementsRequest; res: AnnouncementsResponse };
+	'announcements/groups': { req: EmptyRequest; res: AnnouncementsGroupsResponse };
 	'announcements/show': { req: AnnouncementsShowRequest; res: AnnouncementsShowResponse };
 	'antennas/create': { req: AntennasCreateRequest; res: AntennasCreateResponse };
 	'antennas/delete': { req: AntennasDeleteRequest; res: EmptyResponse };

@@ -33,6 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				>
 					<div v-show="t.key === tab" :class="[$style.tabTitle, $style.animate]">{{ t.title }}</div>
 				</Transition>
+				<span v-if="t.badge" :class="['_indicateCounter', $style.tabBadge]">{{ t.badge > 99 ? '99+' : t.badge }}</span>
 			</div>
 		</button>
 	</div>
@@ -50,6 +51,8 @@ export type Tab = {
 	iconOnly?: boolean;
 	title: string;
 	icon?: string;
+	/** タイトルの横に出す件数 (未読の数など)。0 や未指定のときは出さない */
+	badge?: number;
 };
 </script>
 
@@ -250,6 +253,11 @@ onUnmounted(() => {
 
 .tabIcon + .tabTitle {
 	padding-left: 4px;
+}
+
+.tabBadge {
+	margin-left: 4px;
+	font-size: 0.7em;
 }
 
 .tabTitle {

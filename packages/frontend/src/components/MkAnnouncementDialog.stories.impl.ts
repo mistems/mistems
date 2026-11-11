@@ -43,6 +43,7 @@ export const Default = {
 			createdAt: new Date().toISOString(),
 			updatedAt: null,
 			icon: 'info',
+			groupId: null,
 			imageUrl: null,
 			display: 'dialog',
 			needConfirmationToRead: false,

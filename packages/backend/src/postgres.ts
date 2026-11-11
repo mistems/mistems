@@ -17,6 +17,7 @@ import { MiAccessToken } from '@/models/AccessToken.js';
 import { MiAd } from '@/models/Ad.js';
 import { MiAnnouncement } from '@/models/Announcement.js';
 import { MiAnnouncementRead } from '@/models/AnnouncementRead.js';
+import { MiAnnouncementGroup } from '@/models/AnnouncementGroup.js';
 import { MiAntenna } from '@/models/Antenna.js';
 import { MiApp } from '@/models/App.js';
 import { MiAvatarDecoration } from '@/models/AvatarDecoration.js';
@@ -180,6 +181,7 @@ class MyCustomLogger implements Logger {
 export const entities = [
 	MiAnnouncement,
 	MiAnnouncementRead,
+	MiAnnouncementGroup,
 	MiMeta,
 	MiInstance,
 	MiApp,
