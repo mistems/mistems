@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/vue';
 import { nextTick } from 'vue';
 import { components } from '@/components/index.js';
 import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
+import { prefer } from '@/preferences.js';
 
 // 描画にのみ影響するディレクティブは no-op で十分
 const noopDirective = { mounted: () => {}, updated: () => {}, beforeUnmount: () => {} };
@@ -137,6 +138,11 @@ async function waitForInitialNotes(container: Element) {
 	await waitFor(() => expect(container.querySelectorAll('[data-note-id]')).toHaveLength(3));
 }
 
+beforeEach(() => {
+	// 歯抜けマーカーは実験的機能で既定はオフなので、オンにして確かめる (テストの prefer はモックで、s を直接書き換える)
+	(prefer.s as Record<string, unknown>)['experimental.enableTimelineGapFill'] = true;
+});
+
 afterEach(() => {
 	cleanup();
 	streamMock.reset();
@@ -221,6 +227,19 @@ describe('MkStreamingNotesTimeline: 歯抜けマーカー', () => {
 		await waitFor(() => expect(misskeyApiMock).toHaveBeenLastCalledWith('notes/timeline', expect.objectContaining({ sinceId: 'n003' })));
 		// 空が返るので補給完了と同時にマーカーが消える
 		await waitFor(() => expect(container.querySelector('[data-gap-id]')).toBeNull());
+		expect(renderedIds(container)).toEqual(['n003', 'n002', 'n001']);
+	});
+
+	test('実験的機能の設定がオフなら、WS 再接続でもマーカーを立てない', async () => {
+		(prefer.s as Record<string, unknown>)['experimental.enableTimelineGapFill'] = false;
+		const { container } = renderTimeline();
+		await waitForInitialNotes(container);
+
+		streamMock.emit('_disconnected_');
+		streamMock.emit('_connected_');
+		await nextTick();
+
+		expect(container.querySelector('[data-gap-id]')).toBeNull();
 		expect(renderedIds(container)).toEqual(['n003', 'n002', 'n001']);
 	});
 });

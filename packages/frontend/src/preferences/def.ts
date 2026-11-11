@@ -560,4 +560,8 @@ export const PREF_DEF = definePreferences({
 	'experimental.enableWebTranslatorApi': {
 		default: false,
 	},
+	// WebSocket の切断やスリープなどでタイムラインに取りこぼした区間を、歯抜けマーカーで示して取り直す
+	'experimental.enableTimelineGapFill': {
+		default: false,
+	},
 });

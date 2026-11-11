@@ -247,7 +247,13 @@ const timelineGaps = useTimelineGaps(paginator, {
 });
 const displayItems = timelineGaps.displayItems;
 
-paginator.onQueueOverflow = timelineGaps.onQueueOverflow;
+// 歯抜けマーカーは実験的機能 (設定 > その他 > 実験的機能)。オフのときはマーカーを立てず、今までの動作にする
+const isGapFillEnabled = () => prefer.s['experimental.enableTimelineGapFill'];
+
+paginator.onQueueOverflow = (oldestRemainingQueuedId) => {
+	if (!isGapFillEnabled()) return;
+	timelineGaps.onQueueOverflow(oldestRemainingQueuedId);
+};
 
 /**
  * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
@@ -276,7 +282,7 @@ watch(visibility, () => {
 		hiddenAt = Date.now();
 	} else { // 'visible'
 		isPausingUpdate = false;
-		if (stream != null && hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
+		if (isGapFillEnabled() && stream != null && hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
 			timelineGaps.openGap();
 		}
 		hiddenAt = null;
@@ -369,6 +375,7 @@ if (stream != null) {
 	const onStreamConnected = () => {
 		if (!wasDisconnected) return;
 		wasDisconnected = false;
+		if (!isGapFillEnabled()) return;
 		timelineGaps.openGap();
 	};
 	stream.on('_disconnected_', onStreamDisconnected);

@@ -2377,6 +2377,14 @@ export interface Locale extends ILocale {
      */
     "fetchNotesBetween": string;
     /**
+     * タイムラインの切断中追加読み込み
+     */
+    "enableTimelineGapFill": string;
+    /**
+     * 通信の切断やスリープのあいだにタイムラインへ流れてこなかったノートを、再接続したときに取り直します。取り直していない区間には「間のノートを取得」が表示されます。
+     */
+    "enableTimelineGapFillDescription": string;
+    /**
      * サウンド
      */
     "sounds": string;

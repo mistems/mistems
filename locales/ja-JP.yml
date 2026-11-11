@@ -591,6 +591,8 @@ withRepliesByDefaultForNewlyFollowed: "フォローする際、デフォルト�
 newNoteRecived: "新しいノートがあります"
 newNote: "新しいノート"
 fetchNotesBetween: "間のノートを取得"
+enableTimelineGapFill: "タイムラインの切断中追加読み込み"
+enableTimelineGapFillDescription: "通信の切断やスリープのあいだにタイムラインへ流れてこなかったノートを、再接続したときに取り直します。取り直していない区間には「間のノートを取得」が表示されます。"
 sounds: "サウンド"
 sound: "サウンド"
 notificationSoundSettings: "通知音の設定"
