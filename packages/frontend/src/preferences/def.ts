@@ -225,6 +225,21 @@ export const PREF_DEF = definePreferences({
 	showReactionsCount: {
 		default: false,
 	},
+	enableFavstar: {
+		default: true,
+	},
+	favstarLightAo: {
+		default: '#44a4c1',
+	},
+	favstarLightAka: {
+		default: '#f7796c',
+	},
+	favstarDarkAo: {
+		default: '#44a4c1',
+	},
+	favstarDarkAka: {
+		default: '#f7796c',
+	},
 	enableQuickAddMfmFunction: {
 		default: false,
 	},
@@ -548,5 +563,9 @@ export const PREF_DEF = definePreferences({
 	// MISTEMS: 絵文字の入力補完で、スペース区切りの AND 検索をする。オフにすると、スペースを入力した時点で補完を閉じる (従来の動作)
 	'experimental.emojiAutocompleteAndSearch': {
 		default: true,
+	},
+	// WebSocket の切断やスリープなどでタイムラインに取りこぼした区間を、歯抜けマーカーで示して取り直す
+	'experimental.enableTimelineGapFill': {
+		default: false,
 	},
 });

@@ -29,22 +29,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="$style.transition_x_move"
 			tag="div"
 		>
-			<template v-for="(note, i) in paginator.items.value" :key="note.id">
-				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, note.createdAt)" :data-scroll-anchor="note.id">
-					<div :class="$style.date">
-						<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(paginator.items.value[i -1].createdAt, note.createdAt)?.prevText }}</span>
-						<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-						<span>{{ getSeparatorInfo(paginator.items.value[i -1].createdAt, note.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
-					</div>
-					<MkNote :class="$style.note" :note="note" :withHardMute="true"/>
+			<template v-for="(item, i) in displayItems" :key="item.id">
+				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id">
+					<button class="_button" :class="$style.gapButton" :disabled="item.fetching" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching" @click="timelineGaps.fill(item)">
+						<template v-if="!item.fetching"><i class="ti ti-arrows-vertical"></i> {{ i18n.ts.fetchNotesBetween }}</template>
+						<MkLoading v-else :inline="true"/>
+					</button>
 				</div>
-				<div v-else-if="note._shouldInsertAd_" :data-scroll-anchor="note.id">
-					<MkNote :class="$style.note" :note="note" :withHardMute="true"/>
+				<div v-else-if="getPrevNote(i) != null && isSeparatorNeeded(getPrevNote(i)!.createdAt, item.createdAt)" :data-scroll-anchor="item.id">
+					<div :class="$style.date">
+						<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(getPrevNote(i)!.createdAt, item.createdAt)?.prevText }}</span>
+						<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
+						<span>{{ getSeparatorInfo(getPrevNote(i)!.createdAt, item.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
+					</div>
+					<MkNote :class="$style.note" :note="item" :withHardMute="true"/>
+				</div>
+				<div v-else-if="item._shouldInsertAd_" :data-scroll-anchor="item.id">
+					<MkNote :class="$style.note" :note="item" :withHardMute="true"/>
 					<div :class="$style.ad">
 						<MkAd :preferForms="['horizontal', 'horizontal-big']"/>
 					</div>
 				</div>
-				<MkNote v-else :class="$style.note" :note="note" :withHardMute="true" :data-scroll-anchor="note.id"/>
+				<MkNote v-else :class="$style.note" :note="item" :withHardMute="true" :data-scroll-anchor="item.id"/>
 			</template>
 		</component>
 		<button v-show="paginator.canFetchOlder.value" key="_more_" v-appear="prefer.s.enableInfiniteScroll ? paginator.fetchOlder : null" :disabled="paginator.fetchingOlder.value" class="_button" :class="$style.more" @click="paginator.fetchOlder">
@@ -78,6 +84,7 @@ import { DI } from '@/di.js';
 import { globalEvents, useGlobalEvent } from '@/events.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
 import { Paginator } from '@/utility/paginator.js';
+import { useTimelineGaps, isTimelineGap } from '@/composables/use-timeline-gaps.js';
 
 const props = withDefaults(defineProps<{
 	src: BasicTimelineType | 'mentions' | 'directs' | 'list' | 'antenna' | 'channel' | 'role';
@@ -208,6 +215,9 @@ let scrollContainer: HTMLElement | null = null;
 function onScrollContainerScroll() {
 	if (isTop()) {
 		paginator.releaseQueue();
+		// スクロールで先頭に戻ったときも、保留中の歯抜けマーカーの自動補給を試す
+		// (scrollToTop を伴うコンポーネント側の releaseQueue() はスクロールイベント内から呼ばない)
+		timelineGaps.tryAutoFill();
 	}
 }
 
@@ -229,13 +239,57 @@ onUnmounted(() => {
 const visibility = useDocumentVisibility();
 let isPausingUpdate = false;
 
+// 未取得区間 (歯抜け) のマーカー。paginator.items には混ぜず displayItems で合成する
+const timelineGaps = useTimelineGaps(paginator, {
+	canAutoFill: () => isTop() && !isPausingUpdate,
+	getGapElement: (gapId) => rootEl.value?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(gapId)}"]`) ?? null,
+	getScrollContainer: () => scrollContainer,
+});
+const displayItems = timelineGaps.displayItems;
+
+// 歯抜けマーカーは実験的機能 (設定 > その他 > 実験的機能)。オフのときはマーカーを立てず、今までの動作にする
+const isGapFillEnabled = () => prefer.s['experimental.enableTimelineGapFill'];
+
+paginator.onQueueOverflow = (oldestRemainingQueuedId) => {
+	if (!isGapFillEnabled()) return;
+	timelineGaps.onQueueOverflow(oldestRemainingQueuedId);
+};
+
+/**
+ * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
+ */
+function getPrevNote(i: number): (Misskey.entities.Note & MisskeyEntity) | null {
+	for (let j = i - 1; j >= 0; j--) {
+		const item = displayItems.value[j];
+		if (item != null && !isTimelineGap(item)) return item;
+	}
+	return null;
+}
+
+// 歯抜けマーカーのトリガーは 3 つ:
+//   1. WS 再接続 (下の stream の _disconnected_ → _connected_): 切断中に流れたノートは誰も取り直さないため
+//   2. 先読みキュー溢れ (paginator.onQueueOverflow): 最古側が捨てられるため
+//   3. 長時間 hidden からの復帰 (ここ): タブ凍結中にソケットが黙って死に、close が遅れて届くケースの保険。
+//      1 で拾えないケースの安全網であり、実際に欠損が無ければ自動補給で空が返り即消える。
+//      ポーリングモードはキュー経由で順次追いつくので対象外
+// 閾値は仮の値 (設計書の未決事項)。設定化する場合はここを起点にする
+const HIDDEN_GAP_THRESHOLD_MS = 1000 * 60 * 5;
+let hiddenAt: number | null = null;
+
 watch(visibility, () => {
 	if (visibility.value === 'hidden') {
 		isPausingUpdate = true;
+		hiddenAt = Date.now();
 	} else { // 'visible'
 		isPausingUpdate = false;
+		if (isGapFillEnabled() && stream != null && hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
+			timelineGaps.openGap();
+		}
+		hiddenAt = null;
 		if (isTop()) {
-			releaseQueue();
+			releaseQueue(); // 内部で tryAutoFill も呼ぶ
+		} else {
+			timelineGaps.tryAutoFill();
 		}
 	}
 });
@@ -268,11 +322,13 @@ if (!store.s.realtimeMode) {
 }
 
 useGlobalEvent('noteDeleted', (noteId) => {
+	timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 	paginator.removeItem(noteId);
 });
 
 useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 	if (props.src === 'antenna' && props.antenna === antennaId) {
+		timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 		paginator.removeItem(noteId);
 	}
 });
@@ -280,10 +336,14 @@ useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 function releaseQueue() {
 	paginator.releaseQueue();
 	scrollToTop(rootEl.value!);
+	timelineGaps.tryAutoFill();
 }
 
 function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 	adInsertionCounter++;
+
+	// 「現在まで」のマーカーは、切断後に最初に届いたノートで上限を確定させる
+	timelineGaps.bindUntil(note.id);
 
 	if (instance.notesPerOneAd > 0 && adInsertionCounter % instance.notesPerOneAd === 0) {
 		note._shouldInsertAd_ = true;
@@ -305,6 +365,26 @@ function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 }
 
 const stream = store.s.realtimeMode ? useStream() : null;
+
+// 再接続時: 切断中に流れたノートは誰も取り直さないので、切断直前の最新 id から現在までを歯抜けマーカーにする
+if (stream != null) {
+	let wasDisconnected = false;
+	const onStreamDisconnected = () => {
+		wasDisconnected = true;
+	};
+	const onStreamConnected = () => {
+		if (!wasDisconnected) return;
+		wasDisconnected = false;
+		if (!isGapFillEnabled()) return;
+		timelineGaps.openGap();
+	};
+	stream.on('_disconnected_', onStreamDisconnected);
+	stream.on('_connected_', onStreamConnected);
+	onUnmounted(() => {
+		stream.off('_disconnected_', onStreamDisconnected);
+		stream.off('_connected_', onStreamConnected);
+	});
+}
 
 const connections = {
 	antenna: null as Misskey.IChannelConnection<Misskey.Channels['antenna']> | null,
@@ -556,15 +636,15 @@ defineExpose({
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
-.ad {
+.ad, .gap {
 	padding: 8px;
 	background-size: auto auto;
 	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
+}
 
-	&:empty {
-		display: none;
-	}
+.ad:empty {
+	display: none;
 }
 
 .more {
@@ -573,5 +653,31 @@ defineExpose({
 	box-sizing: border-box;
 	padding: 16px;
 	background: var(--MI_THEME-panel);
+}
+
+.gap {
+	padding: 8px;
+	background-size: auto auto;
+	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+}
+
+.gapButton {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 10px 16px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-panel);
+	font-size: 90%;
+
+	&:hover:not(:disabled) {
+		background: var(--MI_THEME-buttonHoverBg);
+	}
+
+	&:disabled {
+		opacity: 0.7;
+		cursor: default;
+	}
 }
 </style>
