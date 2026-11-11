@@ -3197,6 +3197,14 @@ export interface Locale extends ILocale {
      */
     "experimentalFeatures": string;
     /**
+     * 絵文字入力補完もAND検索
+     */
+    "emojiAutocompleteAndSearch": string;
+    /**
+     * 絵文字の入力補完で、スペースで区切った語をすべて含む絵文字を探します。オフにすると、スペースを入力した時点で補完を閉じます (従来の動作)。
+     */
+    "emojiAutocompleteAndSearchDescription": string;
+    /**
      * 実験的
      */
     "experimental": string;

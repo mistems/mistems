@@ -9,7 +9,8 @@ import { toASCII } from 'punycode.js';
 import type { Ref } from 'vue';
 import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
 import { popup } from '@/os.js';
-import { shouldOpenEmojiSuggestion } from '@/utility/kana-to-hira.js';
+import { prefer } from '@/preferences.js';
+import { EMOJI_QUERY_SEPARATOR, shouldOpenEmojiSuggestion } from '@/utility/kana-to-hira.js';
 
 export type SuggestionType = 'user' | 'hashtag' | 'emoji' | 'mfmTag' | 'mfmParam';
 
@@ -193,9 +194,15 @@ export class Autocomplete {
 		if (isEmoji && !opened && this.onlyType.includes('emoji')) {
 			const emoji = text.substring(emojiIndex + 1);
 			// MISTEMS: スペース区切りで AND 検索できるよう、スペース 1 つでは閉じない。候補が 0 件でも閉じずに検索を続ける。
-			// 開閉の条件は shouldOpenEmojiSuggestion を参照
+			// 開閉の条件は shouldOpenEmojiSuggestion を参照。設定 (実験的機能) でオフにしたときは、従来どおりスペースを含んだら閉じる
+			// (全角スペースも閉じる。検索語の正規化で半角になり、AND 検索になってしまうため)
 			const open = this.suggestion != null && this.currentType === 'emoji';
-			if (shouldOpenEmojiSuggestion(emoji, {
+			if (!prefer.s['experimental.emojiAutocompleteAndSearch']) {
+				if (!EMOJI_QUERY_SEPARATOR.test(emoji)) {
+					this.open('emoji', emoji);
+					opened = true;
+				}
+			} else if (shouldOpenEmojiSuggestion(emoji, {
 				open,
 				lastSearch: open ? this.lastEmojiSearch : null,
 				composing,

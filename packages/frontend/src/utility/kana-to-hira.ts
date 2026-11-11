@@ -123,7 +123,7 @@ export function searchEmojiNormalized(query: string | null, emojiDb: EmojiDef[],
 }
 
 // 入力補助の検索語を区切るスペース。半角・全角のどちらでもよい
-const EMOJI_QUERY_SEPARATOR = /[ \u3000]/;
+export const EMOJI_QUERY_SEPARATOR = /[ \u3000]/;
 const EMOJI_QUERY_DOUBLE_SEPARATOR = /[ \u3000]{2}/;
 
 export type EmojiSuggestionState = {
