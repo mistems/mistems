@@ -142,4 +142,4 @@ git diff --name-only "$BASE"...HEAD -- packages/misskey-js/src/autogen/
 - [endpoint-base.ts (Endpoint 基底クラス)](../../packages/backend/src/server/api/endpoint-base.ts)
 - [error.ts (ApiError)](../../packages/backend/src/server/api/error.ts)
 - [test/e2e/endpoints.ts](../../packages/backend/test/e2e/endpoints.ts)
-- [AGENTS.md](../../AGENTS.md) — 共通の安全規約と検証方針
+- [CLAUDE.md](../../CLAUDE.md) — MISTEMS 開発の規約と検証方針
