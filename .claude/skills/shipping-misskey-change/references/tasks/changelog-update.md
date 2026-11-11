@@ -57,6 +57,6 @@
 CHANGELOG とコミットメッセージは **書式が異なる**:
 
 - CHANGELOG: `- Enhance: ノートの表示を改善` (先頭大文字の英語 Prefix + コロン + 日本語本文)
-- コミットメッセージ: `enhance(frontend): improve note display` (小文字 + スコープ + コロン + 英語本文。詳細は [CONTRIBUTING.md](../../../../../CONTRIBUTING.md))
+- コミットメッセージ: `enhance(frontend): improve note display` (小文字 + スコープ + コロン + 本文)
 
 両方を 1 つの PR で更新するときに混同しないこと。
