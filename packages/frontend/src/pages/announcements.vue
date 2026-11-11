@@ -8,7 +8,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 800px;">
 		<div class="_gaps">
 			<MkTab v-if="hasGroups" v-model="status" :tabs="statusTabs"/>
-			<MkInfo v-if="$i && $i.hasUnreadAnnouncement && status === 'current'" warn>{{ i18n.ts.youHaveUnreadAnnouncements }}</MkInfo>
+			<MkInfo v-if="$i && status === 'current' && unreadCountInTab > 0" warn>
+				{{ i18n.ts.youHaveUnreadAnnouncements }}
+				<button v-if="currentGroupKey !== undefined && !isAnnouncementGroupMuted(currentGroupKey)" class="_textButton _link" :class="$style.muteLink" @click="muteCurrentGroup">{{ i18n.ts._announcement.muteGroup }}</button>
+			</MkInfo>
 			<MkInfo v-if="currentGroupKey !== undefined && isAnnouncementGroupMuted(currentGroupKey)">{{ i18n.ts._announcement.mutedTabInfo }}</MkInfo>
 			<MkPagination v-slot="{items}" :paginator="paginator" class="_gaps">
 				<section v-for="announcement in items" :key="announcement.id" class="_panel" :class="$style.announcement">
@@ -83,6 +86,22 @@ const currentGroupKey = computed<string | null | undefined>(() => {
 	if (tab.value === UNGROUPED_TAB) return null;
 	return tab.value;
 });
+
+// 未読の数は、自分の未読のお知らせ ($i.unreadAnnouncements) をグループごとに数える。
+// 非通知のグループのお知らせは backend で未読から除かれているので、ここでは数えない
+function countUnread(groupKey: string | null | undefined): number {
+	if ($i == null) return 0;
+	if (groupKey === undefined) return $i.unreadAnnouncements.length;
+	return $i.unreadAnnouncements.filter(a => (a.groupId ?? null) === groupKey).length;
+}
+
+const unreadCountInTab = computed(() => countUnread(currentGroupKey.value));
+
+function muteCurrentGroup() {
+	const groupKey = currentGroupKey.value;
+	if (groupKey === undefined) return;
+	os.promiseDialog(setAnnouncementGroupMuted(groupKey, true));
+}
 
 const paginator = markRaw(new Paginator('announcements', {
 	limit: 10,
@@ -170,14 +189,17 @@ const headerTabs = computed(() => {
 		key: ALL_TAB,
 		title: i18n.ts.all,
 		icon: 'ti ti-speakerphone',
+		badge: countUnread(undefined),
 	}, ...groups.value.map(group => ({
 		key: group.id,
 		title: group.name,
 		icon: isAnnouncementGroupMuted(group.id) ? 'ti ti-bell-off' : announcementGroupIconClass(group.icon),
+		badge: countUnread(group.id),
 	})), ...(hasUngrouped.value ? [{
 		key: UNGROUPED_TAB,
 		title: i18n.ts.other,
 		icon: isAnnouncementGroupMuted(null) ? 'ti ti-bell-off' : 'ti ti-dots',
+		badge: countUnread(null),
 	}] : [])];
 });
 
@@ -216,5 +238,9 @@ definePage(() => ({
 
 .footer {
 	margin-top: 16px;
+}
+
+.muteLink {
+	margin-left: 0.5em;
 }
 </style>
