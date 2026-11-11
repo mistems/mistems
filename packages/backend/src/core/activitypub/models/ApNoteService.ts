@@ -161,7 +161,7 @@ export class ApNoteService {
 			throw new Error('unexpected schema of note url: ' + url);
 		}
 
-		this.logger.info(`Creating the Note: ${note.id}`);
+		this.logger.debug(`Creating the Note: ${note.id}`);
 
 		// 投稿者をフェッチ
 		if (note.attributedTo == null) {
@@ -247,7 +247,7 @@ export class ApNoteService {
 					return x;
 				})
 				.catch(async err => {
-					this.logger.warn(`Error in inReplyTo ${note.inReplyTo} - ${err.statusCode ?? err}`);
+					this.logger.debug(`Error in inReplyTo ${note.inReplyTo} - ${err.statusCode ?? err}`);
 					throw err;
 				})
 			: null;
@@ -291,7 +291,7 @@ export class ApNoteService {
 				if (poll.expiresAt && Date.now() > new Date(poll.expiresAt).getTime()) {
 					this.logger.warn(`vote to expired poll from AP: actor=${actor.username}@${actor.host}, note=${note.id}, choice=${name}`);
 				} else if (index >= 0) {
-					this.logger.info(`vote from AP: actor=${actor.username}@${actor.host}, note=${note.id}, choice=${name}`);
+					this.logger.debug(`vote from AP: actor=${actor.username}@${actor.host}, note=${note.id}, choice=${name}`);
 					await this.pollService.vote(actor, reply, index);
 
 					// リモートフォロワーにUpdate配信
@@ -306,7 +306,7 @@ export class ApNoteService {
 		}
 
 		const emojis = await this.extractEmojis(note.tag ?? [], actor.host).catch(e => {
-			this.logger.info(`extractEmojis: ${e}`);
+			this.logger.debug(`extractEmojis: ${e}`);
 			return [];
 		});
 
@@ -336,7 +336,7 @@ export class ApNoteService {
 			if (err.name !== 'duplicated') {
 				throw err;
 			}
-			this.logger.info('The note is already inserted while creating itself, reading again');
+			this.logger.error('The note is already inserted while creating itself, reading again');
 			const duplicate = await this.fetchNote(value);
 			if (!duplicate) {
 				throw new Error('The note creation failed with duplication error even when there is no duplication');
@@ -414,7 +414,7 @@ export class ApNoteService {
 						publicUrl: tag.icon.url,
 						updatedAt: new Date(),
 						// _misskey_license が存在しなければ `null`
-						license: (tag._misskey_license?.freeText ?? null)
+						license: (tag._misskey_license?.freeText ?? null),
 					});
 
 					const emoji = await this.emojisRepository.findOneBy({ host, name });
@@ -437,7 +437,7 @@ export class ApNoteService {
 				updatedAt: new Date(),
 				aliases: [],
 				// _misskey_license が存在しなければ `null`
-				license: (tag._misskey_license?.freeText ?? null)
+				license: (tag._misskey_license?.freeText ?? null),
 			});
 		}));
 	}
