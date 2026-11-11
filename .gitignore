@@ -83,3 +83,9 @@ vite.config.local-dev.ts.timestamp-*
 
 # Affinity
 *.af~lock~
+
+# frontend-variants
+/frontend-variants/
+/frontend-variants.next/
+/frontend-variants.old/
+/.frontend-variants-work/
