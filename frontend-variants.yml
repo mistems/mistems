@@ -1,8 +1,11 @@
-# 本番に同居させるフロントエンド variant の一覧。
-# サーバーでのデプロイ時に scripts/build-frontend-variants.mjs がビルドする。
-# 切り替えは管理画面の /admin/frontend-variants から行う。詳しくは docs/frontend-variants.md を参照。
-#
-# - name: emoji-drop                   # variant 名（英数字・ハイフン・アンダースコア）
-#   branch: feat/emoji-drop-area       # remote（FRONTEND_VARIANTS_REMOTE、省略時 origin）上のブランチ名
-#   mode: merge                        # merge（既定）: HEAD に squash merge してビルド / as-is: ブランチをそのままビルド
-[]
+# main-統合.sh が生成する。直接編集せず main-統合.sh を直すこと。
+- name: clips-pagination
+  branch: fix-clips-pagination
+# 古い mistems-main から派生していて HEAD に squash merge できないので、コンフリクトを解消した variant のブランチ (mistems-main 114 が土台) をそのままビルドする
+- name: pages-mfm-toolbar
+  branch: variant/issue-26-20260510-1119
+  mode: as-is
+# 投稿フォームのアップロード中の一覧をハンドルで並べ替える。mistems-main 114 には別のブランチ経由で同じ機能が入っており、本流 (origin/develop) には無い
+- name: uploader-drag-handle
+  branch: variant/misskey-pr-34-continue-5ywvl
+  mode: as-is
