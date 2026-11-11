@@ -61,7 +61,7 @@ describe('HTML descriptions as plain text', () => {
 			serverErrorImageUrl: '', infoImageUrl: '', notFoundImageUrl: '',
 			now: 0, federationEnabled: true, frontendViteFiles: null,
 			frontendBootloaderJs: null, frontendBootloaderCss: null,
-			frontendEmbedViteFiles: null, frontendEmbedBootloaderJs: null, frontendEmbedBootloaderCss: null,
+			frontendEmbedViteFiles: null, frontendEmbedBootloaderJs: null, frontendEmbedBootloaderCss: null, frontendVariant: null,
 		});
 		const service = new ClientServerService(
 			{ url: 'https://example.test', rootDir: process.cwd() } as Config,
