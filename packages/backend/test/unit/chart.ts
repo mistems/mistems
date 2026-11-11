@@ -457,6 +457,24 @@ describe('Chart', () => {
 				},
 			});
 		});
+
+		test('UPDATE に失敗したグループのバッファは破棄され、他のグループと後続の書き込みは影響を受けない', async () => {
+			await testGroupedChart.increment('alice');
+			await testGroupedChart.incrementBy('bob', 40000); // foo.inc は smallint なので UPDATE が失敗する
+
+			await testGroupedChart.save(); // 失敗しても例外を投げない
+
+			// 失敗しなかった alice の差分は書き込まれている
+			const aliceChartHours = await testGroupedChart.getChart('hour', 3, null, 'alice');
+			assert.deepStrictEqual(aliceChartHours.foo.inc, [1, 0, 0]);
+
+			// bob の失敗した差分は捨てられ、後続の正常な差分は書き込める
+			await testGroupedChart.increment('bob');
+			await testGroupedChart.save();
+
+			const bobChartHours = await testGroupedChart.getChart('hour', 3, null, 'bob');
+			assert.deepStrictEqual(bobChartHours.foo.inc, [1, 0, 0]);
+		});
 	});
 
 	describe('Unique increment', () => {
