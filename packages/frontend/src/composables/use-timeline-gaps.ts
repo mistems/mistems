@@ -75,7 +75,10 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 
 	const displayItems = computed<TimelineItem[]>(() => {
 		const items = paginator.items.value;
-		if (gaps.value.length === 0) return items;
+		// マーカーが無くても、必ず新しい配列を返す。paginator は useShallowRef のとき、過去のノートを items に
+		// その場で push して triggerRef するので、同じ配列を返すと computed の値が変わっていない扱いになり、
+		// 一覧 (TransitionGroup の中) が描き直されず、もっと見るで取得したノートが表示されない
+		if (gaps.value.length === 0) return [...items];
 
 		const out: TimelineItem[] = [];
 		const placed = new Set<string>();

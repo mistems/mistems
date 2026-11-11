@@ -145,6 +145,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	delete (prefer.s as Record<string, unknown>).animation;
 	streamMock.reset();
 	misskeyApiMock.mockReset();
 	fetchRangeResult = null;
@@ -241,5 +242,29 @@ describe('MkStreamingNotesTimeline: 歯抜けマーカー', () => {
 
 		expect(container.querySelector('[data-gap-id]')).toBeNull();
 		expect(renderedIds(container)).toEqual(['n003', 'n002', 'n001']);
+	});
+
+	test('マーカーが無いとき、もっと見るで取得した過去のノートが描画される', async () => {
+		(prefer.s as Record<string, unknown>)['experimental.enableTimelineGapFill'] = false;
+		// 本番と同じく TransitionGroup で包む (div だと親の再描画に巻き込まれて、一覧の更新漏れが表に出ない)
+		(prefer.s as Record<string, unknown>).animation = true;
+		// 初回に FIRST_FETCH_LIMIT (15) 件返して「もっと見る」を出す。untilId 付きの取得には、それより古いノートを返す
+		const firstPage = Array.from({ length: 15 }, (_, i) => note(`n${String(115 - i).padStart(3, '0')}`, '2026-01-01T03:00:00.000Z'));
+		const olderPage = [note('n090', '2026-01-01T02:00:00.000Z'), note('n089', '2026-01-01T01:00:00.000Z')];
+		misskeyApiMock.mockImplementation((_endpoint: string, params?: { untilId?: string }) => {
+			return Promise.resolve(params?.untilId != null ? olderPage : firstPage);
+		});
+		const { container } = render(MkStreamingNotesTimeline, {
+			props: { src: 'home' },
+			global: { components, directives: stubDirectives, stubs },
+		});
+		await waitFor(() => expect(container.querySelectorAll('[data-note-id]')).toHaveLength(15));
+
+		const more = [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.querySelector('.ti-chevron-down') != null || /more/i.test(b.className));
+		expect(more).toBeDefined();
+		more!.click();
+
+		await waitFor(() => expect(container.querySelectorAll('[data-note-id]')).toHaveLength(17));
+		expect(renderedIds(container).slice(-2)).toEqual(['n090', 'n089']);
 	});
 });

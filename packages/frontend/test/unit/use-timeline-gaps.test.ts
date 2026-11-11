@@ -50,10 +50,12 @@ function descendingNotes(newestId: string, count: number): Note[] {
 
 describe('useTimelineGaps', () => {
 	describe('displayItems', () => {
-		test('マーカーが無いときは items をそのまま返す', () => {
+		test('マーカーが無いときは items と同じ並びの、別の配列を返す', () => {
 			const items = [note('n003'), note('n002'), note('n001')];
 			const { gaps } = setup(items);
-			expect(gaps.displayItems.value).toBe(items);
+			expect(gaps.displayItems.value).toEqual(items);
+			// 同じ配列を返すと、items をその場で push したときに computed の値が変わらない扱いになり、一覧が描き直されない
+			expect(gaps.displayItems.value).not.toBe(items);
 		});
 
 		test('マーカーは sinceId のノートの直前に差し込まれる', () => {
