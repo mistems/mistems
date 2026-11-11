@@ -54,4 +54,16 @@ export default class TestGroupedChart extends Chart<typeof schema> { // eslint-d
 			'foo.inc': 1,
 		}, group);
 	}
+
+	@bindThis
+	public async incrementBy(group: string, amount: number): Promise<void> {
+		if (this.total[group] == null) this.total[group] = 0;
+
+		this.total[group] += amount;
+
+		await this.commit({
+			'foo.total': amount,
+			'foo.inc': amount,
+		}, group);
+	}
 }
