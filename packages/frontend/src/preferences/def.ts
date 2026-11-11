@@ -545,4 +545,8 @@ export const PREF_DEF = definePreferences({
 	'experimental.enableWebTranslatorApi': {
 		default: false,
 	},
+	// MISTEMS: 絵文字の入力補完で、スペース区切りの AND 検索をする。オフにすると、スペースを入力した時点で補完を閉じる (従来の動作)
+	'experimental.emojiAutocompleteAndSearch': {
+		default: true,
+	},
 });
