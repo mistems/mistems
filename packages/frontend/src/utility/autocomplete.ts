@@ -62,6 +62,7 @@ export class Autocomplete {
 		this.onCompositionStart = this.onCompositionStart.bind(this);
 		this.onCompositionEnd = this.onCompositionEnd.bind(this);
 		this.onKeyup = this.onKeyup.bind(this);
+		this.commitComposition = this.commitComposition.bind(this);
 		this.complete = this.complete.bind(this);
 		this.close = this.close.bind(this);
 		//#endregion
@@ -271,6 +272,7 @@ export class Autocomplete {
 			const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkAutocomplete.vue')), {
 				textarea: this.textarea,
 				close: this.close,
+				commitComposition: this.commitComposition,
 				type: type,
 				//@ts-expect-error popupは今のところジェネリック型のコンポーネントに対応していない
 				q: _q,
@@ -310,11 +312,12 @@ export class Autocomplete {
 	}
 
 	/**
-	 * MISTEMS: IME で変換中なら、フォーカスを外して変換を確定させる (フォーカスは close() で戻す)
+	 * MISTEMS: IME で変換中なら、フォーカスを外して変換を確定させる。候補の上で指を離した時点 (pointerup) で MkAutocomplete から呼ぶ。
+	 * iOS では候補をタップしても変換が続く。選んだとき (click) にフォーカスを外して置き換えても、キーボード側に変換中の文字が残り、
+	 * 次に打った文字が消えたり入力できなくなったりする。確定を click より前のイベントで済ませておく。フォーカスは置き換えのときに close() で戻す
 	 */
 	private commitComposition() {
-		const vModelComposing = (this.textarea as { composing?: boolean }).composing === true;
-		if (!this.composing && !vModelComposing) return;
+		if (!this.composing) return;
 		this.textarea.blur();
 	}
 
@@ -322,9 +325,6 @@ export class Autocomplete {
 	 * オートコンプリートする
 	 */
 	private complete<T extends keyof CompleteInfo>(props: CompleteProps<T>) {
-		// MISTEMS: 変換中に候補を選んだら (iOS では候補をタップしても変換が続く)、先に変換を確定させてから置き換える。
-		// 変換中のまま置き換えると、あとで IME が確定した文字列で上書きし、置き換えが消える
-		this.commitComposition();
 		this.close();
 
 		const caret = Number(this.textarea.selectionStart);

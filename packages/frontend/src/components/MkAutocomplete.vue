@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}">
+<div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}" @pointerup="onPointerup">
 	<ol v-if="type === 'user'" ref="suggests" :class="$style.list">
 		<li v-for="user in users" tabindex="-1" :class="$style.item" @click="complete(type, user)" @keydown="onKeydown">
 			<img :class="$style.avatar" :src="user.avatarUrl"/>
@@ -173,6 +173,8 @@ type PropsType<T extends keyof CompleteInfo> = {
 	// なぜかわからないけど HTMLTextAreaElement | HTMLInputElement だと addEventListener/removeEventListenerがエラー
 	textarea: (HTMLTextAreaElement | HTMLInputElement) & HTMLElement;
 	close: () => void;
+	// MISTEMS: 候補を選ぶ (click) より前に IME の変換を確定させる (autocomplete.ts を参照)
+	commitComposition?: () => void;
 	x: number;
 	y: number;
 };
@@ -254,6 +256,13 @@ function highlightKeywords(name: string, q: string): string {
 		result = result.replace(keyword, `<b>${keyword}</b>`);
 	}
 	return result;
+}
+
+// MISTEMS: 候補の上で指を離したら、選ぶ (click) より前に IME の変換を確定させる。
+// スクロールになったときは pointerup ではなく pointercancel が届くので、確定しない (フォーカスが外れたままにならない)
+function onPointerup(event: PointerEvent) {
+	if (!(event.target instanceof Element) || event.target.closest('li') == null) return;
+	props.commitComposition?.();
 }
 
 function exec() {
