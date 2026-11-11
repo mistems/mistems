@@ -43,7 +43,7 @@ export function Layout(props: PropsWithChildren<CommonProps<{
 					<meta name="theme-color-orig" content={props.themeColor ?? '#86b300'} />
 					<meta property="og:site_name" content={props.instanceName || 'Misskey'} />
 					<meta property="instance_url" content={props.instanceUrl} />
-					<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+					<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 					<meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
 					<link rel="icon" href={props.icon || '/favicon.ico'} />
 					<link rel="apple-touch-icon" href={props.appleTouchIcon || '/apple-touch-icon.png'} />
