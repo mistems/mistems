@@ -36,6 +36,9 @@ export const paramDef = {
 		sinceDate: { type: 'integer' },
 		untilDate: { type: 'integer' },
 		isActive: { type: 'boolean', default: true },
+		// 省略するとすべて、null はグループに入っていないもの
+		groupId: { type: 'string', format: 'misskey:id', nullable: true },
+		offset: { type: 'integer', minimum: 0 },
 	},
 	required: [],
 } as const;
@@ -69,6 +72,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					qb.orWhere('announcement.autoArchiveAt <= :now', { now });
 				}));
 			}
+
+			if (ps.groupId === null) {
+				query.andWhere('announcement.groupId IS NULL');
+			} else if (ps.groupId !== undefined) {
+				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
+			}
+
+			// グループ (またはグループなし) を指定したときは、グループの中の表示順で並べる
+			if (ps.groupId !== undefined) {
+				query.orderBy('announcement.displayOrder', 'ASC').addOrderBy('announcement.id', 'DESC');
+			}
+
+			if (ps.offset != null) query.offset(ps.offset);
 
 			const announcements = await query.limit(ps.limit).getMany();
 
