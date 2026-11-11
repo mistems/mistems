@@ -254,8 +254,11 @@ export class SigninApiService {
 					id: '93b86c4b-72f9-40eb-9815-798928603d1e',
 				});
 			}
-		} else if (securityKeysAvailable) {
-			if (!same && !profile.usePasswordLessLogin) {
+		} else if (securityKeysAvailable && !profile.usePasswordLessLogin) {
+			// パスワードレスログインが無効な場合のみ、セキュリティキーをパスワード入力後の第2要素として扱う。
+			// パスワードレスログインが有効な場合は、パスキー単体ログインを入力画面のパスキーボタン
+			// (signin-with-passkey) に集約し、パスワード入力経由のサインインでは下の TOTP を要求する。
+			if (!same) {
 				return await fail(403, {
 					id: '932c904e-9460-45b7-9ce6-7ed33be7eb2c',
 				});
@@ -270,17 +273,19 @@ export class SigninApiService {
 				authRequest,
 			} satisfies Misskey.entities.SigninFlowResponse;
 		} else {
-			if (!same || !profile.twoFactorEnabled) {
+			// パスワード + TOTP 経路。ここに到達する時点で profile.twoFactorEnabled は必ず true
+			// (二段階認証が無効なケースは上の `if (!profile.twoFactorEnabled)` で処理済み)。
+			if (!same) {
 				return await fail(403, {
 					id: '932c904e-9460-45b7-9ce6-7ed33be7eb2c',
 				});
-			} else {
-				reply.code(200);
-				return {
-					finished: false,
-					next: 'totp',
-				} satisfies Misskey.entities.SigninFlowResponse;
 			}
+
+			reply.code(200);
+			return {
+				finished: false,
+				next: 'totp',
+			} satisfies Misskey.entities.SigninFlowResponse;
 		}
 		// never get here
 	}
