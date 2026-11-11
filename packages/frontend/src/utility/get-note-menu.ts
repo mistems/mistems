@@ -735,7 +735,8 @@ export function getRenoteMenu(props: {
 			action: () => {
 				os.post({
 					renote: appearNote,
-				});
+				},
+				{ forceTimeline: true });
 			},
 		}])]);
 

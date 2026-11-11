@@ -380,6 +380,14 @@ export const packedMetaDetailedOnlySchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		sensitiveWords: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
 	},
 } as const;
 
