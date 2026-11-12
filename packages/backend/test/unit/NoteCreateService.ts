@@ -12,6 +12,7 @@ import { GlobalModule } from '@/GlobalModule.js';
 import { MiNote } from '@/models/Note.js';
 import { IPoll } from '@/models/Poll.js';
 import { MiDriveFile } from '@/models/DriveFile.js';
+import { MiChannel } from '@/models/Channel.js';
 
 describe('NoteCreateService', () => {
 	let noteCreateService: NoteCreateService;
@@ -142,6 +143,70 @@ describe('NoteCreateService', () => {
 			const note = { renote: base, files: [file] };
 			expect(noteCreateService['isRenote'](note)).toBe(true);
 			expect(noteCreateService['isQuote'](note)).toBe(true);
+		});
+	});
+
+	describe('applyChannelFederationPolicy (チャンネル連合)', () => {
+		const localUser = { id: 'local-user-id', host: null };
+		const remoteUser = { id: 'remote-user-id', host: 'remote.example' };
+		const channel = (federationPolicy: MiChannel['federationPolicy']) => ({ id: 'some-channel-id', federationPolicy } as MiChannel);
+		const apply = (data: { channel: MiChannel | null; visibility?: string; localOnly?: boolean; visibleUsers?: unknown[] }, user: { id: string; host: string | null } = localUser) => {
+			noteCreateService['applyChannelFederationPolicy'](data as any, user);
+			return data;
+		};
+
+		test('none: public + localOnly になる', () => {
+			const data = apply({ channel: channel('none'), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+		});
+
+		test('home: home で連合する', () => {
+			const data = apply({ channel: channel('home'), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('home');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('public: public で連合する', () => {
+			const data = apply({ channel: channel('public'), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('public: サイレンス等で home に降格済みなら home を維持する', () => {
+			const data = apply({ channel: channel('public'), visibility: 'home', localOnly: false });
+			expect(data.visibility).toBe('home');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test.each(['home', 'public'] as const)('%s: ノート単位の localOnly は尊重し、public + localOnly に落とす', (policy) => {
+			const data = apply({ channel: channel(policy), visibility: 'public', localOnly: true });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+		});
+
+		test.each(['followers', 'specified'])('%s 可視性は連合させず public + localOnly に落とす', (visibility) => {
+			const data = apply({ channel: channel('public'), visibility, localOnly: false, visibleUsers: [{ id: 'x' }] });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+			expect(data.visibleUsers).toEqual([]);
+		});
+
+		test('未知の federationPolicy は連合しない側に倒す', () => {
+			const data = apply({ channel: channel('unknown' as any), visibility: 'public', localOnly: false });
+			expect(data.localOnly).toBe(true);
+		});
+
+		test('リモートユーザーのノートには適用しない (受信した可視性と localOnly を保つ)', () => {
+			const data = apply({ channel: channel('none'), visibility: 'home', localOnly: false }, remoteUser);
+			expect(data.visibility).toBe('home');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('チャンネル外のノートには適用しない', () => {
+			const data = apply({ channel: null, visibility: 'followers', localOnly: false });
+			expect(data.visibility).toBe('followers');
+			expect(data.localOnly).toBe(false);
 		});
 	});
 });
