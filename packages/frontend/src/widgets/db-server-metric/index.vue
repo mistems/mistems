@@ -10,7 +10,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template #func="{ buttonStyleClass }"><button class="_button" :class="buttonStyleClass" @click="toggleView()"><i class="ti ti-selector"></i></button></template>
 
 	<div data-cy-mkw-dbServerMetric class="mkw-dbServerMetric">
-		<XDisk v-if="widgetProps.view === 0" :stats="latest"/>
+		<div v-if="latest == null" :class="$style.empty">{{ i18n.ts.dbServerStatsNoData }}</div>
+		<XDisk v-else-if="widgetProps.view === 0" :stats="latest"/>
 		<XCpuMem v-else-if="widgetProps.view === 1" :history="history"/>
 		<XConn v-else-if="widgetProps.view === 2" :stats="latest"/>
 	</div>
@@ -70,6 +71,9 @@ const latest = computed<Misskey.entities.DbServerStats | null>(() => history.val
 const connection = useStream().useChannel('dbServerStats');
 
 function pushStats(s: Misskey.entities.DbServerStats) {
+	// requestLog の応答と stats の配信が前後しても、同じ行や古い行を重ねない
+	const last = history.value.at(-1);
+	if (last != null && Date.parse(s.ts) <= Date.parse(last.ts)) return;
 	history.value.push(s);
 	if (history.value.length > HISTORY_LIMIT) history.value.shift();
 }
@@ -95,3 +99,11 @@ defineExpose<WidgetComponentExpose>({
 	id: props.widget ? props.widget.id : null,
 });
 </script>
+
+<style lang="scss" module>
+.empty {
+	padding: 16px;
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+</style>

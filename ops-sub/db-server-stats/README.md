@@ -80,7 +80,7 @@ journalctl -u misskey-db-stats.service -n 20
 
 ### 6. アプリ側で機能を有効化
 
-管理画面の設定で `enableDbServerStats` を `true` にする（または直接 meta テーブルを更新）。アプリを再起動すると `DbServerStatsService` が `db_server_stats` テーブルを 60 秒間隔で SELECT し、ウィジェットに配信し始める。
+管理画面の「パフォーマンス」で「DBサーバーの統計を表示する」をオンにする（または直接 meta テーブルの `enableDbServerStats` を更新）。再起動は要らない。`DbServerStatsService` は、ウィジェットを開いている人がいる間だけ `db_server_stats` テーブルを 30 秒間隔で SELECT し、新しい行があればウィジェットに配信する。ウィジェットを開いたときの履歴も、このテーブルから読む。
 
 ### 7. ウィジェットを追加
 

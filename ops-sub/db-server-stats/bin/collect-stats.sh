@@ -96,7 +96,9 @@ fi
 
 # ---- DB-side metrics (single round trip) ------------------------------------
 # 1 行 TSV: db_size, conn_active, conn_max, cache_hit_ratio
-db_metrics=$(psql -X -A -t -F$'\t' -v ON_ERROR_STOP=1 <<'SQL'
+# $'\t' は bash の書き方で、POSIX sh (dash など) では使えないので printf で作る
+tab=$(printf '\t')
+db_metrics=$(psql -X -A -t -F"$tab" -v ON_ERROR_STOP=1 <<'SQL'
 SELECT
     pg_database_size(current_database())::bigint,
     (SELECT count(*) FROM pg_stat_activity WHERE state = 'active')::int,
