@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<section>
 		<div :class="$style.toolbar">
-			<button class="_button" :class="$style.toolbarButton" @click="insertChar('$')">$MFM</button>
+			<button class="_button" :class="$style.toolbarButton" @click="showFormatMenu">$MFM</button>
 			<button class="_button" :class="$style.toolbarButton" @click="showMfmMenu">{{ i18n.ts._pages.otherMfm }}</button>
 			<button class="_button" :class="$style.toolbarButton" @click="insertChar('#')">#</button>
 			<button class="_button" :class="$style.toolbarButton" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
@@ -41,6 +41,29 @@ const emit = defineEmits<{
 	(ev: 'remove'): void;
 }>();
 
+type MfmFormat = {
+	id: string;
+	label: string;
+	icon: string;
+	before: string;
+	after: string;
+	multilineOk: boolean;
+};
+
+const MFM_FORMATS: MfmFormat[] = [
+	{ id: 'bold', label: '太字', icon: 'ti ti-bold', before: '**', after: '**', multilineOk: false },
+	{ id: 'italic', label: 'イタリック', icon: 'ti ti-italic', before: '*', after: '*', multilineOk: false },
+	{ id: 'strike', label: '打ち消し', icon: 'ti ti-strikethrough', before: '~~', after: '~~', multilineOk: false },
+	{ id: 'center', label: '中央寄せ', icon: 'ti ti-align-center', before: '<center>', after: '</center>', multilineOk: true },
+	{ id: 'small', label: '小さく', icon: 'ti ti-letter-case-lower', before: '<small>', after: '</small>', multilineOk: true },
+	{ id: 'code', label: 'インラインコード', icon: 'ti ti-code', before: '`', after: '`', multilineOk: false },
+	{ id: 'codeblock', label: 'コードブロック', icon: 'ti ti-code-dots', before: '```\n', after: '\n```', multilineOk: true },
+	{ id: 'x2', label: '2倍サイズ', icon: 'ti ti-zoom-in', before: '$[x2 ', after: ']', multilineOk: true },
+	{ id: 'rainbow', label: '虹色', icon: 'ti ti-rainbow', before: '$[rainbow ', after: ']', multilineOk: true },
+	{ id: 'spin', label: '回転', icon: 'ti ti-rotate-clockwise', before: '$[spin ', after: ']', multilineOk: true },
+	{ id: 'blur', label: 'ぼかし', icon: 'ti ti-eye-off', before: '$[blur ', after: ']', multilineOk: true },
+];
+
 let autocomplete: Autocomplete;
 
 const text = ref(props.modelValue.text ?? '');
@@ -52,6 +75,36 @@ watch(text, () => {
 		text: text.value,
 	});
 });
+
+function applyFormat(fmt: MfmFormat) {
+	const el = inputEl.value;
+	if (!el) return;
+
+	const start = el.selectionStart ?? 0;
+	const end = el.selectionEnd ?? 0;
+	const selected = text.value.substring(start, end);
+
+	if (!fmt.multilineOk && selected.includes('\n')) {
+		os.toast(i18n.ts._pages.mfmNoMultiline);
+		return;
+	}
+
+	const placeholder = 'テキスト';
+	const inner = selected || placeholder;
+
+	text.value = text.value.substring(0, start) + fmt.before + inner + fmt.after + text.value.substring(end);
+
+	nextTick(() => {
+		el.focus();
+		if (selected) {
+			const pos = start + fmt.before.length + selected.length + fmt.after.length;
+			el.setSelectionRange(pos, pos);
+		} else {
+			const selStart = start + fmt.before.length;
+			el.setSelectionRange(selStart, selStart + placeholder.length);
+		}
+	});
+}
 
 onMounted(() => {
 	if (inputEl.value == null) return;
@@ -95,6 +148,24 @@ function insertEmoji(ev: PointerEvent) {
 	);
 }
 
+function showFormatMenu(ev: PointerEvent) {
+	let applied = false;
+	const items: MenuItem[] = MFM_FORMATS.map(fmt => ({
+		text: fmt.label,
+		icon: fmt.icon,
+		action: () => {
+			applied = true;
+			applyFormat(fmt);
+		},
+	}));
+	// メニューは閉じるときにフォーカスをボタンへ戻すので、書式を当てたときはテキストエリアへ戻す (選択範囲は applyFormat で設定済み)
+	os.popupMenu(items, ev.currentTarget ?? ev.target, {
+		onClosed: () => {
+			if (applied) nextTick(() => inputEl.value?.focus());
+		},
+	});
+}
+
 function showMfmMenu(ev: PointerEvent) {
 	const items: MenuItem[] = [
 		{ text: '**Bold**', icon: 'ti ti-bold', action: () => insertTemplate('**Bold**') },
@@ -117,6 +188,7 @@ function insertTemplate(tpl: string) {
 <style lang="scss" module>
 .toolbar {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 2px;
 	padding: 4px 8px;
 	border-bottom: 1px solid var(--MI_THEME-divider);

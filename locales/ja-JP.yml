@@ -2861,6 +2861,8 @@ _pages:
   featured: "人気"
   inspector: "インスペクター"
   contents: "コンテンツ"
+  preview: "プレビュー"
+  mfmNoMultiline: "行またぎできないMFMです"
   content: "ページブロック"
   variables: "変数"
   title: "タイトル"
