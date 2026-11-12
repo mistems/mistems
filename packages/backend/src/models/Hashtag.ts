@@ -8,6 +8,9 @@ import { id } from './util/id.js';
 import type { MiUser } from './User.js';
 
 @Entity('hashtag')
+// 前方一致検索 (hashtags/search) 用の text_pattern_ops インデックス。オペレータクラスは TypeORM で
+// 表現できないため migration (1794493981000) で管理し、ここでは同期対象外として宣言だけする
+@Index('IDX_hashtag_name_pattern', { synchronize: false })
 export class MiHashtag {
 	@PrimaryColumn(id())
 	public id: string;
