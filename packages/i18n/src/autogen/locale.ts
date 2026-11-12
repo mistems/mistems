@@ -10915,6 +10915,100 @@ export interface Locale extends ILocale {
          * 他MFM
          */
         "otherMfm": string;
+        "_mfmTags": {
+            /**
+             * じゃーん
+             */
+            "tada": string;
+            /**
+             * びよーん
+             */
+            "jelly": string;
+            /**
+             * ブレる
+             */
+            "twitch": string;
+            /**
+             * ぶるぶる
+             */
+            "shake": string;
+            /**
+             * くるくる回る
+             */
+            "spin": string;
+            /**
+             * ジャンプ
+             */
+            "jump": string;
+            /**
+             * バウンド
+             */
+            "bounce": string;
+            /**
+             * 反転
+             */
+            "flip": string;
+            /**
+             * 2倍の大きさ
+             */
+            "x2": string;
+            /**
+             * 3倍の大きさ
+             */
+            "x3": string;
+            /**
+             * 4倍の大きさ
+             */
+            "x4": string;
+            /**
+             * 拡大・縮小
+             */
+            "scale": string;
+            /**
+             * 位置をずらす
+             */
+            "position": string;
+            /**
+             * 文字の色
+             */
+            "fg": string;
+            /**
+             * 背景の色
+             */
+            "bg": string;
+            /**
+             * 枠線
+             */
+            "border": string;
+            /**
+             * フォント
+             */
+            "font": string;
+            /**
+             * ぼかし
+             */
+            "blur": string;
+            /**
+             * 虹色
+             */
+            "rainbow": string;
+            /**
+             * キラキラ
+             */
+            "sparkle": string;
+            /**
+             * 回転
+             */
+            "rotate": string;
+            /**
+             * ルビ
+             */
+            "ruby": string;
+            /**
+             * 日時
+             */
+            "unixtime": string;
+        };
         "blocks": {
             /**
              * テキスト

@@ -119,11 +119,18 @@ function insertEmoji(ev: PointerEvent) {
 	);
 }
 
+/** `$[rotate 回転]` の形のメニューの表記。上流で MFM_TAGS が増えて意味の文言が無いときは、タグだけを出す */
+function mfmTagLabel(tag: string): string {
+	// i18n.ts は無いキーでも undefined を返さないので、キーがあるかを先に確かめる
+	const meanings: Record<string, string> = i18n.ts._pages._mfmTags;
+	return Object.keys(meanings).includes(tag) ? `$[${tag} ${meanings[tag]}]` : `$[${tag}]`;
+}
+
 function showFormatMenu(ev: PointerEvent) {
 	let applied = false;
-	// $ を入力したときの補完と同じ一覧 (MFM_TAGS) を出す
+	// $ を入力したときの補完と同じ一覧 (MFM_TAGS) を、入るものと意味を併せた `$[rotate 回転]` の形で出す
 	const items: MenuItem[] = MFM_TAGS.map(tag => ({
-		text: `$[${tag}]`,
+		text: mfmTagLabel(tag),
 		action: () => {
 			applied = true;
 			applyMfmTag(tag);
