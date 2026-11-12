@@ -161,12 +161,6 @@ describe('NoteCreateService', () => {
 			expect(data.localOnly).toBe(true);
 		});
 
-		test('home: home で連合する', () => {
-			const data = apply({ channel: channel('home'), visibility: 'public', localOnly: false });
-			expect(data.visibility).toBe('home');
-			expect(data.localOnly).toBe(false);
-		});
-
 		test('public: public で連合する', () => {
 			const data = apply({ channel: channel('public'), visibility: 'public', localOnly: false });
 			expect(data.visibility).toBe('public');
@@ -179,8 +173,8 @@ describe('NoteCreateService', () => {
 			expect(data.localOnly).toBe(false);
 		});
 
-		test.each(['home', 'public'] as const)('%s: ノート単位の localOnly は尊重し、public + localOnly に落とす', (policy) => {
-			const data = apply({ channel: channel(policy), visibility: 'public', localOnly: true });
+		test('public: ノート単位の localOnly は尊重し、public + localOnly に落とす', () => {
+			const data = apply({ channel: channel('public'), visibility: 'public', localOnly: true });
 			expect(data.visibility).toBe('public');
 			expect(data.localOnly).toBe(true);
 		});
@@ -192,8 +186,9 @@ describe('NoteCreateService', () => {
 			expect(data.visibleUsers).toEqual([]);
 		});
 
-		test('未知の federationPolicy は連合しない側に倒す', () => {
-			const data = apply({ channel: channel('unknown' as any), visibility: 'public', localOnly: false });
+		test.each(['unknown', 'home'])('未知の federationPolicy (%s) は連合しない側に倒す', (policy) => {
+			const data = apply({ channel: channel(policy as any), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
 			expect(data.localOnly).toBe(true);
 		});
 

@@ -69,7 +69,7 @@ export const paramDef = {
 		color: { type: 'string', minLength: 1, maxLength: 16 },
 		isSensitive: { type: 'boolean', nullable: true },
 		allowRenoteToExternal: { type: 'boolean', nullable: true },
-		federationPolicy: { type: 'string', nullable: true, enum: ['none', 'home', 'public', null] },
+		federationPolicy: { type: 'string', nullable: true, enum: ['none', 'public', null] },
 	},
 	required: ['channelId'],
 } as const;

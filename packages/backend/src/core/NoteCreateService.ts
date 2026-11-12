@@ -976,15 +976,15 @@ export class NoteCreateService implements OnApplicationShutdown {
 	 */
 	@bindThis
 	private doesChannelFederate(channel: MiChannel | null | undefined): boolean {
-		return channel != null && (channel.federationPolicy === 'home' || channel.federationPolicy === 'public');
+		return channel != null && channel.federationPolicy === 'public';
 	}
 
 	/**
 	 * チャンネル投稿の可視性・localOnly を、チャンネル側の federationPolicy を最終権限として確定する。
 	 * ローカルユーザーの投稿にのみ適用する (リモートからの返信がチャンネルに戻る場合は parseAudience の結果を保持)。
 	 * - none: 必ず localOnly + public (連合しない・従来のチャンネルノート)
-	 * - home: 可視性 home で連合 (ノート単位/親からの localOnly 指定は尊重して public + localOnly に落ちる)
-	 * - public: 可視性 public で連合 (ただし直前までにサイレンス等で home に降格済みなら home を維持)
+	 * - public: 可視性 public で連合 (ただし直前までにサイレンス等で home に降格済みなら home を維持。
+	 *   ノート単位/親からの localOnly 指定は尊重して public + localOnly に落ちる)
 	 */
 	@bindThis
 	private applyChannelFederationPolicy(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): void {
@@ -1000,10 +1000,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (!this.doesChannelFederate(data.channel) || data.localOnly || data.visibility === 'followers' || data.visibility === 'specified') {
 			data.localOnly = true;
 			data.visibility = 'public';
-		} else if (data.channel.federationPolicy === 'home') {
-			data.visibility = 'home';
 		} else if (data.visibility !== 'home') {
-			// public ポリシー: サイレンス等で home に降格済みなら維持、それ以外は public
+			// サイレンス等で home に降格済みなら維持、それ以外は public
 			data.visibility = 'public';
 		}
 	}

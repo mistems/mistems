@@ -27,13 +27,18 @@ describe('チャンネル連合 (federationPolicy)', () => {
 		});
 
 		test('federationPolicy を指定して作成できる', async () => {
-			const res = await api('channels/create', { name: 'federated-channel', federationPolicy: 'home' }, alice);
+			const res = await api('channels/create', { name: 'federated-channel', federationPolicy: 'public' }, alice);
 			assert.strictEqual(res.status, 200);
-			assert.strictEqual(res.body.federationPolicy, 'home');
+			assert.strictEqual(res.body.federationPolicy, 'public');
+		});
+
+		test('federationPolicy に home は指定できない (なくした値)', async () => {
+			const res = await api('channels/create', { name: 'home-channel', federationPolicy: 'home' } as any, alice);
+			assert.strictEqual(res.status, 400);
 		});
 
 		test('チャンネル外リノート禁止と連合は同時に指定できない', async () => {
-			const res = await api('channels/create', { name: 'bad-channel', federationPolicy: 'home', allowRenoteToExternal: false }, alice);
+			const res = await api('channels/create', { name: 'bad-channel', federationPolicy: 'public', allowRenoteToExternal: false }, alice);
 			assert.strictEqual(res.status, 400);
 			assert.strictEqual(castAsError(res.body as any).error.code, 'FEDERATION_INCOMPATIBLE_WITH_RENOTE_RESTRICTION');
 		});
@@ -42,7 +47,7 @@ describe('チャンネル連合 (federationPolicy)', () => {
 	describe('channels/update', () => {
 		test('チャンネル外リノート禁止のチャンネルを連合に変更できない', async () => {
 			const channel = (await api('channels/create', { name: 'no-external-renote', allowRenoteToExternal: false }, alice)).body;
-			const res = await api('channels/update', { channelId: channel.id, federationPolicy: 'home' }, alice);
+			const res = await api('channels/update', { channelId: channel.id, federationPolicy: 'public' }, alice);
 			assert.strictEqual(res.status, 400);
 			assert.strictEqual(castAsError(res.body as any).error.code, 'FEDERATION_INCOMPATIBLE_WITH_RENOTE_RESTRICTION');
 		});
@@ -70,13 +75,6 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(note.localOnly, true);
 		});
 
-		test('home: home + 連合する', async () => {
-			const channel = (await api('channels/create', { name: 'home-notes', federationPolicy: 'home' }, alice)).body;
-			const note = await post(alice, { text: 'a', channelId: channel.id });
-			assert.strictEqual(note.visibility, 'home');
-			assert.strictEqual(note.localOnly, false);
-		});
-
 		test('public: public + 連合する', async () => {
 			const channel = (await api('channels/create', { name: 'public-notes', federationPolicy: 'public' }, alice)).body;
 			const note = await post(alice, { text: 'a', channelId: channel.id });
@@ -85,14 +83,14 @@ describe('チャンネル連合 (federationPolicy)', () => {
 		});
 
 		test('連合チャンネルでもノート単位の localOnly は尊重される', async () => {
-			const channel = (await api('channels/create', { name: 'home-localonly', federationPolicy: 'home' }, alice)).body;
+			const channel = (await api('channels/create', { name: 'public-localonly', federationPolicy: 'public' }, alice)).body;
 			const note = await post(alice, { text: 'a', channelId: channel.id, localOnly: true });
 			assert.strictEqual(note.visibility, 'public');
 			assert.strictEqual(note.localOnly, true);
 		});
 
-		test('連合チャンネルで localOnly ノートにリプライしても home + localOnly にならない (public + localOnly に落ちる)', async () => {
-			const channel = (await api('channels/create', { name: 'home-reply-lo', federationPolicy: 'home' }, alice)).body;
+		test('連合チャンネルで localOnly ノートにリプライすると public + localOnly に落ちる', async () => {
+			const channel = (await api('channels/create', { name: 'public-reply-lo', federationPolicy: 'public' }, alice)).body;
 			const parent = await post(alice, { text: 'parent', channelId: channel.id, localOnly: true });
 			const reply = (await api('notes/create', { text: 'reply', channelId: channel.id, replyId: parent.id }, alice)).body.createdNote;
 			assert.strictEqual(reply.visibility, 'public');
@@ -160,7 +158,7 @@ describe('チャンネル連合 (federationPolicy)', () => {
 		});
 
 		test('連合を none に戻したチャンネルのノートは以後返さない', async () => {
-			const channel = (await api('channels/create', { name: 'ap-disabled', federationPolicy: 'home' }, alice)).body;
+			const channel = (await api('channels/create', { name: 'ap-disabled', federationPolicy: 'public' }, alice)).body;
 			const note = await post(alice, { text: 'a', channelId: channel.id });
 			assert.strictEqual((await simpleGet(`/notes/${note.id}`, AP)).status, 200);
 			await api('channels/update', { channelId: channel.id, federationPolicy: 'none' }, alice);

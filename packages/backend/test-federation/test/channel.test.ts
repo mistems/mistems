@@ -13,7 +13,7 @@ describe('Channel federation', () => {
 	let alice: LoginUser, carol: LoginUser, bob: LoginUser;
 	let aliceInB: Misskey.entities.UserDetailedNotMe, bobInA: Misskey.entities.UserDetailedNotMe;
 
-	async function createChannel(owner: LoginUser, federationPolicy: 'none' | 'home' | 'public'): Promise<Misskey.entities.Channel> {
+	async function createChannel(owner: LoginUser, federationPolicy: 'none' | 'public'): Promise<Misskey.entities.Channel> {
 		const name = `ch-${crypto.randomUUID().substring(0, 8)}`;
 		return await owner.client.request('channels/create', { name, federationPolicy });
 	}
@@ -66,29 +66,27 @@ describe('Channel federation', () => {
 		]);
 	});
 
-	describe('federationPolicy: home', () => {
+	describe('federationPolicy: public', () => {
 		let channel: Misskey.entities.Channel;
 		let note: Misskey.entities.Note;
 		let noteInB: Misskey.entities.Note;
 
 		beforeAll(async () => {
-			channel = await createChannel(alice, 'home');
+			channel = await createChannel(alice, 'public');
 			note = await postToChannel(alice, channel.id);
 			noteInB = await waitForNoteInBobHome(note.id);
 		});
 
-		test('F1: 相手には home の可視性で届き、チャンネルには属さない', async () => {
-			strictEqual(note.visibility, 'home');
+		test('F2: 相手には public の可視性で届き、チャンネルには属さず、相手の GTL に載る', async () => {
+			strictEqual(note.visibility, 'public');
 			strictEqual(note.localOnly, false);
-			strictEqual(noteInB.visibility, 'home');
+			strictEqual(noteInB.visibility, 'public');
 			strictEqual(noteInB.channelId ?? null, null);
 
-			const [ltl, gtl] = await Promise.all([
-				bob.client.request('notes/local-timeline', { limit: 100 }),
-				bob.client.request('notes/global-timeline', { limit: 100 }),
-			]);
-			strictEqual(ltl.some(n => n.uri === noteInB.uri), false);
-			strictEqual(gtl.some(n => n.uri === noteInB.uri), false);
+			await vi.waitFor(async () => {
+				const gtl = await bob.client.request('notes/global-timeline', { limit: 100 });
+				assert(gtl.some(n => n.uri === noteInB.uri));
+			}, WAIT_FOR_FEDERATION);
 		});
 
 		test('F3: 相手から見た本文の末尾に、チャンネル名と URL が付く', async () => {
@@ -140,37 +138,11 @@ describe('Channel federation', () => {
 			}
 		});
 
-		test('F6: 相手からのリアクションが届き、相手のリノートは home 止まりになる', async () => {
+		test('F6: 相手からのリアクションが届く', async () => {
 			await bob.client.request('notes/reactions/create', { noteId: noteInB.id, reaction: '👍' });
 			await vi.waitFor(async () => {
 				const noteInA = await alice.client.request('notes/show', { noteId: note.id });
 				strictEqual(noteInA.reactions['👍'], 1);
-			}, WAIT_FOR_FEDERATION);
-
-			const renote = (await bob.client.request('notes/create', { renoteId: noteInB.id })).createdNote;
-			strictEqual(renote.visibility, 'home');
-		});
-	});
-
-	describe('federationPolicy: public', () => {
-		let channel: Misskey.entities.Channel;
-
-		beforeAll(async () => {
-			channel = await createChannel(alice, 'public');
-		});
-
-		test('F2・F3: 相手には public で届き、相手の GTL に載る', async () => {
-			const note = await postToChannel(alice, channel.id);
-			strictEqual(note.visibility, 'public');
-			strictEqual(note.localOnly, false);
-
-			const noteInB = await waitForNoteInBobHome(note.id);
-			strictEqual(noteInB.visibility, 'public');
-			assert(noteInB.text?.endsWith(`https://a.test/channels/${channel.id}`));
-
-			await vi.waitFor(async () => {
-				const gtl = await bob.client.request('notes/global-timeline', { limit: 100 });
-				assert(gtl.some(n => n.uri === noteInB.uri));
 			}, WAIT_FOR_FEDERATION);
 		});
 
@@ -217,7 +189,7 @@ describe('Channel federation', () => {
 		});
 
 		test('F9: 連合を none に戻すと過去のノートを返さなくなり、戻したあとのリプライはチャンネルに入る', async () => {
-			const channel = await createChannel(alice, 'home');
+			const channel = await createChannel(alice, 'public');
 			const delivered = await postToChannel(alice, channel.id);
 			// carol はだれにもフォローされていないので、このノートは b.test にまだ知られていない
 			const undelivered = await postToChannel(carol, channel.id);

@@ -118,7 +118,8 @@ export class ActivityPubServerService {
 	private async isChannelNoteServable(note: MiNote): Promise<boolean> {
 		if (note.channelId == null) return true;
 		const channel = note.channel ?? await this.channelsRepository.findOneBy({ id: note.channelId });
-		if (channel == null || channel.federationPolicy === 'none') return false;
+		// 未知の federationPolicy 値 (DB に残った旧値など) は連合しない側に倒す (fail-closed)。
+		if (channel == null || channel.federationPolicy !== 'public') return false;
 		note.channel = channel;
 		return true;
 	}
@@ -582,13 +583,13 @@ export class ActivityPubServerService {
 			}))
 			.andWhere('note.localOnly = FALSE')
 			// 連合を 'none' に戻したチャンネルのノートは以後配信しない (channel を join して判定)。
-			// 未知の federationPolicy 値は連合しない側に倒す (fail-closed) ため IN で明示する。
+			// 未知の federationPolicy 値は連合しない側に倒す (fail-closed) ため、連合する値を明示して比較する。
 			// あわせて renderNote の N+1 (チャンネル名取得) を防ぐため channel を populate する。
 			.leftJoinAndSelect('note.channel', 'channel')
 			.andWhere(new Brackets(qb => {
 				qb
 					.where('note.channelId IS NULL')
-					.orWhere('channel.federationPolicy IN (:...federatingPolicies)', { federatingPolicies: ['home', 'public'] });
+					.orWhere('channel.federationPolicy = :federatingPolicy', { federatingPolicy: 'public' });
 			}))
 			.limit(ps.limit)
 			.getMany();

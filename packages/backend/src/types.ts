@@ -61,10 +61,9 @@ export const noteVisibilities = ['public', 'home', 'followers', 'specified'] as 
 /**
  * チャンネルノートの連合方針。値は「連合するノートに与える可視性」を表す (none は連合しない)。
  * - none: 連合しない (ノートは public + localOnly のローカル限定チャンネルノートになる)
- * - home: 連合し、実ノートの可視性は 'home' (Mastodon 等の unlisted と同じくリモートの公開TLには載らない)
  * - public: 連合し、実ノートの可視性は 'public'
  */
-export const channelFederationPolicies = ['none', 'home', 'public'] as const;
+export const channelFederationPolicies = ['none', 'public'] as const;
 
 export const noteReactionAcceptances = ['likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote', null] as const;
 

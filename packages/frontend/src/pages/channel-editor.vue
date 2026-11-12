@@ -111,10 +111,9 @@ const {
 } = useMkSelect({
 	items: [
 		{ label: i18n.ts._channel._federationPolicy.none, value: 'none' },
-		{ label: i18n.ts._channel._federationPolicy.home, value: 'home' },
 		{ label: i18n.ts._channel._federationPolicy.public, value: 'public' },
 	],
-	initialValue: 'none' as 'none' | 'home' | 'public',
+	initialValue: 'none' as 'none' | 'public',
 });
 const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
 
@@ -174,20 +173,19 @@ function removePinnedNote(id: string) {
 }
 
 async function save() {
-	// 連合の露出度が変わる場合は確認する。
-	// 露出が上がる方向 (none < home < public) は「外に出る」旨、
-	// 下がる方向 (連合 → none) は「配信済みは取り消せない」旨を伝える。
-	const rank = { none: 0, home: 1, public: 2 } as const;
+	// 連合の設定が変わる場合は確認する。
+	// 連合する方向 (none → public) は「外に出る」旨、
+	// 連合をやめる方向 (public → none) は「配信済みは取り消せない」旨を伝える。
 	const prev = channel.value?.federationPolicy ?? 'none';
 	const next = federationPolicy.value;
-	if (rank[next] > rank[prev]) {
+	if (prev === 'none' && next === 'public') {
 		const { canceled } = await os.confirm({
 			type: 'warning',
 			title: i18n.ts._channel.federationPolicy,
-			text: prev === 'none' ? i18n.ts._channel.federationPolicyEnableConfirm : i18n.ts._channel.federationPolicyEscalateConfirm,
+			text: i18n.ts._channel.federationPolicyEnableConfirm,
 		});
 		if (canceled) return;
-	} else if (rank[next] < rank[prev]) {
+	} else if (prev === 'public' && next === 'none') {
 		const { canceled } = await os.confirm({
 			type: 'warning',
 			title: i18n.ts._channel.federationPolicy,

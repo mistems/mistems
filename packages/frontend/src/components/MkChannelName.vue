@@ -15,13 +15,10 @@ import { isFederatedChannel } from '@/utility/channel.js';
 const props = defineProps<{
 	channel: {
 		name: string;
-		federationPolicy?: 'none' | 'home' | 'public';
+		federationPolicy?: 'none' | 'public';
 	};
 }>();
 
 const federated = computed(() => isFederatedChannel(props.channel));
-const tooltip = computed(() => {
-	const policy = props.channel.federationPolicy ?? 'none';
-	return policy === 'none' ? '' : i18n.ts._channel._federationPolicy[policy];
-});
+const tooltip = computed(() => federated.value ? i18n.ts._channel._federationPolicy.public : '');
 </script>
