@@ -25,6 +25,7 @@ import { nextTick, watch, ref, useTemplateRef, onMounted, onUnmounted } from 'vu
 import * as Misskey from 'misskey-js';
 import insertTextAtCursor from 'insert-text-at-cursor';
 import XContainer from '../page-editor.container.vue';
+import { MFM_TAGS } from '@@/js/const.js';
 import type { MenuItem } from '@/types/menu.js';
 import { i18n } from '@/i18n.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
@@ -41,29 +42,6 @@ const emit = defineEmits<{
 	(ev: 'remove'): void;
 }>();
 
-type MfmFormat = {
-	id: string;
-	label: string;
-	icon: string;
-	before: string;
-	after: string;
-	multilineOk: boolean;
-};
-
-const MFM_FORMATS: MfmFormat[] = [
-	{ id: 'bold', label: '太字', icon: 'ti ti-bold', before: '**', after: '**', multilineOk: false },
-	{ id: 'italic', label: 'イタリック', icon: 'ti ti-italic', before: '*', after: '*', multilineOk: false },
-	{ id: 'strike', label: '打ち消し', icon: 'ti ti-strikethrough', before: '~~', after: '~~', multilineOk: false },
-	{ id: 'center', label: '中央寄せ', icon: 'ti ti-align-center', before: '<center>', after: '</center>', multilineOk: true },
-	{ id: 'small', label: '小さく', icon: 'ti ti-letter-case-lower', before: '<small>', after: '</small>', multilineOk: true },
-	{ id: 'code', label: 'インラインコード', icon: 'ti ti-code', before: '`', after: '`', multilineOk: false },
-	{ id: 'codeblock', label: 'コードブロック', icon: 'ti ti-code-dots', before: '```\n', after: '\n```', multilineOk: true },
-	{ id: 'x2', label: '2倍サイズ', icon: 'ti ti-zoom-in', before: '$[x2 ', after: ']', multilineOk: true },
-	{ id: 'rainbow', label: '虹色', icon: 'ti ti-rainbow', before: '$[rainbow ', after: ']', multilineOk: true },
-	{ id: 'spin', label: '回転', icon: 'ti ti-rotate-clockwise', before: '$[spin ', after: ']', multilineOk: true },
-	{ id: 'blur', label: 'ぼかし', icon: 'ti ti-eye-off', before: '$[blur ', after: ']', multilineOk: true },
-];
-
 let autocomplete: Autocomplete;
 
 const text = ref(props.modelValue.text ?? '');
@@ -76,33 +54,26 @@ watch(text, () => {
 	});
 });
 
-function applyFormat(fmt: MfmFormat) {
+/**
+ * $ の補完 (MkAutocomplete の mfmTag) と同じく、選んだ MFM 関数を `$[タグ ]` の形で入れる。
+ * 選択範囲があれば `$[タグ 選択範囲]` で囲み、なければ `$[タグ ]` を入れてカーソルを中に置く。
+ */
+function applyMfmTag(tag: string) {
 	const el = inputEl.value;
 	if (!el) return;
 
 	const start = el.selectionStart ?? 0;
 	const end = el.selectionEnd ?? 0;
 	const selected = text.value.substring(start, end);
+	const before = `$[${tag} `;
 
-	if (!fmt.multilineOk && selected.includes('\n')) {
-		os.toast(i18n.ts._pages.mfmNoMultiline);
-		return;
-	}
-
-	const placeholder = 'テキスト';
-	const inner = selected || placeholder;
-
-	text.value = text.value.substring(0, start) + fmt.before + inner + fmt.after + text.value.substring(end);
+	text.value = text.value.substring(0, start) + before + selected + ']' + text.value.substring(end);
 
 	nextTick(() => {
 		el.focus();
-		if (selected) {
-			const pos = start + fmt.before.length + selected.length + fmt.after.length;
-			el.setSelectionRange(pos, pos);
-		} else {
-			const selStart = start + fmt.before.length;
-			el.setSelectionRange(selStart, selStart + placeholder.length);
-		}
+		// 選択範囲を囲んだときは閉じ括弧のあと、何も選んでいないときは括弧の中にカーソルを置く
+		const pos = selected ? start + before.length + selected.length + 1 : start + before.length;
+		el.setSelectionRange(pos, pos);
 	});
 }
 
@@ -150,15 +121,15 @@ function insertEmoji(ev: PointerEvent) {
 
 function showFormatMenu(ev: PointerEvent) {
 	let applied = false;
-	const items: MenuItem[] = MFM_FORMATS.map(fmt => ({
-		text: fmt.label,
-		icon: fmt.icon,
+	// $ を入力したときの補完と同じ一覧 (MFM_TAGS) を出す
+	const items: MenuItem[] = MFM_TAGS.map(tag => ({
+		text: `$[${tag}]`,
 		action: () => {
 			applied = true;
-			applyFormat(fmt);
+			applyMfmTag(tag);
 		},
 	}));
-	// メニューは閉じるときにフォーカスをボタンへ戻すので、書式を当てたときはテキストエリアへ戻す (選択範囲は applyFormat で設定済み)
+	// メニューは閉じるときにフォーカスをボタンへ戻すので、書式を当てたときはテキストエリアへ戻す (カーソルの位置は applyMfmTag で設定済み)
 	os.popupMenu(items, ev.currentTarget ?? ev.target, {
 		onClosed: () => {
 			if (applied) nextTick(() => inputEl.value?.focus());

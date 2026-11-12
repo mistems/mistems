@@ -10840,10 +10840,6 @@ export interface Locale extends ILocale {
          */
         "preview": string;
         /**
-         * 行またぎできないMFMです
-         */
-        "mfmNoMultiline": string;
-        /**
          * ページブロック
          */
         "content": string;

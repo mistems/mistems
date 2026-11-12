@@ -2862,7 +2862,6 @@ _pages:
   inspector: "インスペクター"
   contents: "コンテンツ"
   preview: "プレビュー"
-  mfmNoMultiline: "行またぎできないMFMです"
   content: "ページブロック"
   variables: "変数"
   title: "タイトル"
