@@ -106,4 +106,25 @@ export class MiChannel {
 		comment: 'How notes in this channel are federated.',
 	})
 	public federationPolicy: typeof channelFederationPolicies[number];
+
+	/**
+	 * 連合するチャンネルのハッシュタグ (先頭の「#」は含まない)。連合を有効にしたときに決めて保存し、
+	 * チャンネル名を変えても変わらない。連合をやめても消さない。
+	 */
+	@Column('varchar', {
+		length: 128, nullable: true,
+		comment: 'The hashtag (without #) attached to notes of this channel when federated.',
+	})
+	public federationHashtag: string | null;
+
+	/**
+	 * federationHashtag を normalizeTag で正規化した値。ほかのチャンネルとの重なりの判定と、
+	 * 外から届いたノートのハッシュタグとの照合に使う。
+	 */
+	@Index({ unique: true })
+	@Column('varchar', {
+		length: 128, nullable: true,
+		comment: 'The normalized federationHashtag, used for uniqueness and lookup.',
+	})
+	public federationHashtagNormalized: string | null;
 }

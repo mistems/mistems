@@ -120,6 +120,7 @@ export class ChannelEntityService {
 			isSensitive: channel.isSensitive,
 			allowRenoteToExternal: channel.allowRenoteToExternal,
 			federationPolicy: channel.federationPolicy,
+			federationHashtag: channel.federationHashtag,
 
 			...(me ? {
 				isFollowing,
