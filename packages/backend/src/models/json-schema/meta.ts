@@ -309,6 +309,10 @@ export const packedMetaLiteSchema = {
 			enum: ['all', 'specified', 'none'],
 			optional: false, nullable: false,
 		},
+		enableDbServerStats: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 	},
 } as const;
 

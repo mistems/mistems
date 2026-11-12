@@ -45,6 +45,11 @@ export const federationWidgets = [
 	'instanceCloud',
 ] as const;
 
+// DB サーバー統計のウィジェット（管理画面で有効化し、かつモデレーター以上のときだけ出す）
+export const dbServerStatsWidgets = [
+	'dbServerMetric',
+] as const;
+
 export const widgets = [
 	'profile',
 	'instanceInfo',
