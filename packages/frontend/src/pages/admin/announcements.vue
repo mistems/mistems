@@ -23,13 +23,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkLoading v-if="loading"/>
 
 			<template v-else>
-				<!-- 表示順はお知らせ全体で 1 つなので、並べ替えは「全て」で行う。グループで絞り込んだ一覧も、この順番で並ぶ -->
-				<XReorder
-					v-if="groupFilterId === undefined && announcementsStatus === 'active' && savedAnnouncements.length > 1"
-					:key="reorderKey"
-					@saved="refresh"
-				/>
-				<MkFolder v-for="announcement in announcements" :key="announcement.id ?? announcement._id" :defaultOpen="announcement.id == null">
+				<div v-if="canReorder" :class="$style.reorderDescription">{{ i18n.ts._announcement.reorderDescription }}</div>
+				<!-- 公開中のお知らせは、項目ごとドラッグ (または矢印のボタン) で並べ替えられる。並べ替えるとすぐに保存する -->
+				<MkDraggable
+					v-model="orderItems"
+					direction="vertical"
+					withGaps
+					manualDragStart
+				>
+					<template #default="{ item: { announcement }, index, dragStart }">
+				<div :class="$style.row">
+				<div v-if="canReorder && announcement.id != null" :class="$style.reorderControls">
+					<span :class="$style.handle" :draggable="true" :aria-label="i18n.ts._announcement.reorder" @dragstart.stop="dragStart"><i class="ti ti-menu"></i></span>
+					<button class="_button" :class="$style.move" :disabled="index === 0" :aria-label="i18n.ts._announcement.moveUp" @click="move(index, -1)"><i class="ti ti-arrow-up"></i></button>
+					<button class="_button" :class="$style.move" :disabled="index === orderItems.length - 1" :aria-label="i18n.ts._announcement.moveDown" @click="move(index, 1)"><i class="ti ti-arrow-down"></i></button>
+				</div>
+				<MkFolder :class="$style.folder" :defaultOpen="announcement.id == null">
 					<template #label>{{ announcement.title }}</template>
 					<template #icon>
 						<i v-if="announcement.icon === 'info'" class="ti ti-info-circle"></i>
@@ -105,6 +114,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<p v-if="announcement.reads">{{ i18n.tsx.nUsersRead({ n: announcement.reads }) }}</p>
 					</div>
 				</MkFolder>
+				</div>
+					</template>
+				</MkDraggable>
 				<MkLoading v-if="loadingMore"/>
 				<MkButton @click="more()">
 					<i class="ti ti-reload"></i>{{ i18n.ts.more }}
@@ -135,7 +147,7 @@ import { genId } from '@/utility/id.js';
 import { useMkSelect } from '@/composables/use-mkselect.js';
 import { formatDateTimeString } from '@/utility/format-time-string.js';
 import XGroups from './announcements.groups.vue';
-import XReorder from './announcements.reorder.vue';
+import MkDraggable from '@/components/MkDraggable.vue';
 import type { MkSelectItem } from '@/components/MkSelect.vue';
 
 const {
@@ -227,8 +239,38 @@ function toAutoArchiveAt(value: string, originalValue: Misskey.entities.AdminAnn
 	return value === '' ? null : new Date(value).getTime();
 }
 
-// 並べ替えの部品は、全体の一覧を自分で読み込む。お知らせを作ったり変えたりしたら読み直させる
-const reorderKey = ref(0);
+// 公開中のお知らせだけを並べ替えられる (アーカイブ済みは表示順を使わない)
+const canReorder = computed(() => announcementsStatus.value === 'active');
+
+// MkDraggable は id で項目を見分けるので、まだ保存していないお知らせは仮の _id を使う
+const orderItems = computed({
+	get: () => announcements.value.map(announcement => ({ id: (announcement.id ?? announcement._id)!, announcement })),
+	set: (items) => {
+		announcements.value = items.map(x => x.announcement);
+		persistOrder();
+	},
+});
+
+function move(index: number, delta: -1 | 1) {
+	const to = index + delta;
+	if (to < 0 || to >= orderItems.value.length) return;
+	const next = [...orderItems.value];
+	[next[index], next[to]] = [next[to], next[index]];
+	orderItems.value = next;
+}
+
+// 表示している保存済みのお知らせの順番を送る。サーバーは、それらが今いる位置の中で入れ替えるので、
+// グループで絞り込んだ一覧や、ページ送りの途中までの一覧から並べ替えても、ほかのお知らせの位置は変わらない
+async function persistOrder() {
+	const ids = savedAnnouncements.value.map(a => a.id);
+	if (ids.length < 2) return;
+	try {
+		await misskeyApi('admin/announcements/reorder', { announcementIds: ids });
+	} catch (err) {
+		os.alert({ type: 'error', text: String((err as { message?: string }).message ?? err) });
+		refresh();
+	}
+}
 
 const savedAnnouncements = computed(() => announcements.value.filter((a): a is EditableAnnouncement & { id: string } => a.id != null));
 
@@ -340,7 +382,6 @@ function more() {
 
 function refresh() {
 	loading.value = true;
-	reorderKey.value++;
 	misskeyApi('admin/announcements/list', listParams()).then(announcementResponse => {
 		announcements.value = announcementResponse.map(toEditableAnnouncement);
 		loading.value = false;
@@ -387,5 +428,57 @@ definePage(() => ({
 
 .autoArchiveAt {
 	white-space: nowrap;
+}
+.reorderDescription {
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+
+.row {
+	display: flex;
+	gap: 2px;
+	align-items: flex-start;
+}
+
+.folder {
+	flex: 1;
+	min-width: 0;
+}
+
+.reorderControls {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	align-items: center;
+	// 折りたたんだお知らせの見出しの高さに収める
+	padding-top: 2px;
+	font-size: 0.85em;
+	line-height: 1;
+}
+
+.handle {
+	display: flex;
+	width: 28px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	cursor: move;
+}
+
+.move {
+	display: flex;
+	width: 28px;
+	height: 17px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+
+	&:disabled {
+		opacity: 0.3;
+	}
+
+	&:hover:not(:disabled) {
+		background: var(--MI_THEME-buttonHoverBg);
+	}
 }
 </style>

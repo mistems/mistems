@@ -254,14 +254,25 @@ describe('お知らせのグループ', () => {
 			assert.ok(logs.body.length > 0);
 		});
 
-		test('渡さなかったお知らせは、今の順番のまま後ろに続く', async () => {
+		test('渡したお知らせが今いる位置の中で入れ替わり、渡さなかったお知らせの位置は変わらない', async () => {
 			const x = await createAnnouncement({ title: 'x' });
 			const y = await createAnnouncement({ title: 'y' });
 			const z = await createAnnouncement({ title: 'z' });
-			// いまは z, y, x の順。x だけを渡すと x が先頭になり、z と y はその後ろに今の順で続く
-			await api('admin/announcements/reorder', { announcementIds: [x.id] }, admin);
+			// いまは z, y, x の順。z と x だけを入れ替えると、y は真ん中のまま
+			await api('admin/announcements/reorder', { announcementIds: [x.id, z.id] }, admin);
 			const list = await api('announcements', { limit: 100 }, alice);
-			assert.deepStrictEqual(list.body.map(a => a.id).slice(0, 3), [x.id, z.id, y.id]);
+			assert.deepStrictEqual(list.body.map(a => a.id).slice(0, 3), [x.id, y.id, z.id]);
+		});
+
+		test('グループで絞り込んだ一覧から並べ替えると、他のグループのお知らせの位置は変わらない', async () => {
+			const g = await createGroup('絞り込みの並べ替え');
+			const g1 = await createAnnouncement({ title: 'g1', groupId: g.id });
+			const other = await createAnnouncement({ title: 'other' });
+			const g2 = await createAnnouncement({ title: 'g2', groupId: g.id });
+			// いまは g2, other, g1 の順。グループの 2 件だけを入れ替える
+			await api('admin/announcements/reorder', { announcementIds: [g1.id, g2.id] }, admin);
+			const list = await api('announcements', { limit: 100 }, alice);
+			assert.deepStrictEqual(list.body.map(a => a.id).slice(0, 3), [g1.id, other.id, g2.id]);
 		});
 
 		test('別のグループへ移しても、全体の順番は変わらない', async () => {

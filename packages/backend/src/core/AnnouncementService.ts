@@ -235,20 +235,23 @@ export class AnnouncementService implements OnModuleInit {
 	}
 
 	/**
-	 * お知らせ全体の表示順を並べ替える。渡したお知らせを先頭からその順に置き、渡さなかったお知らせは今の順番のまま後ろに続ける
+	 * お知らせ全体の表示順の中で、渡したお知らせの順番を入れ替える。
+	 * 渡したお知らせが今いる位置 (全体の順番の中の席) はそのままに、その席へ渡した順で置き直す。
+	 * 渡さなかったお知らせの位置は変わらないので、グループで絞り込んだ一覧やページ送りの途中の一覧から並べ替えてもよい
 	 * (特定の利用者向けのお知らせは対象外)
 	 */
 	@bindThis
 	public async reorder(announcementIds: MiAnnouncement['id'][], moderator?: MiUser): Promise<void> {
 		await this.announcementsRepository.manager.transaction(async (em) => {
-			const rest = await em.createQueryBuilder(MiAnnouncement, 'announcement')
+			const all = (await em.createQueryBuilder(MiAnnouncement, 'announcement')
 				.select('announcement.id')
 				.where('announcement.userId IS NULL')
 				.orderBy('announcement.displayOrder', 'ASC')
 				.addOrderBy('announcement.id', 'DESC')
-				.getMany();
+				.getMany()).map(x => x.id);
 			const given = new Set(announcementIds);
-			const ordered = [...announcementIds, ...rest.map(x => x.id).filter(id => !given.has(id))];
+			const queue = [...announcementIds];
+			const ordered = all.map(id => given.has(id) ? queue.shift()! : id);
 			// 1 件ずつ更新すると、アーカイブ済みのお知らせが多いときに遅いので、配列の順番から 1 回で振り直す
 			await em.query(
 				'UPDATE "announcement" AS a SET "displayOrder" = (t.ord - 1)::integer FROM unnest($1::varchar[]) WITH ORDINALITY AS t(id, ord) WHERE a."id" = t.id AND a."userId" IS NULL',

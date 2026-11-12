@@ -35,7 +35,7 @@ export const meta = {
 export const paramDef = {
 	type: 'object',
 	properties: {
-		// お知らせ全体での表示順。渡さなかったお知らせは、今の順番のまま後ろに続く
+		// 渡したお知らせが今いる位置の中で、この順に入れ替える。渡さなかったお知らせの位置は変わらない
 		announcementIds: { type: 'array', minItems: 1, maxItems: 1000, uniqueItems: true, items: { type: 'string', format: 'misskey:id' } },
 	},
 	required: ['announcementIds'],
