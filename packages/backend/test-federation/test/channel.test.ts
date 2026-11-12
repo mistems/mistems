@@ -7,7 +7,7 @@
 import { describe, test, beforeAll, vi } from 'vitest';
 import assert, { rejects, strictEqual } from 'node:assert';
 import * as Misskey from 'misskey-js';
-import { createAccount, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, waitForFollowRelation, WAIT_FOR_FEDERATION } from './utils.js';
+import { createAccount, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, waitForFollowRelation, WAIT_FOR_FEDERATION } from './utils.js';
 
 describe('Channel federation', () => {
 	let alice: LoginUser, carol: LoginUser, bob: LoginUser;
@@ -191,7 +191,12 @@ describe('Channel federation', () => {
 		test('F9: 連合を none に戻すと過去のノートを返さなくなり、戻したあとのリプライはチャンネルに入る', async () => {
 			const channel = await createChannel(alice, 'public');
 			const delivered = await postToChannel(alice, channel.id);
-			// carol はだれにもフォローされていないので、このノートは b.test にまだ知られていない
+			// carol はだれにもフォローされていないので、リレーが無ければ、このノートは b.test にまだ知られていない
+			// a.test にリレーが登録されていると (fed.sh relay を実行したあとなど)、public のノートはリレー経由で
+			// b.test に届くので、carol のノートも「b.test にまだ知られていない」とは言えなくなる。そのときは
+			// b.test から引けないことの確認だけを外す (AP の応答が 404 になることは確かめる)
+			const relays = await (await fetchAdmin('a.test')).client.request('admin/relays/list', {});
+			const hasAcceptedRelay = relays.some(relay => relay.status === 'accepted');
 			const undelivered = await postToChannel(carol, channel.id);
 			const deliveredInB = await waitForNoteInBobHome(delivered.id);
 			// ノートの AP 応答は `Cache-Control: public, max-age=180` で、a.test の前の nginx が保存する。
@@ -203,7 +208,9 @@ describe('Channel federation', () => {
 
 			strictEqual(await fetchApNoteStatus(delivered.id), 404);
 			strictEqual(await fetchApNoteStatus(undelivered.id), 404);
-			await rejects(async () => await resolveRemoteNote('a.test', undelivered.id, bob));
+			if (!hasAcceptedRelay) {
+				await rejects(async () => await resolveRemoteNote('a.test', undelivered.id, bob));
+			}
 
 			const reply = (await bob.client.request('notes/create', { text: crypto.randomUUID(), replyId: deliveredInB.id })).createdNote;
 			const replyUri = `https://b.test/notes/${reply.id}`;
