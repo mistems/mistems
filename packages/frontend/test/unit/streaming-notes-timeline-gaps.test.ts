@@ -139,7 +139,7 @@ async function waitForInitialNotes(container: Element) {
 }
 
 beforeEach(() => {
-	// 歯抜けマーカーは実験的機能で既定はオフなので、オンにして確かめる (テストの prefer はモックで、s を直接書き換える)
+	// 歯抜けマーカーは実験的機能 (既定はオン)。テストの prefer はモックなので、オンにして確かめる (テストの prefer はモックで、s を直接書き換える)
 	(prefer.s as Record<string, unknown>)['experimental.enableTimelineGapFill'] = true;
 });
 
