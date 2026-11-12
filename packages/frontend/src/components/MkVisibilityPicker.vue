@@ -91,11 +91,11 @@ const v = ref(props.currentVisibility);
 // (MkPostForm 側の actualVisibility / actualLocalOnly で読み替える)
 const channels = ref<Misskey.entities.Channel[]>([]);
 const currentChannel = ref<(Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'> & Partial<Pick<Misskey.entities.Channel, 'federationPolicy'>>) | undefined>(props.currentChannel);
-const currentChannelName = computed<string | null>(() => currentChannel.value ? channelLabel(currentChannel.value) : null);
+const currentChannelName = computed<string | null>(() => currentChannel.value?.name ?? null);
 
-/** 連合するチャンネルには、MkChannelName と同じく 🪐 を付ける (メニューの項目は文字列なので部品を使えない) */
-function channelLabel(channel: { name: string; federationPolicy?: Misskey.entities.Channel['federationPolicy'] }): string {
-	return isFederatedChannel(channel) ? `🪐 ${channel.name}` : channel.name;
+/** 連合するチャンネルには、MkChannelName と同じくグローバルタイムラインのアイコンを付ける */
+function channelIcon(channel: { federationPolicy?: Misskey.entities.Channel['federationPolicy'] }): string | undefined {
+	return isFederatedChannel(channel) ? 'ti ti-whirl' : undefined;
 }
 
 async function fetchChannels() {
@@ -108,7 +108,7 @@ async function fetchChannels() {
 async function chooseChannel() {
 	let selectedChannel: Misskey.entities.Channel | null = null;
 	await os.popupMenu(
-		channels.value.map(it => ({ type: 'button', text: channelLabel(it), action: () => { selectedChannel = it; } })),
+		channels.value.map(it => ({ type: 'button', icon: channelIcon(it), text: it.name, action: () => { selectedChannel = it; } })),
 		channelsButton.value,
 	);
 

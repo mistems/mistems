@@ -40,6 +40,7 @@ import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 import { definePage } from '@/page.js';
 import { antennasCache, userListsCache, favoritedChannelsCache } from '@/cache.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 import { deviceKind } from '@/utility/device-kind.js';
 import { deepMerge } from '@/utility/merge.js';
 import { miLocalStorage } from '@/local-storage.js';
@@ -154,6 +155,8 @@ async function chooseChannel(ev: PointerEvent): Promise<void> {
 
 			return {
 				type: 'link' as const,
+				// 連合するチャンネルには、グローバルタイムラインと同じアイコンを付ける
+				icon: isFederatedChannel(channel) ? 'ti ti-whirl' : undefined,
 				text: channel.name,
 				indicate: hasUnreadNote,
 				to: `/channels/${channel.id}`,

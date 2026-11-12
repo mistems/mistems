@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<span><span v-if="federated" v-tooltip="tooltip" role="img" :aria-label="tooltip">🪐 </span>{{ channel.name }}</span>
+<span><i v-if="federated" v-tooltip="tooltip" class="ti ti-whirl" :class="$style.icon" role="img" :aria-label="tooltip"></i>{{ channel.name }}</span>
 </template>
 
 <script lang="ts" setup>
@@ -22,3 +22,9 @@ const props = defineProps<{
 const federated = computed(() => isFederatedChannel(props.channel));
 const tooltip = computed(() => federated.value ? i18n.ts._channel._federationPolicy.public : '');
 </script>
+
+<style lang="scss" module>
+.icon {
+	margin-right: 4px;
+}
+</style>

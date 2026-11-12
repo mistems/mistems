@@ -28,7 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</MkSwitch>
 
 			<MkSelect v-model="federationPolicy" :items="federationPolicyDef" :disabled="!allowRenoteToExternal">
-				<template #label>🪐 {{ i18n.ts._channel.federationPolicy }}</template>
+				<template #label><i class="ti ti-whirl"></i> {{ i18n.ts._channel.federationPolicy }}</template>
 				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
 			</MkSelect>
 

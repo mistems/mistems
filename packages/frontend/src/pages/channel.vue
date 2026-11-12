@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="$i != null && channel != null && $i.id === channel.userId" style="color: var(--MI_THEME-warn)"><i class="ti ti-user-star ti-fw"></i><span style="margin-left: 4px;">{{ i18n.ts.youAreAdmin }}</span></div>
 					</div>
 					<div v-if="channel.isSensitive" :class="$style.sensitiveIndicator">{{ i18n.ts.sensitive }}</div>
-					<div v-if="isFederatedChannel(channel)" v-tooltip="i18n.ts._channel._federationPolicy[channel.federationPolicy]" :class="$style.federationIndicator">🪐 {{ i18n.ts._channel._federationPolicy[channel.federationPolicy] }}</div>
+					<div v-if="isFederatedChannel(channel)" v-tooltip="i18n.ts._channel._federationPolicy[channel.federationPolicy]" :class="$style.federationIndicator"><i class="ti ti-whirl"></i> {{ i18n.ts._channel._federationPolicy[channel.federationPolicy] }}</div>
 					<div :class="$style.bannerFade"></div>
 				</div>
 				<div v-if="channel.description" :class="$style.description">
@@ -357,8 +357,9 @@ const headerTabs = computed(() => [{
 }]);
 
 definePage(() => ({
-	title: channel.value ? (isFederatedChannel(channel.value) ? `🪐 ${channel.value.name}` : channel.value.name) : i18n.ts.channel,
-	icon: 'ti ti-device-tv',
+	title: channel.value ? channel.value.name : i18n.ts.channel,
+	// 連合するチャンネルは、グローバルタイムラインと同じアイコンで示す
+	icon: channel.value != null && isFederatedChannel(channel.value) ? 'ti ti-whirl' : 'ti ti-device-tv',
 }));
 </script>
 
