@@ -75,6 +75,7 @@ function toKanaToHira(str: string): string {
 		return String.fromCharCode(chr);
 	});
 }
+
 let cachedTags: string[] | null = null;
 export function getCustomEmojiTags() {
 	if (cachedTags) return cachedTags;

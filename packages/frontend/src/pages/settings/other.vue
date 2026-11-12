@@ -104,10 +104,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkSwitch v-model="enableWebTranslatorApi">
 							<template #label>Enable in-browser translator API</template>
 						</MkSwitch>
-						<MkSwitch v-model="emojiAutocompleteAndSearch">
-							<template #label>{{ i18n.ts.emojiAutocompleteAndSearch }}</template>
-							<template #caption>{{ i18n.ts.emojiAutocompleteAndSearchDescription }}</template>
-						</MkSwitch>
 					</div>
 				</MkFolder>
 			</SearchMarker>
@@ -184,7 +180,6 @@ const stackingRouterView = prefer.model('experimental.stackingRouterView');
 const enableFolderPageView = prefer.model('experimental.enableFolderPageView');
 const enableHapticFeedback = prefer.model('experimental.enableHapticFeedback');
 const enableWebTranslatorApi = prefer.model('experimental.enableWebTranslatorApi');
-const emojiAutocompleteAndSearch = prefer.model('experimental.emojiAutocompleteAndSearch');
 
 watch(skipNoteRender, () => {
 	suggestReload();
