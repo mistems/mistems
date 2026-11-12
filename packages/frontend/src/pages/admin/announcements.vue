@@ -23,10 +23,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkLoading v-if="loading"/>
 
 			<template v-else>
+				<!-- 表示順はお知らせ全体で 1 つなので、並べ替えは「全て」で行う。グループで絞り込んだ一覧も、この順番で並ぶ -->
 				<XReorder
-					v-if="groupFilterId !== undefined && announcementsStatus === 'active' && savedAnnouncements.length > 1"
-					:groupId="groupFilterId"
-					:announcements="savedAnnouncements"
+					v-if="groupFilterId === undefined && announcementsStatus === 'active' && savedAnnouncements.length > 1"
+					:key="reorderKey"
 					@saved="refresh"
 				/>
 				<MkFolder v-for="announcement in announcements" :key="announcement.id ?? announcement._id" :defaultOpen="announcement.id == null">
@@ -227,6 +227,9 @@ function toAutoArchiveAt(value: string, originalValue: Misskey.entities.AdminAnn
 	return value === '' ? null : new Date(value).getTime();
 }
 
+// 並べ替えの部品は、全体の一覧を自分で読み込む。お知らせを作ったり変えたりしたら読み直させる
+const reorderKey = ref(0);
+
 const savedAnnouncements = computed(() => announcements.value.filter((a): a is EditableAnnouncement & { id: string } => a.id != null));
 
 watch([announcementsStatus, groupFilter], () => {
@@ -323,8 +326,8 @@ function more() {
 	loadingMore.value = true;
 	misskeyApi('admin/announcements/list', {
 		...listParams(),
-		// グループで絞り込んでいるときは表示順で並ぶので、offset でページを送る
-		...(groupFilterId.value !== undefined ? {
+		// 公開中の一覧と、グループで絞り込んだ一覧は表示順で並ぶので、offset でページを送る
+		...(announcementsStatus.value === 'active' || groupFilterId.value !== undefined ? {
 			offset: savedAnnouncements.value.length,
 		} : {
 			untilId: announcements.value.reduce((acc, announcement) => announcement.id != null ? announcement : acc).id!,
@@ -337,6 +340,7 @@ function more() {
 
 function refresh() {
 	loading.value = true;
+	reorderKey.value++;
 	misskeyApi('admin/announcements/list', listParams()).then(announcementResponse => {
 		announcements.value = announcementResponse.map(toEditableAnnouncement);
 		loading.value = false;

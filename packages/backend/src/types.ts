@@ -420,7 +420,8 @@ export type ModerationLogPayloads = {
 		group: any;
 	};
 	reorderAnnouncements: {
-		groupId: string | null;
+		// 表示順がグループごとだったころのログにだけある
+		groupId?: string | null;
 		announcementIds: string[];
 	};
 };

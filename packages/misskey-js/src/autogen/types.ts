@@ -7277,8 +7277,6 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    /** Format: misskey:id */
-                    groupId: string | null;
                     announcementIds: string[];
                 };
             };

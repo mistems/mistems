@@ -164,8 +164,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
 			}
 
-			// グループ (またはグループなし) を指定したときは、グループの中の表示順で並べる
-			if (ps.groupId !== undefined) {
+			// 公開中の一覧と、グループ (またはグループなし) で絞り込んだ一覧は、お知らせ全体の表示順で並べる (offset でページを送る)
+			if (ps.status === 'active' || ps.groupId !== undefined) {
 				query.orderBy('announcement.displayOrder', 'ASC').addOrderBy('announcement.id', 'DESC');
 			}
 

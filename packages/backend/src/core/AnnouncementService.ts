@@ -95,28 +95,22 @@ export class AnnouncementService implements OnModuleInit {
 	}
 
 	/**
-	 * グループ (null はグループなし) の先頭に置くための表示順を返す
+	 * お知らせ全体の先頭に置くための表示順を返す。表示順はグループに関係なく、お知らせ全体で 1 つである
+	 * (グループのタブでは、この順番のままグループで絞り込んで表示する)
 	 */
 	@bindThis
-	private async getHeadDisplayOrder(groupId: MiAnnouncement['groupId']): Promise<number> {
-		const query = this.announcementsRepository.createQueryBuilder('announcement')
+	private async getHeadDisplayOrder(): Promise<number> {
+		const result = await this.announcementsRepository.createQueryBuilder('announcement')
 			.select('MIN(announcement.displayOrder)', 'min')
-			.where('announcement.userId IS NULL');
-
-		if (groupId == null) {
-			query.andWhere('announcement.groupId IS NULL');
-		} else {
-			query.andWhere('announcement.groupId = :groupId', { groupId });
-		}
-
-		const result = await query.getRawOne<{ min: number | null }>();
+			.where('announcement.userId IS NULL')
+			.getRawOne<{ min: number | null }>();
 		return result?.min == null ? 0 : result.min - 1;
 	}
 
 	@bindThis
 	public async create(values: Partial<MiAnnouncement>, moderator?: MiUser): Promise<{ raw: MiAnnouncement; packed: Packed<'Announcement'> }> {
-		// 新しいお知らせはグループの先頭に置く
-		const displayOrder = values.userId ? 0 : await this.getHeadDisplayOrder(values.groupId ?? null);
+		// 新しいお知らせは全体の先頭に置く
+		const displayOrder = values.userId ? 0 : await this.getHeadDisplayOrder();
 
 		const announcement = await this.announcementsRepository.insertOne({
 			id: this.idService.gen(),
@@ -183,11 +177,6 @@ export class AnnouncementService implements OnModuleInit {
 
 	@bindThis
 	public async update(announcement: MiAnnouncement, values: Partial<MiAnnouncement>, moderator?: MiUser): Promise<void> {
-		// 別のグループへ移したお知らせは、移った先のグループの先頭に置く
-		const displayOrder = values.groupId !== undefined && values.groupId !== announcement.groupId && announcement.userId == null
-			? await this.getHeadDisplayOrder(values.groupId)
-			: undefined;
-
 		// レプリカから古い値を読まないよう、更新後の値はRETURNINGで取得する
 		const after: MiAnnouncement | undefined = await this.announcementsRepository.createQueryBuilder().update()
 			.set({
@@ -204,7 +193,6 @@ export class AnnouncementService implements OnModuleInit {
 				isActive: values.isActive,
 				autoArchiveAt: values.autoArchiveAt,
 				groupId: values.groupId,
-				displayOrder,
 			})
 			.where('id = :id', { id: announcement.id })
 			.returning('*')
@@ -247,19 +235,29 @@ export class AnnouncementService implements OnModuleInit {
 	}
 
 	/**
-	 * グループ (null はグループなし) の中のお知らせを、渡した順に並べ替える
+	 * お知らせ全体の表示順を並べ替える。渡したお知らせを先頭からその順に置き、渡さなかったお知らせは今の順番のまま後ろに続ける
+	 * (特定の利用者向けのお知らせは対象外)
 	 */
 	@bindThis
-	public async reorder(groupId: MiAnnouncement['groupId'], announcementIds: MiAnnouncement['id'][], moderator?: MiUser): Promise<void> {
+	public async reorder(announcementIds: MiAnnouncement['id'][], moderator?: MiUser): Promise<void> {
 		await this.announcementsRepository.manager.transaction(async (em) => {
-			for (const [i, id] of announcementIds.entries()) {
-				await em.update(MiAnnouncement, { id, groupId: groupId ?? IsNull(), userId: IsNull() }, { displayOrder: i });
-			}
+			const rest = await em.createQueryBuilder(MiAnnouncement, 'announcement')
+				.select('announcement.id')
+				.where('announcement.userId IS NULL')
+				.orderBy('announcement.displayOrder', 'ASC')
+				.addOrderBy('announcement.id', 'DESC')
+				.getMany();
+			const given = new Set(announcementIds);
+			const ordered = [...announcementIds, ...rest.map(x => x.id).filter(id => !given.has(id))];
+			// 1 件ずつ更新すると、アーカイブ済みのお知らせが多いときに遅いので、配列の順番から 1 回で振り直す
+			await em.query(
+				'UPDATE "announcement" AS a SET "displayOrder" = (t.ord - 1)::integer FROM unnest($1::varchar[]) WITH ORDINALITY AS t(id, ord) WHERE a."id" = t.id AND a."userId" IS NULL',
+				[ordered],
+			);
 		});
 
 		if (moderator) {
 			this.moderationLogService.log(moderator, 'reorderAnnouncements', {
-				groupId,
 				announcementIds,
 			});
 		}

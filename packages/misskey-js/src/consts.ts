@@ -557,7 +557,7 @@ export type ModerationLogPayloads = {
 		group: AnnouncementGroup;
 	};
 	reorderAnnouncements: {
-		groupId: string | null;
+		groupId?: string | null;
 		announcementIds: string[];
 	};
 };

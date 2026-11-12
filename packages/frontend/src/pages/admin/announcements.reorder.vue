@@ -36,31 +36,33 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import MkButton from '@/components/MkButton.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
 import MkFolder from '@/components/MkFolder.vue';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
 
 type Item = { id: string; title: string };
-
-const props = defineProps<{
-	groupId: string | null;
-	announcements: Item[];
-}>();
 
 const emit = defineEmits<{
 	(ev: 'saved'): void;
 }>();
 
 const items = ref<Item[]>([]);
+const saved = ref<Item[]>([]);
 
-watch(() => props.announcements, (to) => {
-	items.value = to.map(x => ({ id: x.id, title: x.title }));
-}, { immediate: true });
+// 一覧のページ送りに関係なく、公開中のお知らせを全体の表示順でまとめて読み込む
+async function fetchItems() {
+	const res = await misskeyApi('admin/announcements/list', { status: 'active', limit: 100 });
+	saved.value = res.map(x => ({ id: x.id, title: x.title }));
+	items.value = [...saved.value];
+}
 
-const changed = computed(() => items.value.map(x => x.id).join(',') !== props.announcements.map(x => x.id).join(','));
+fetchItems();
+
+const changed = computed(() => items.value.map(x => x.id).join(',') !== saved.value.map(x => x.id).join(','));
 
 function move(index: number, delta: -1 | 1) {
 	const to = index + delta;
@@ -72,9 +74,9 @@ function move(index: number, delta: -1 | 1) {
 
 async function save() {
 	await os.apiWithDialog('admin/announcements/reorder', {
-		groupId: props.groupId,
 		announcementIds: items.value.map(x => x.id),
 	});
+	saved.value = [...items.value];
 	emit('saved');
 }
 </script>

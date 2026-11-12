@@ -79,10 +79,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
 			}
 
-			// グループ (またはグループなし) を指定したときは、グループの中の表示順で並べる
-			if (ps.groupId !== undefined) {
-				query.orderBy('announcement.displayOrder', 'ASC').addOrderBy('announcement.id', 'DESC');
-			}
+			// お知らせ全体の表示順で並べる。グループのタブも、この順番のままグループで絞り込む (offset でページを送る)
+			query.orderBy('announcement.displayOrder', 'ASC').addOrderBy('announcement.id', 'DESC');
 
 			if (ps.offset != null) query.offset(ps.offset);
 
