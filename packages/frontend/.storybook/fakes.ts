@@ -42,6 +42,7 @@ export function channel(id = 'somechannelid', name = 'Some Channel', bannerUrl: 
 		isSensitive: false,
 		allowRenoteToExternal: false,
 		federationPolicy: 'none',
+		federationHashtag: null,
 	};
 }
 

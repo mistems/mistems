@@ -32,6 +32,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
 			</MkSelect>
 
+			<MkInput v-if="federationPolicy === 'public'" v-model="federationHashtag" :placeholder="channel?.federationHashtag == null ? i18n.ts._channel.federationHashtagAutoAssigned : undefined" :disabled="channel?.federationHashtag == null">
+				<template #label><i class="ti ti-hash"></i> {{ i18n.ts._channel.federationHashtag }}</template>
+				<template #prefix>#</template>
+				<template #caption>{{ i18n.ts._channel.federationHashtagDescription }}</template>
+			</MkInput>
+
 			<div>
 				<MkButton v-if="bannerId == null" @click="setBannerImage"><i class="ti ti-plus"></i> {{ i18n.ts._channel.setBanner }}</MkButton>
 				<div v-else-if="bannerUrl">
@@ -116,6 +122,8 @@ const {
 	initialValue: 'none' as 'none' | 'public',
 });
 const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
+// 連合するチャンネルのハッシュタグ (先頭の「#」は含めない)。まだ決まっていないときは空で、保存時にサーバーが決める
+const federationHashtag = ref('');
 
 watch(allowRenoteToExternal, () => {
 	// チャンネル外リノート禁止と連合は両立しない
@@ -150,6 +158,7 @@ async function fetchChannel() {
 	color.value = result.color;
 	allowRenoteToExternal.value = result.allowRenoteToExternal;
 	federationPolicy.value = result.federationPolicy ?? 'none';
+	federationHashtag.value = result.federationHashtag ?? '';
 
 	channel.value = result;
 }
@@ -194,6 +203,20 @@ async function save() {
 		if (canceled) return;
 	}
 
+	// ハッシュタグを変えると、リモートのユーザーのミュートやフォローが外れるので確認する
+	const prevHashtag = channel.value?.federationHashtag ?? null;
+	const nextHashtag = federationHashtag.value.trim().replace(/^#/, '');
+	// 欄が出ているのは連合するときだけなので、連合しないときは書き換えた値があっても送らない
+	const hashtagChanged = federationPolicy.value === 'public' && prevHashtag != null && nextHashtag !== '' && nextHashtag !== prevHashtag;
+	if (hashtagChanged) {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationHashtag,
+			text: i18n.ts._channel.federationHashtagChangeConfirm,
+		});
+		if (canceled) return;
+	}
+
 	const params = {
 		name: name.value,
 		description: description.value,
@@ -209,9 +232,11 @@ async function save() {
 			...params,
 			channelId: props.channelId,
 			pinnedNoteIds: pinnedNoteIds.value,
+			...(hashtagChanged ? { federationHashtag: nextHashtag } : {}),
 		}).then(updated => {
 			// 保存後に手元の状態を更新し、続けて編集した場合に確認ダイアログの判定が古くならないようにする
 			channel.value = updated;
+			federationHashtag.value = updated.federationHashtag ?? '';
 		});
 	} else {
 		os.apiWithDialog('channels/create', params).then(created => {

@@ -2353,6 +2353,12 @@ _channel:
   _federationPolicy:
     none: "連合しない"
     public: "連合する"
+  federationHashtag: "チャンネルのハッシュタグ"
+  federationHashtagDescription: "連合するノートの本文の末尾に、チャンネル名とともに書き添えるハッシュタグです。リモートサーバーのユーザーはこのハッシュタグでミュートできます。また、このハッシュタグを付けたリモートのユーザーの公開ノートは、このチャンネルに入ります (このサーバーに届いたノートに限ります)。「連合チャンネル_」を含め、文字・数字・下線だけで128文字以内にしてください。"
+  federationHashtagAutoAssigned: "保存すると、チャンネル名から自動で決まります。"
+  federationHashtagChangeConfirm: "ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？"
+  removeNoteFromChannel: "チャンネルから外す"
+  removeNoteFromChannelConfirm: "このノートをチャンネルから外しますか？ノートそのものは削除されません。"
 
 _menuDisplay:
   sideFull: "横"

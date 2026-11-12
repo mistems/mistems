@@ -8987,6 +8987,30 @@ export interface Locale extends ILocale {
              */
             "public": string;
         };
+        /**
+         * チャンネルのハッシュタグ
+         */
+        "federationHashtag": string;
+        /**
+         * 連合するノートの本文の末尾に、チャンネル名とともに書き添えるハッシュタグです。リモートサーバーのユーザーはこのハッシュタグでミュートできます。また、このハッシュタグを付けたリモートのユーザーの公開ノートは、このチャンネルに入ります (このサーバーに届いたノートに限ります)。「連合チャンネル_」を含め、文字・数字・下線だけで128文字以内にしてください。
+         */
+        "federationHashtagDescription": string;
+        /**
+         * 保存すると、チャンネル名から自動で決まります。
+         */
+        "federationHashtagAutoAssigned": string;
+        /**
+         * ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？
+         */
+        "federationHashtagChangeConfirm": string;
+        /**
+         * チャンネルから外す
+         */
+        "removeNoteFromChannel": string;
+        /**
+         * このノートをチャンネルから外しますか？ノートそのものは削除されません。
+         */
+        "removeNoteFromChannelConfirm": string;
     };
     "_menuDisplay": {
         /**
