@@ -7,8 +7,9 @@ process.env.NODE_ENV = 'test';
 
 import * as assert from 'assert';
 import { beforeAll, describe, test } from 'vitest';
-import { api, castAsError, post, signup, simpleGet } from '../utils.js';
+import { api, castAsError, initTestDb, post, signup, simpleGet } from '../utils.js';
 import type * as misskey from 'misskey-js';
+import { MiNote, MiUser } from '@/models/_.js';
 
 describe('チャンネル連合 (federationPolicy)', () => {
 	let alice: misskey.entities.SignupResponse;
@@ -163,6 +164,185 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual((await simpleGet(`/notes/${note.id}`, AP)).status, 200);
 			await api('channels/update', { channelId: channel.id, federationPolicy: 'none' }, alice);
 			assert.strictEqual((await simpleGet(`/notes/${note.id}`, AP)).status, 404);
+		});
+	});
+
+	describe('チャンネルのハッシュタグ (federationHashtag)', () => {
+		const MARKER = '連合チャンネル_';
+
+		test('連合しないチャンネルにはハッシュタグを付けない', async () => {
+			const res = await api('channels/create', { name: 'hashtag-none' }, alice);
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual(res.body.federationHashtag, null);
+		});
+
+		test('連合するチャンネルを作ると、ハッシュタグを付ける (使えない文字は取り除く)', async () => {
+			const res = await api('channels/create', { name: 'タグ・作成 a.b', federationPolicy: 'public' }, alice);
+			assert.strictEqual(res.status, 200);
+			assert.ok(res.body.federationHashtag?.endsWith(`${MARKER}タグ作成ab`), res.body.federationHashtag ?? 'null');
+			assert.match(res.body.federationHashtag!, /^[\p{L}\p{N}_]+$/u);
+		});
+
+		test('連合に変えるとハッシュタグを付け、none に戻しても消さず、名前を変えても変わらない', async () => {
+			const channel = (await api('channels/create', { name: 'hashtag-later' }, alice)).body;
+			const enabled = await api('channels/update', { channelId: channel.id, federationPolicy: 'public' }, alice);
+			assert.strictEqual(enabled.status, 200);
+			const hashtag = enabled.body.federationHashtag;
+			assert.ok(hashtag?.endsWith(`${MARKER}hashtaglater`), hashtag ?? 'null');
+
+			const renamed = await api('channels/update', { channelId: channel.id, name: 'renamed' }, alice);
+			assert.strictEqual(renamed.body.federationHashtag, hashtag);
+
+			const disabled = await api('channels/update', { channelId: channel.id, federationPolicy: 'none' }, alice);
+			assert.strictEqual(disabled.body.federationHashtag, hashtag);
+		});
+
+		test('同じ名前の連合するチャンネルには _2 を付ける', async () => {
+			const first = (await api('channels/create', { name: 'dup-name', federationPolicy: 'public' }, alice)).body;
+			const second = (await api('channels/create', { name: 'dup-name', federationPolicy: 'public' }, alice)).body;
+			assert.strictEqual(second.federationHashtag, `${first.federationHashtag}_2`);
+		});
+
+		test('持ち主はハッシュタグを変えられる (先頭の # は取り除く)', async () => {
+			const channel = (await api('channels/create', { name: 'hashtag-change', federationPolicy: 'public' }, alice)).body;
+			const res = await api('channels/update', { channelId: channel.id, federationHashtag: `#独自${MARKER}変更後` }, alice);
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual(res.body.federationHashtag, `独自${MARKER}変更後`);
+		});
+
+		test('ハッシュタグの変更の誤りは、エラーコードを分けて返す', async () => {
+			const channel = (await api('channels/create', { name: 'hashtag-errors', federationPolicy: 'public' }, alice)).body;
+			const other = (await api('channels/create', { name: 'hashtag-taken', federationPolicy: 'public' }, alice)).body;
+
+			const invalid = await api('channels/update', { channelId: channel.id, federationHashtag: `a.b${MARKER}c` }, alice);
+			assert.strictEqual(invalid.status, 400);
+			assert.strictEqual(castAsError(invalid.body as any).error.code, 'INVALID_FEDERATION_HASHTAG');
+
+			const tooLong = await api('channels/update', { channelId: channel.id, federationHashtag: `${MARKER}${'a'.repeat(128)}` }, alice);
+			assert.strictEqual(tooLong.status, 400);
+			assert.strictEqual(castAsError(tooLong.body as any).error.code, 'FEDERATION_HASHTAG_TOO_LONG');
+
+			const noMarker = await api('channels/update', { channelId: channel.id, federationHashtag: 'cats' }, alice);
+			assert.strictEqual(noMarker.status, 400);
+			assert.strictEqual(castAsError(noMarker.body as any).error.code, 'FEDERATION_HASHTAG_MUST_CONTAIN_MARKER');
+
+			// 大文字・小文字の違いだけでも重なりとみなす
+			const taken = await api('channels/update', { channelId: channel.id, federationHashtag: other.federationHashtag!.toUpperCase() }, alice);
+			assert.strictEqual(taken.status, 400);
+			assert.strictEqual(castAsError(taken.body as any).error.code, 'FEDERATION_HASHTAG_ALREADY_USED');
+		});
+
+		test('ほかの人はハッシュタグを変えられない', async () => {
+			const bob = await signup({ username: 'hashtag_bob' });
+			const channel = (await api('channels/create', { name: 'hashtag-owner', federationPolicy: 'public' }, alice)).body;
+			const res = await api('channels/update', { channelId: channel.id, federationHashtag: `bob${MARKER}x` }, bob);
+			assert.strictEqual(res.status, 400);
+			assert.strictEqual(castAsError(res.body as any).error.code, 'ACCESS_DENIED');
+		});
+
+		test('AP では本文の付記にハッシュタグを書き、tag には入れない。ローカルの tags にも入れない', async () => {
+			const channel = (await api('channels/create', { name: 'hashtag-ap', federationPolicy: 'public' }, alice)).body;
+			const note = await post(alice, { text: 'hello', channelId: channel.id });
+			assert.deepStrictEqual(note.tags ?? [], []);
+
+			const res = await simpleGet(`/notes/${note.id}`, 'application/activity+json');
+			assert.strictEqual(res.status, 200);
+			const body = res.body as any;
+			assert.ok(body.content.includes(`#${channel.federationHashtag}`), body.content);
+			assert.ok(body.content.includes(`/channels/${channel.id}`));
+			const tags = (body.tag ?? []) as { type: string }[];
+			assert.strictEqual(tags.filter(t => t.type === 'Hashtag').length, 0);
+		});
+
+		test('「連合チャンネル_」を含むハッシュタグはトレンドに数えない', async () => {
+			const users = await Promise.all([1, 2, 3].map(i => signup({ username: `trend_user${i}` })));
+			const plainTag = 'chhtrendplain';
+			const channelTag = `trend${MARKER}x`;
+			for (const user of users) {
+				await post(user, { text: `#${plainTag} #${channelTag}` });
+			}
+			// トレンドの集計 (Redis) は投稿のあとに非同期で行われるので、少し待つ
+			await new Promise(resolve => setTimeout(resolve, 1000));
+
+			const res = await api('hashtags/trend', {}, alice);
+			assert.strictEqual(res.status, 200);
+			const trendTags = (res.body as { tag: string }[]).map(x => x.tag);
+			assert.ok(trendTags.includes(plainTag), JSON.stringify(trendTags));
+			assert.ok(!trendTags.some(tag => tag.includes(MARKER)), JSON.stringify(trendTags));
+		});
+	});
+
+	describe('channels/remove-note', () => {
+		// e2e には相手のサーバーがないので、ローカルのユーザーとノートを DB の上でリモートのものに書き換え、
+		// ハッシュタグで収蔵したリモートのノートの代わりにする
+		const createCollectedRemoteNote = async (channelId: string) => {
+			const carol = await signup({ username: `remote_${Date.now()}` });
+			const note = await post(carol, { text: 'from remote' });
+			const db = await initTestDb(true);
+			try {
+				await db.getRepository(MiUser).update({ id: carol.id }, { host: 'remote.example' });
+				await db.getRepository(MiNote).update({ id: note.id }, { userHost: 'remote.example', channelId });
+			} finally {
+				await db.destroy();
+			}
+			return note;
+		};
+
+		test('持ち主は収蔵したリモートのノートをチャンネルから外せる (ノートは消さない)', async () => {
+			const channel = (await api('channels/create', { name: 'remove-owner', federationPolicy: 'public' }, alice)).body;
+			const note = await createCollectedRemoteNote(channel.id);
+
+			const before = await api('channels/timeline', { channelId: channel.id }, alice);
+			assert.ok(before.body.some(n => n.id === note.id));
+
+			const res = await api('channels/remove-note', { noteId: note.id }, alice);
+			assert.strictEqual(res.status, 204);
+
+			const after = await api('channels/timeline', { channelId: channel.id }, alice);
+			assert.ok(!after.body.some(n => n.id === note.id));
+
+			const shown = await api('notes/show', { noteId: note.id }, alice);
+			assert.strictEqual(shown.status, 200);
+			assert.strictEqual(shown.body.channelId ?? null, null);
+		});
+
+		test('モデレーターは外せる', async () => {
+			const owner = await signup({ username: 'remove_owner2' });
+			const channel = (await api('channels/create', { name: 'remove-mod', federationPolicy: 'public' }, owner)).body;
+			const note = await createCollectedRemoteNote(channel.id);
+			// alice は最初に作ったユーザーなので管理者
+			const res = await api('channels/remove-note', { noteId: note.id }, alice);
+			assert.strictEqual(res.status, 204);
+		});
+
+		test('持ち主とモデレーター以外は外せない', async () => {
+			const bob = await signup({ username: 'remove_bob' });
+			const channel = (await api('channels/create', { name: 'remove-denied', federationPolicy: 'public' }, alice)).body;
+			const note = await createCollectedRemoteNote(channel.id);
+			const res = await api('channels/remove-note', { noteId: note.id }, bob);
+			assert.strictEqual(res.status, 400);
+			assert.strictEqual(castAsError(res.body as any).error.code, 'ACCESS_DENIED');
+		});
+
+		test('ローカルのノートは外せない', async () => {
+			const channel = (await api('channels/create', { name: 'remove-local', federationPolicy: 'public' }, alice)).body;
+			const note = await post(alice, { text: 'local', channelId: channel.id });
+			const res = await api('channels/remove-note', { noteId: note.id }, alice);
+			assert.strictEqual(res.status, 400);
+			assert.strictEqual(castAsError(res.body as any).error.code, 'CANNOT_REMOVE_LOCAL_NOTE');
+		});
+
+		test('ないノートは外せない', async () => {
+			const res = await api('channels/remove-note', { noteId: 'aaaaaaaaaa' }, alice);
+			assert.strictEqual(res.status, 400);
+			assert.strictEqual(castAsError(res.body as any).error.code, 'NO_SUCH_NOTE');
+		});
+
+		test('チャンネルに入っていないノートは外せない', async () => {
+			const note = await post(alice, { text: 'not in channel' });
+			const res = await api('channels/remove-note', { noteId: note.id }, alice);
+			assert.strictEqual(res.status, 400);
+			assert.strictEqual(castAsError(res.body as any).error.code, 'NOT_IN_CHANNEL');
 		});
 	});
 });

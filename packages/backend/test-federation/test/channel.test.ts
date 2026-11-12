@@ -2,6 +2,7 @@
  * チャンネル連合 (channel.federationPolicy) の連合テスト。
  * 確認項目の番号 (F1〜F10) は docs/planning/2026-11-12-チャンネル連合-資料4-ローカルの連合環境.md に対応する。
  * F8 (リレー) は DB の操作が要るので、ここでは扱わない。
+ * H1〜H6 はチャンネルのハッシュタグ (docs/planning/2026-11-13-チャンネル連合-ハッシュタグ.md §7) を確かめる。
  */
 
 import { describe, test, beforeAll, vi } from 'vitest';
@@ -92,7 +93,7 @@ describe('Channel federation', () => {
 		test('F3: 相手から見た本文の末尾に、チャンネル名と URL が付く', async () => {
 			assert(noteInB.text != null);
 			assert(
-				noteInB.text.endsWith(`From: 「${channel.name}」 https://a.test/channels/${channel.id}`),
+				noteInB.text.endsWith(`From: 「${channel.name}」 #${channel.federationHashtag} https://a.test/channels/${channel.id}`),
 				`unexpected text: ${noteInB.text}`,
 			);
 			// 元のノートの本文は書き換えない
@@ -217,6 +218,112 @@ describe('Channel federation', () => {
 			await vi.waitFor(async () => {
 				const notes = await alice.client.request('channels/timeline', { channelId: channel.id, limit: 100 });
 				assert(notes.some(n => n.uri === replyUri));
+			}, WAIT_FOR_FEDERATION);
+		});
+	});
+
+	describe('チャンネルのハッシュタグ', () => {
+		let channel: Misskey.entities.Channel;
+		let hashtag: string;
+
+		/** alice のホームタイムラインに bob のノートが届くまで待ち、a.test でのノートを返す */
+		async function waitForBobNoteInAliceHome(noteId: string): Promise<Misskey.entities.Note> {
+			const uri = `https://b.test/notes/${noteId}`;
+			return await vi.waitFor(async () => {
+				const notes = await alice.client.request('notes/timeline', { limit: 100 });
+				const found = notes.find(n => n.uri === uri);
+				assert(found != null);
+				return found;
+			}, WAIT_FOR_FEDERATION);
+		}
+
+		async function channelTimelineHas(channelId: string, uri: string): Promise<boolean> {
+			const notes = await alice.client.request('channels/timeline', { channelId, limit: 100 });
+			return notes.some(n => n.uri === uri);
+		}
+
+		beforeAll(async () => {
+			channel = await createChannel(alice, 'public');
+			assert(channel.federationHashtag != null);
+			hashtag = channel.federationHashtag;
+		});
+
+		test('H1: サーバーの表示名が空なら、ドメインからハッシュタグを作る', async () => {
+			const admin = await fetchAdmin('a.test');
+			const { name } = await admin.client.request('admin/meta', {});
+			await admin.client.request('admin/update-meta', { name: null });
+			try {
+				const ch = await createChannel(alice, 'public');
+				strictEqual(ch.federationHashtag, `atest連合チャンネル_${ch.name.replace(/[^\p{L}\p{N}_]/gu, '')}`);
+			} finally {
+				await admin.client.request('admin/update-meta', { name });
+			}
+		});
+
+		test('H2: 相手には本文の付記にハッシュタグが届くが、相手のノートの tags には入らず、ハッシュタグの検索にも出ない', async () => {
+			const note = await postToChannel(alice, channel.id);
+			strictEqual((note.tags ?? []).length, 0);
+			const noteInB = await waitForNoteInBobHome(note.id);
+
+			assert(noteInB.text?.includes(`#${hashtag} https://a.test/channels/${channel.id}`), `unexpected text: ${noteInB.text}`);
+			strictEqual((noteInB.tags ?? []).length, 0);
+
+			const searched = await bob.client.request('notes/search-by-tag', { tag: hashtag, limit: 100 });
+			strictEqual(searched.some(n => n.uri === noteInB.uri), false);
+		});
+
+		test('H3: 相手のユーザーがハッシュタグを付けて公開で投稿すると、チャンネルに入る。外せばチャンネルのタイムラインから消える', async () => {
+			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${hashtag}` })).createdNote;
+			const uri = `https://b.test/notes/${posted.id}`;
+
+			const inA = await vi.waitFor(async () => {
+				const notes = await alice.client.request('channels/timeline', { channelId: channel.id, limit: 100 });
+				const found = notes.find(n => n.uri === uri);
+				assert(found != null);
+				return found;
+			}, WAIT_FOR_FEDERATION);
+			strictEqual(inA.channelId, channel.id);
+
+			// 持ち主が外すと、チャンネルのタイムライン (Redis と DB) から消え、ノートは残る
+			await alice.client.request('channels/remove-note', { noteId: inA.id });
+			strictEqual(await channelTimelineHas(channel.id, uri), false);
+			const shown = await alice.client.request('notes/show', { noteId: inA.id });
+			strictEqual(shown.channelId ?? null, null);
+		});
+
+		test('H4: ホーム・フォロワー限定のノートは、ハッシュタグがあってもチャンネルに入らない', async () => {
+			for (const visibility of ['home', 'followers'] as const) {
+				const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${hashtag}`, visibility })).createdNote;
+				const inA = await waitForBobNoteInAliceHome(posted.id);
+				strictEqual(inA.channelId ?? null, null, visibility);
+				strictEqual(await channelTimelineHas(channel.id, inA.uri!), false, visibility);
+			}
+		});
+
+		test('H5: 連合しないチャンネルのハッシュタグでは、チャンネルに入らない', async () => {
+			const disabled = await createChannel(alice, 'public');
+			await alice.client.request('channels/update', { channelId: disabled.id, federationPolicy: 'none' });
+
+			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${disabled.federationHashtag}` })).createdNote;
+			const inA = await waitForBobNoteInAliceHome(posted.id);
+			strictEqual(inA.channelId ?? null, null);
+			strictEqual(await channelTimelineHas(disabled.id, inA.uri!), false);
+		});
+
+		test('H6: a.test のトレンドに、チャンネルのハッシュタグは出ない', async () => {
+			const plainTag = `plain${crypto.randomUUID().substring(0, 8)}`;
+			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${plainTag} #${hashtag}` })).createdNote;
+			// チャンネルに収蔵されるので、alice のホームではなくチャンネルのタイムラインで届いたことを確かめる
+			await vi.waitFor(async () => {
+				assert(await channelTimelineHas(channel.id, `https://b.test/notes/${posted.id}`));
+			}, WAIT_FOR_FEDERATION);
+
+			await vi.waitFor(async () => {
+				const trend = await alice.client.request('hashtags/trend', {});
+				const tags = trend.map(t => t.tag);
+				// 同じノートに付けたふつうのハッシュタグは数えられている (集計そのものは動いている)
+				assert(tags.includes(plainTag.toLowerCase()), JSON.stringify(tags));
+				strictEqual(tags.some(tag => tag.includes('連合チャンネル_')), false, JSON.stringify(tags));
 			}, WAIT_FOR_FEDERATION);
 		});
 	});
