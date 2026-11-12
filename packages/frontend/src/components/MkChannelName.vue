@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<span><span v-if="federated" v-tooltip="tooltip">🪐 </span>{{ channel.name }}</span>
+<span><span v-if="federated" v-tooltip="tooltip" role="img" :aria-label="tooltip">🪐 </span>{{ channel.name }}</span>
 </template>
 
 <script lang="ts" setup>
