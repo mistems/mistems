@@ -360,10 +360,23 @@ describe('ActivityPub', () => {
 				assert.ok(rendered.content?.includes(anchor));
 			});
 
+			test('連合するチャンネルのハッシュタグを付記に書き、AP の tag には入れない', async () => {
+				const channel = { id: genAidx(Date.now()), name: '雑談', federationPolicy: 'public', federationHashtag: 'S連合チャンネル_雑談' } as MiChannel;
+				const note = createChannelNote('**hello**', channel);
+				const rendered = await rendererService.renderNote(note, false);
+
+				assert.ok(rendered._misskey_content?.startsWith('**hello**\n\nFrom: 「雑談」 #S連合チャンネル_雑談 '), rendered._misskey_content ?? 'undefined');
+				assert.ok(rendered._misskey_content?.endsWith(`/channels/${channel.id}`));
+				assert.ok(rendered.content?.includes('S連合チャンネル_雑談'));
+				const tags = (rendered.tag ?? []) as { type: string }[];
+				assert.strictEqual(tags.filter(t => t.type === 'Hashtag').length, 0);
+				assert.deepStrictEqual(note.tags, []);
+			});
+
 			test('チャンネルが見つからなくても URL は付ける', async () => {
 				const note = createChannelNote(null, null);
 				const rendered = await rendererService.renderNote(note, false);
-				// プレーンテキストのみなので _misskey_content は付かず、content (HTML) に載る
+				// content (HTML) にも載る
 				assert.ok(rendered.content?.includes('From: '));
 				assert.ok(rendered.content?.includes(`/channels/${note.channelId}`));
 			});
