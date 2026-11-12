@@ -41,6 +41,12 @@ export const meta = {
 			code: 'NO_SUCH_FILE',
 			id: 'cd1e9f3e-5a12-4ab4-96f6-5d0a2cc32050',
 		},
+
+		federationIncompatibleWithRenoteRestriction: {
+			message: 'Federation cannot be enabled for a channel that disallows renote to external.',
+			code: 'FEDERATION_INCOMPATIBLE_WITH_RENOTE_RESTRICTION',
+			id: 'facd3448-c850-4473-ae3f-07770cc88305',
+		},
 	},
 } as const;
 
@@ -53,6 +59,7 @@ export const paramDef = {
 		color: { type: 'string', minLength: 1, maxLength: 16 },
 		isSensitive: { type: 'boolean', nullable: true },
 		allowRenoteToExternal: { type: 'boolean', nullable: true },
+		federationPolicy: { type: 'string', nullable: true, enum: ['none', 'home', 'public', null] },
 	},
 	required: ['name'],
 } as const;
@@ -70,6 +77,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private channelEntityService: ChannelEntityService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
+			// チャンネル外リノート禁止と連合は両立しない (連合先ではリノート制約を強制できないため)
+			if ((ps.federationPolicy ?? 'none') !== 'none' && ps.allowRenoteToExternal === false) {
+				throw new ApiError(meta.errors.federationIncompatibleWithRenoteRestriction);
+			}
+
 			let banner = null;
 			if (ps.bannerId != null) {
 				banner = await this.driveFilesRepository.findOneBy({
@@ -91,6 +103,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				isSensitive: ps.isSensitive ?? false,
 				...(ps.color !== undefined ? { color: ps.color } : {}),
 				allowRenoteToExternal: ps.allowRenoteToExternal ?? true,
+				federationPolicy: ps.federationPolicy ?? 'none',
 			} as MiChannel);
 
 			return await this.channelEntityService.pack(channel, me);

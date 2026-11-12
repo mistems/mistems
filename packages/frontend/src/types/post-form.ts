@@ -14,6 +14,7 @@ export interface PostFormProps {
 		color: string;
 		isSensitive: boolean;
 		allowRenoteToExternal: boolean;
+		federationPolicy: 'none' | 'home' | 'public';
 		userId: string | null;
 	} | null;
 	mention?: Misskey.entities.User;

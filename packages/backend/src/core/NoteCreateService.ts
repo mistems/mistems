@@ -449,6 +449,10 @@ export class NoteCreateService implements OnApplicationShutdown {
 	}, data: Option, silent = false): Promise<MiNote> {
 		// チャンネル外にリプライしたら対象のスコープに合わせる
 		// (クライアントサイドでやっても良い処理だと思うけどとりあえずサーバーサイドで)
+		// NOTE: リプライは元ノートと同じチャンネルに入れる (スコープ整合を優先、Plan §2.5-4)。
+		// チャンネルに入れず data.channel=null にすると applyChannelFederationPolicy が効かず、
+		// リプライが公開・連合の通常ノートとして LTL/GTL に漏れるため、ここでチャンネルを外さない。
+		// 連合の停止は federationPolicy='none' で行う (アーカイブは連合の緊急停止ではない)。
 		if (data.reply && data.channel && data.reply.channelId !== data.channel.id) {
 			if (data.reply.channelId) {
 				data.channel = await this.channelsRepository.findOneBy({ id: data.reply.channelId });
@@ -466,11 +470,18 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.createdAt == null) data.createdAt = new Date();
 		if (data.visibility == null) data.visibility = 'public';
 		if (data.localOnly == null) data.localOnly = false;
-		if (data.channel != null) data.visibility = 'public';
-		if (data.channel != null) data.visibleUsers = [];
-		if (data.channel != null) data.localOnly = true;
 
-		if (data.visibility === 'public' && data.channel == null) {
+		// リモート由来ノートがリプライでチャンネルに入る場合、チャンネルの一覧性が壊れる
+		// 可視性 (followers/specified) ならチャンネルには入れない (parseAudience の結果は保持する)
+		if (data.channel != null && !this.userEntityService.isLocalUser(user)) {
+			if (data.visibility === 'followers' || data.visibility === 'specified') {
+				data.channel = null;
+			}
+		}
+
+		// チャンネルノートも、連合するチャンネル (localOnly でなくなる) ではサイレンス/センシティブ
+		// ワードによる home 降格の対象に含める。連合しないチャンネルは localOnly なので従来どおり対象外。
+		if (data.visibility === 'public' && (data.channel == null || this.doesChannelFederate(data.channel))) {
 			const sensitiveWords = this.meta.sensitiveWords;
 			const sensitiveWordsTarget = data.cw ?? data.text ?? '';
 			if (sensitiveWords.length > 0 && this.utilityService.isKeyWordIncluded([sensitiveWordsTarget, ...extractUrlsForKeyWordCheck(sensitiveWordsTarget)].join('\n'), sensitiveWords)) {
@@ -523,8 +534,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 					throw new Error('Renote target is not public or home');
 			}
 
-			// ローカルのみをRenoteしたらローカルのみにする
-			if (data.renote.localOnly && data.channel == null) {
+			// ローカルのみをRenoteしたらローカルのみにする (ローカルユーザーの投稿のみ。
+			// リモート由来ノートは parseAudience の結果を保持し localOnly を付けない)
+			if (data.renote.localOnly && this.userEntityService.isLocalUser(user)) {
 				data.localOnly = true;
 			}
 		}
@@ -566,11 +578,16 @@ export class NoteCreateService implements OnApplicationShutdown {
 					break;
 			}
 
-			// ローカルのみにリプライしたらローカルのみにする
-			if (data.reply.localOnly && data.channel == null) {
+			// ローカルのみにリプライしたらローカルのみにする (ローカルユーザーの投稿のみ)
+			if (data.reply.localOnly && this.userEntityService.isLocalUser(user)) {
 				data.localOnly = true;
 			}
 		}
+
+		// チャンネル投稿の連合方針を最終決定する (ローカルユーザーのみ)。
+		// ここまでの可視性/localOnly の決定 (サイレンス降格・親からの localOnly 伝播など) を
+		// 踏まえた上で、チャンネル側の federationPolicy を最終権限として適用する。
+		this.applyChannelFederationPolicy(data, user);
 
 		if (data.text) {
 			if (data.text.length > DB_MAX_NOTE_TEXT_LENGTH) {
@@ -952,6 +969,43 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		// Register to search database
 		this.index(note);
+	}
+
+	/**
+	 * チャンネルが連合するか。未知の federationPolicy 値は「連合しない」側に倒す (fail-closed)。
+	 */
+	@bindThis
+	private doesChannelFederate(channel: MiChannel | null | undefined): boolean {
+		return channel != null && (channel.federationPolicy === 'home' || channel.federationPolicy === 'public');
+	}
+
+	/**
+	 * チャンネル投稿の可視性・localOnly を、チャンネル側の federationPolicy を最終権限として確定する。
+	 * ローカルユーザーの投稿にのみ適用する (リモートからの返信がチャンネルに戻る場合は parseAudience の結果を保持)。
+	 * - none: 必ず localOnly + public (連合しない・従来のチャンネルノート)
+	 * - home: 可視性 home で連合 (ノート単位/親からの localOnly 指定は尊重して public + localOnly に落ちる)
+	 * - public: 可視性 public で連合 (ただし直前までにサイレンス等で home に降格済みなら home を維持)
+	 */
+	@bindThis
+	private applyChannelFederationPolicy(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): void {
+		if (data.channel == null || !this.userEntityService.isLocalUser(user)) return;
+
+		data.visibleUsers = [];
+
+		// fail-closed: 連合できない条件は widening せず public + localOnly (従来のチャンネルノートと同形) に落とす。
+		// - 連合しないチャンネル
+		// - ノート単位/親からの localOnly 指定
+		// - followers/specified 可視性 (エンドポイントガードを迂回するリプライ・リノートナローイング経由で
+		//   ここに到達しうる。public に広げると DM/フォロワー限定ノートが連合公開化するため、必ずローカル止まりにする)
+		if (!this.doesChannelFederate(data.channel) || data.localOnly || data.visibility === 'followers' || data.visibility === 'specified') {
+			data.localOnly = true;
+			data.visibility = 'public';
+		} else if (data.channel.federationPolicy === 'home') {
+			data.visibility = 'home';
+		} else if (data.visibility !== 'home') {
+			// public ポリシー: サイレンス等で home に降格済みなら維持、それ以外は public
+			data.visibility = 'public';
+		}
 	}
 
 	@bindThis

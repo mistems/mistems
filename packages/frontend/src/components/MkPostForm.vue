@@ -29,11 +29,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</button>
 				<button v-else ref="visibilityButton" v-tooltip="i18n.ts.visibility" class="_button" :class="[$style.headerRightItem, $style.visibility]" :disabled="channel != null" @click="setVisibility">
 					<span><i class="ti ti-device-tv"></i></span>
-					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
+					<span :class="$style.headerRightButtonText"><MkChannelName :channel="targetChannel"/></span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
+			<button v-if="actualVisibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: actualLocalOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
+				<span v-if="!actualLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
 			<button ref="otherSettingsButton" v-tooltip="i18n.ts.other" class="_button" :class="$style.headerRightItem" @click="showOtherSettings"><i class="ti ti-dots"></i></button>
@@ -92,7 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<MkInfo v-if="matchedSensitiveWords.length > 0" warn :class="$style.sensitiveWordsWarning">{{ i18n.tsx.sensitiveWordsContained({ words: matchedSensitiveWords.join('、') }) }}</MkInfo>
-	<div v-if="targetChannel" :class="$style.channelName"><i class="ti ti-device-tv" style="margin-right: 4px;"></i>{{ targetChannel.name }}</div>
+	<div v-if="targetChannel" :class="$style.channelName"><i class="ti ti-device-tv" style="margin-right: 4px;"></i><MkChannelName :channel="targetChannel"/></div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
 	<div v-if="uploader.items.value.length > 0" style="padding: 12px;">
@@ -140,6 +140,8 @@ import type { MenuItem } from '@/types/menu.js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
+import MkChannelName from '@/components/MkChannelName.vue';
+import { isFederatedChannel } from '@/utility/channel.js';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
@@ -235,15 +237,21 @@ const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
 
 /**
- * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にfalse）
+ * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する。
+ * チャンネル選択時は、チャンネルの連合設定 (federationPolicy) で決める (連合しないチャンネルなら true)。
+ * サーバー側 (NoteCreateService.applyChannelFederationPolicy) の決定と一致させ、表示と実際の挙動が食い違わないようにする。
  * チャンネル選択有無を考慮する必要がある場面では{@link localOnly}ではなくこの値を使用する。
  */
-const actualLocalOnly = computed<boolean>(() => targetChannel.value ? true : localOnly.value);
+const actualLocalOnly = computed<boolean>(() => targetChannel.value ? !isFederatedChannel(targetChannel.value) : localOnly.value);
 /**
- * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は強制的にpublic）。
- * チャンネル選択有無を考慮する必要がある場面では{@link actualVisibility}ではなくこの値を使用する。
+ * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する。
+ * チャンネル選択時は、チャンネルの連合設定 (federationPolicy) で決める。
+ * チャンネル選択有無を考慮する必要がある場面では{@link visibility}ではなくこの値を使用する。
  */
-const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => targetChannel.value ? 'public' : visibility.value);
+const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => {
+	if (targetChannel.value == null) return visibility.value;
+	return isFederatedChannel(targetChannel.value) && targetChannel.value.federationPolicy === 'home' ? 'home' : 'public';
+});
 const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
@@ -423,11 +431,6 @@ if ($i.isSilenced && visibility.value === 'public') {
 	visibility.value = 'home';
 }
 
-if (targetChannel.value) {
-	visibility.value = 'public';
-	localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
-}
-
 // 公開以外へのリプライ時は元の公開範囲を引き継ぐ
 if (replyTargetNote.value && ['home', 'followers', 'specified'].includes(replyTargetNote.value.visibility)) {
 	if (replyTargetNote.value.visibility === 'home' && visibility.value === 'followers') {
@@ -570,9 +573,8 @@ function updateFileName(file: Misskey.entities.DriveFile, name: Misskey.entities
 
 function setVisibility() {
 	// props でチャンネルを指定されて開いたフォームは宛先固定。ピッカーで選んだ場合は選び直せる
+	// (チャンネルのときの公開範囲と連合は actualVisibility / actualLocalOnly がチャンネルの連合設定から決める)
 	if (props.channel) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
 		return;
 	}
 
@@ -601,8 +603,6 @@ function setVisibility() {
 
 async function toggleLocalOnly() {
 	if (targetChannel.value) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
 		return;
 	}
 

@@ -2346,6 +2346,15 @@ _channel:
   nameAndDescription: "名前と説明"
   nameOnly: "名前のみ"
   allowRenoteToExternal: "チャンネル外へのリノートと引用リノートを許可する"
+  federationPolicy: "ノートの連合"
+  federationPolicyDescription: "「連合する (ひかえめ)」はホーム扱いで連合し、リモートサーバーの公開タイムラインには表示されません。「連合する (公開)」はリモートの公開タイムラインにも表示され、見つけてもらいやすくなります。どちらもこのサーバー内での見え方 (タイムラインに載らない) は変わりません。チャンネル外へのリノートを禁止しているチャンネルは連合できません。"
+  federationPolicyEnableConfirm: "今後このチャンネルに投稿されるノートはサーバーの外に配信されます。過去のノートは連合されません。よろしいですか？"
+  federationPolicyEscalateConfirm: "今後このチャンネルに投稿されるノートは、リモートサーバーの公開タイムラインにも表示されるようになります。よろしいですか？"
+  federationPolicyDisableConfirm: "今後このチャンネルに投稿されるノートは連合されなくなります。ただし、すでにリモートサーバーへ配信されたノートは取り消せません。よろしいですか？"
+  _federationPolicy:
+    none: "連合しない"
+    home: "連合する (ひかえめ)"
+    public: "連合する (公開)"
 
 _menuDisplay:
   sideFull: "横"

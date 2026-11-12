@@ -13,7 +13,7 @@ import accepts from 'accepts';
 import vary from 'vary';
 import secureJson from 'secure-json-parse';
 import { DI } from '@/di-symbols.js';
-import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta } from '@/models/_.js';
+import type { FollowingsRepository, NotesRepository, ChannelsRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta } from '@/models/_.js';
 import * as url from '@/misc/prelude/url.js';
 import type { Config } from '@/config.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
@@ -54,6 +54,9 @@ export class ActivityPubServerService {
 
 		@Inject(DI.notesRepository)
 		private notesRepository: NotesRepository,
+
+		@Inject(DI.channelsRepository)
+		private channelsRepository: ChannelsRepository,
 
 		@Inject(DI.noteReactionsRepository)
 		private noteReactionsRepository: NoteReactionsRepository,
@@ -103,6 +106,21 @@ export class ActivityPubServerService {
 		}
 
 		return this.apRendererService.renderCreate(await this.apRendererService.renderNote(note, false), note);
+	}
+
+	/**
+	 * ノートを AP エンドポイントから配信してよいか。
+	 * チャンネルノートは、連合を 'none' に戻したチャンネルのものを以後配信しないよう federationPolicy を確認する。
+	 * (可視性/localOnly の判定は呼び出し側で行う。ここはチャンネル観点の追加ガード)
+	 * 併せて note.channel を populate し、renderNote のチャンネル取得 N+1 を防ぐ。
+	 */
+	@bindThis
+	private async isChannelNoteServable(note: MiNote): Promise<boolean> {
+		if (note.channelId == null) return true;
+		const channel = note.channel ?? await this.channelsRepository.findOneBy({ id: note.channelId });
+		if (channel == null || channel.federationPolicy === 'none') return false;
+		note.channel = channel;
+		return true;
 	}
 
 	@bindThis
@@ -407,9 +425,14 @@ export class ActivityPubServerService {
 			order: { id: 'DESC' },
 		});
 
-		const pinnedNotes = (await Promise.all(pinings.map(pining =>
+		const candidateNotes = (await Promise.all(pinings.map(pining =>
 			this.notesRepository.findOneByOrFail({ id: pining.noteId }))))
 			.filter(note => !note.localOnly && ['public', 'home'].includes(note.visibility));
+
+		// 連合を 'none' に戻したチャンネルのノートは featured からも配信しない
+		const pinnedNotes = (await Promise.all(candidateNotes.map(async note =>
+			(await this.isChannelNoteServable(note)) ? note : null)))
+			.filter((note): note is MiNote => note != null);
 
 		const renderedNotes = await Promise.all(pinnedNotes.map(note => this.apRendererService.renderNote(note)));
 
@@ -558,6 +581,15 @@ export class ActivityPubServerService {
 					.orWhere('note.visibility = \'home\'');
 			}))
 			.andWhere('note.localOnly = FALSE')
+			// 連合を 'none' に戻したチャンネルのノートは以後配信しない (channel を join して判定)。
+			// 未知の federationPolicy 値は連合しない側に倒す (fail-closed) ため IN で明示する。
+			// あわせて renderNote の N+1 (チャンネル名取得) を防ぐため channel を populate する。
+			.leftJoinAndSelect('note.channel', 'channel')
+			.andWhere(new Brackets(qb => {
+				qb
+					.where('note.channelId IS NULL')
+					.orWhere('channel.federationPolicy IN (:...federatingPolicies)', { federatingPolicies: ['home', 'public'] });
+			}))
 			.limit(ps.limit)
 			.getMany();
 	}
@@ -666,7 +698,8 @@ export class ActivityPubServerService {
 				localOnly: false,
 			});
 
-			if (note == null) {
+			// 連合を 'none' に戻したチャンネルのノートは以後配信しない
+			if (note == null || !await this.isChannelNoteServable(note)) {
 				reply.code(404);
 				return;
 			}
@@ -702,7 +735,8 @@ export class ActivityPubServerService {
 				localOnly: false,
 			});
 
-			if (note == null) {
+			// 連合を 'none' に戻したチャンネルのノートは以後配信しない
+			if (note == null || !await this.isChannelNoteServable(note)) {
 				reply.code(404);
 				return;
 			}

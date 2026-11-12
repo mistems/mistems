@@ -62,6 +62,7 @@ import MkModal from '@/components/MkModal.vue';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 
 const modal = useTemplateRef('modal');
 const channelsButton = useTemplateRef('channelsButton');
@@ -73,7 +74,7 @@ const props = withDefaults(defineProps<{
 	anchorElement?: HTMLElement | null;
 	isReplyVisibilitySpecified?: boolean;
 	// MkPostForm の targetChannel は props 由来の簡易型のこともあるため、表示に必要な項目だけ受け取る
-	currentChannel?: Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'>;
+	currentChannel?: Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'> & Partial<Pick<Misskey.entities.Channel, 'federationPolicy'>>;
 }>(), {
 	currentChannel: undefined,
 });
@@ -86,11 +87,16 @@ const emit = defineEmits<{
 
 const v = ref(props.currentVisibility);
 
-// visibility とチャンネルは本来独立だが、現状チャンネル投稿は public + localOnly に固定される
+// visibility とチャンネルは本来独立。チャンネル投稿の公開範囲と連合は、チャンネルの連合設定で決まる
 // (MkPostForm 側の actualVisibility / actualLocalOnly で読み替える)
 const channels = ref<Misskey.entities.Channel[]>([]);
-const currentChannel = ref<Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'> | undefined>(props.currentChannel);
-const currentChannelName = computed<string | null>(() => currentChannel.value?.name ?? null);
+const currentChannel = ref<(Pick<Misskey.entities.Channel, 'id' | 'name' | 'color'> & Partial<Pick<Misskey.entities.Channel, 'federationPolicy'>>) | undefined>(props.currentChannel);
+const currentChannelName = computed<string | null>(() => currentChannel.value ? channelLabel(currentChannel.value) : null);
+
+/** 連合するチャンネルには、MkChannelName と同じく 🪐 を付ける (メニューの項目は文字列なので部品を使えない) */
+function channelLabel(channel: { name: string; federationPolicy?: Misskey.entities.Channel['federationPolicy'] }): string {
+	return isFederatedChannel(channel) ? `🪐 ${channel.name}` : channel.name;
+}
 
 async function fetchChannels() {
 	const res = await misskeyApi('channels/my-favorites', {
@@ -102,7 +108,7 @@ async function fetchChannels() {
 async function chooseChannel() {
 	let selectedChannel: Misskey.entities.Channel | null = null;
 	await os.popupMenu(
-		channels.value.map(it => ({ type: 'button', text: it.name, action: () => { selectedChannel = it; } })),
+		channels.value.map(it => ({ type: 'button', text: channelLabel(it), action: () => { selectedChannel = it; } })),
 		channelsButton.value,
 	);
 

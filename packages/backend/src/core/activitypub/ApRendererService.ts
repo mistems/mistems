@@ -23,7 +23,7 @@ import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
-import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, MiMeta } from '@/models/_.js';
+import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, ChannelsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { IdService } from '@/core/IdService.js';
@@ -57,6 +57,9 @@ export class ApRendererService {
 
 		@Inject(DI.pollsRepository)
 		private pollsRepository: PollsRepository,
+
+		@Inject(DI.channelsRepository)
+		private channelsRepository: ChannelsRepository,
 
 		private customEmojiService: CustomEmojiService,
 		private userEntityService: UserEntityService,
@@ -426,7 +429,23 @@ export class ApRendererService {
 
 		const files = await getPromisedFiles(note.fileIds);
 
-		const text = note.text ?? '';
+		// チャンネルノートには、リモートの読者向けにチャンネル名とURLを本文へ付記する。
+		// この固定URLはリモートユーザーがチャンネル単位でワードミュートするためのアンカーを兼ねるため、
+		// content だけでなく _misskey_content / source (Misskey系受信側が優先する原文) にも必ず含める。
+		// チャンネル行が取得できなくても URL は落とさない (ミュートアンカーの省略条件を作らない)。
+		let text = note.text ?? '';
+		if (note.channelId != null) {
+			const channel = note.channel ?? await this.channelsRepository.findOneBy({ id: note.channelId });
+			const channelUrl = `${this.config.url}/channels/${note.channelId}`;
+			// チャンネル名は source (MFM原文) にも載るため、改行/制御文字と MFM/メンション記号を潰して
+			// 受信側での「From:」行偽装やミュートアンカー汚染を防ぐ (URL 部分がアンカー本体)
+			const safeName = channel != null
+				? channel.name.replace(/[\r\n\u0000-\u001f]/g, ' ').replace(/[@#$`[\]]/g, '').trim()
+				: null;
+			const namePart = safeName ? `「${safeName}」 ` : '';
+			text = `${text}\n\nFrom: ${namePart}${channelUrl}`.trim();
+		}
+
 		let poll: MiPoll | null = null;
 
 		if (note.hasPoll) {
@@ -444,7 +463,8 @@ export class ApRendererService {
 
 		const summary = note.cw === '' ? String.fromCharCode(0x200B) : note.cw;
 
-		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml(note, extraHtml);
+		// text にチャンネル付記を反映した上で HTML を生成する (content にも URL が載る)
+		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml({ ...note, text }, extraHtml);
 
 		const emojis = await this.getEmojis(note.emojis);
 		const apemojis = emojis.filter(emoji => !emoji.localOnly).map(emoji => this.renderEmoji(emoji));

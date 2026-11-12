@@ -4503,6 +4503,8 @@ export type components = {
                 color: string;
                 isSensitive: boolean;
                 allowRenoteToExternal: boolean;
+                /** @enum {string} */
+                federationPolicy: 'none' | 'home' | 'public';
                 userId: string | null;
             } | null;
             localOnly?: boolean;
@@ -4564,6 +4566,8 @@ export type components = {
                 color: string;
                 isSensitive: boolean;
                 allowRenoteToExternal: boolean;
+                /** @enum {string} */
+                federationPolicy: 'none' | 'home' | 'public';
                 userId: string | null;
             } | null;
             localOnly: boolean;
@@ -5039,6 +5043,8 @@ export type components = {
             notesCount: number;
             isSensitive: boolean;
             allowRenoteToExternal: boolean;
+            /** @enum {string} */
+            federationPolicy: 'none' | 'home' | 'public';
             isFollowing?: boolean;
             isFavorited?: boolean;
             isMuting?: boolean;
@@ -14850,6 +14856,8 @@ export interface operations {
                     color?: string;
                     isSensitive?: boolean | null;
                     allowRenoteToExternal?: boolean | null;
+                    /** @enum {string|null} */
+                    federationPolicy?: 'none' | 'home' | 'public' | null;
                 };
             };
         };
@@ -15852,6 +15860,8 @@ export interface operations {
                     color?: string;
                     isSensitive?: boolean | null;
                     allowRenoteToExternal?: boolean | null;
+                    /** @enum {string|null} */
+                    federationPolicy?: 'none' | 'home' | 'public' | null;
                 };
             };
         };

@@ -27,6 +27,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #label>{{ i18n.ts._channel.allowRenoteToExternal }}</template>
 			</MkSwitch>
 
+			<MkSelect v-model="federationPolicy" :items="federationPolicyDef" :disabled="!allowRenoteToExternal">
+				<template #label>🪐 {{ i18n.ts._channel.federationPolicy }}</template>
+				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
+			</MkSelect>
+
 			<div>
 				<MkButton v-if="bannerId == null" @click="setBannerImage"><i class="ti ti-plus"></i> {{ i18n.ts._channel.setBanner }}</MkButton>
 				<div v-else-if="bannerUrl">
@@ -79,10 +84,12 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import MkFolder from '@/components/MkFolder.vue';
+import MkSelect from '@/components/MkSelect.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
 import { useRouter } from '@/router.js';
+import { useMkSelect } from '@/composables/use-mkselect.js';
 
 const router = useRouter();
 
@@ -98,7 +105,25 @@ const bannerId = ref<string | null>(null);
 const color = ref('#000');
 const isSensitive = ref(false);
 const allowRenoteToExternal = ref(true);
+const {
+	model: federationPolicy,
+	def: federationPolicyDef,
+} = useMkSelect({
+	items: [
+		{ label: i18n.ts._channel._federationPolicy.none, value: 'none' },
+		{ label: i18n.ts._channel._federationPolicy.home, value: 'home' },
+		{ label: i18n.ts._channel._federationPolicy.public, value: 'public' },
+	],
+	initialValue: 'none' as 'none' | 'home' | 'public',
+});
 const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
+
+watch(allowRenoteToExternal, () => {
+	// チャンネル外リノート禁止と連合は両立しない
+	if (!allowRenoteToExternal.value) {
+		federationPolicy.value = 'none';
+	}
+});
 
 watch(() => bannerId.value, async () => {
 	if (bannerId.value == null) {
@@ -125,6 +150,7 @@ async function fetchChannel() {
 	pinnedNoteIds.value = result.pinnedNoteIds;
 	color.value = result.color;
 	allowRenoteToExternal.value = result.allowRenoteToExternal;
+	federationPolicy.value = result.federationPolicy ?? 'none';
 
 	channel.value = result;
 }
@@ -147,7 +173,29 @@ function removePinnedNote(id: string) {
 	pinnedNoteIds.value = pinnedNoteIds.value.filter(x => x !== id);
 }
 
-function save() {
+async function save() {
+	// 連合の露出度が変わる場合は確認する。
+	// 露出が上がる方向 (none < home < public) は「外に出る」旨、
+	// 下がる方向 (連合 → none) は「配信済みは取り消せない」旨を伝える。
+	const rank = { none: 0, home: 1, public: 2 } as const;
+	const prev = channel.value?.federationPolicy ?? 'none';
+	const next = federationPolicy.value;
+	if (rank[next] > rank[prev]) {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationPolicy,
+			text: prev === 'none' ? i18n.ts._channel.federationPolicyEnableConfirm : i18n.ts._channel.federationPolicyEscalateConfirm,
+		});
+		if (canceled) return;
+	} else if (rank[next] < rank[prev]) {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationPolicy,
+			text: i18n.ts._channel.federationPolicyDisableConfirm,
+		});
+		if (canceled) return;
+	}
+
 	const params = {
 		name: name.value,
 		description: description.value,
@@ -155,6 +203,7 @@ function save() {
 		color: color.value,
 		isSensitive: isSensitive.value,
 		allowRenoteToExternal: allowRenoteToExternal.value,
+		federationPolicy: federationPolicy.value,
 	} satisfies Misskey.entities.ChannelsCreateRequest;
 
 	if (props.channelId != null) {
@@ -162,6 +211,9 @@ function save() {
 			...params,
 			channelId: props.channelId,
 			pinnedNoteIds: pinnedNoteIds.value,
+		}).then(updated => {
+			// 保存後に手元の状態を更新し、続けて編集した場合に確認ダイアログの判定が古くならないようにする
+			channel.value = updated;
 		});
 	} else {
 		os.apiWithDialog('channels/create', params).then(created => {
