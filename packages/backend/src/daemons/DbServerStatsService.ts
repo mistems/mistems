@@ -13,8 +13,14 @@ import type { OnApplicationShutdown } from '@nestjs/common';
 
 const ev = new Xev();
 
-const interval = 60 * 1000;
+/** db_server_stats を見に行く間隔。収集スクリプトの既定の実行間隔 (60 秒) より短くして、新しい行を待たせすぎない */
+const interval = 30 * 1000;
+
+/** requestLog で返す最大件数 */
 const logCapacity = 200;
+
+/** 最後の dbServerStatsWatching からこの時間がたったら SELECT を止める */
+const watchTimeout = 5 * 60 * 1000;
 
 export type DbServerStats = {
 	ts: string;
@@ -74,7 +80,7 @@ const rowToStats = (row: Row): DbServerStats => ({
 export class DbServerStatsService implements OnApplicationShutdown {
 	private intervalId: NodeJS.Timeout | null = null;
 	private lastTs: string | null = null;
-	private readonly log: DbServerStats[] = [];
+	private lastWatchedAt = 0;
 
 	constructor(
 		@Inject(DI.meta)
@@ -86,36 +92,51 @@ export class DbServerStatsService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	public async start(): Promise<void> {
-		if (!this.meta.enableDbServerStats) return;
-
-		ev.on('requestDbServerStatsLog', x => {
-			ev.emit(`dbServerStatsLog:${x.id}`, this.log.slice(0, x.length));
+	public start(): void {
+		// 履歴は db_server_stats テーブルにあるので、メモリには持たずに毎回 SELECT する
+		ev.on('requestDbServerStatsLog', async x => {
+			const length = Math.min(Math.max(Math.trunc(x.length), 0), logCapacity);
+			const log = this.meta.enableDbServerStats ? await this.fetch(length) : [];
+			ev.emit(`dbServerStatsLog:${x.id}`, log);
 		});
 
-		await this.tick();
+		// dbServerStats チャンネルを購読している人がいる間だけ SELECT する
+		ev.on('dbServerStatsWatching', () => {
+			this.lastWatchedAt = Date.now();
+		});
+
 		this.intervalId = setInterval(() => { this.tick(); }, interval);
 	}
 
 	@bindThis
-	private async tick(): Promise<void> {
+	private async fetch(limit: number): Promise<DbServerStats[]> {
+		if (limit === 0) return [];
 		try {
 			const rows: Row[] = await this.db.query(
-				'SELECT * FROM "db_server_stats" ORDER BY "ts" DESC LIMIT 1',
+				'SELECT * FROM "db_server_stats" ORDER BY "ts" DESC LIMIT $1',
+				[limit],
 			);
-			if (rows.length === 0) return;
-			const stats = rowToStats(rows[0]);
-
-			// 同じ ts の行は配信しない（収集スクリプトがまだ次の行を入れていない）
-			if (stats.ts === this.lastTs) return;
-			this.lastTs = stats.ts;
-
-			ev.emit('dbServerStats', stats);
-			this.log.unshift(stats);
-			if (this.log.length > logCapacity) this.log.pop();
-		} catch (err) {
-			// DB 不通時に setInterval を止めない。次の tick で回復するかもしれない
+			return rows.map(rowToStats);
+		} catch {
+			// DB 不通時やテーブルの権限がないときは空にする。次の tick で回復するかもしれない
+			return [];
 		}
+	}
+
+	@bindThis
+	private async tick(): Promise<void> {
+		// 管理画面での切り替えを再起動なしで反映するため、毎回フラグを見る
+		if (!this.meta.enableDbServerStats) return;
+		if (Date.now() - this.lastWatchedAt >= watchTimeout) return;
+
+		const [stats] = await this.fetch(1);
+		if (stats == null) return;
+
+		// 同じ ts の行は配信しない（収集スクリプトがまだ次の行を入れていない）
+		if (stats.ts === this.lastTs) return;
+		this.lastTs = stats.ts;
+
+		ev.emit('dbServerStats', stats);
 	}
 
 	@bindThis

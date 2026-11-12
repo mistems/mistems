@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export class DbServerStats1778500000000 {
-    name = 'DbServerStats1778500000000'
+export class DbServerStats1794477103450 {
+    name = 'DbServerStats1794477103450'
 
     /**
      * @param {QueryRunner} queryRunner

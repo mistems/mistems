@@ -817,6 +817,19 @@ export type Channels = {
             };
         };
     };
+    dbServerStats: {
+        params: null;
+        events: {
+            stats: (payload: DbServerStats) => void;
+            statsLog: (payload: DbServerStatsLog) => void;
+        };
+        receives: {
+            requestLog: {
+                id: string | number;
+                length: number;
+            };
+        };
+    };
     queueStats: {
         params: null;
         events: {
@@ -1285,6 +1298,26 @@ type ClipsUpdateResponse = operations['clips___update']['responses']['200']['con
 type DateString = string;
 
 // @public (undocumented)
+type DbServerStats = {
+    ts: string;
+    hostId: string;
+    cpu: number | null;
+    memUsed: number | null;
+    memTotal: number | null;
+    diskUsed: number | null;
+    diskTotal: number | null;
+    diskRSec: number | null;
+    diskWSec: number | null;
+    dbSize: number | null;
+    connActive: number | null;
+    connMax: number | null;
+    cacheHitRatio: number | null;
+};
+
+// @public (undocumented)
+type DbServerStatsLog = DbServerStats[];
+
+// @public (undocumented)
 type DriveFile = components['schemas']['DriveFile'];
 
 // @public (undocumented)
@@ -1527,6 +1560,8 @@ declare namespace entities {
         ModerationLog,
         ServerStats,
         ServerStatsLog,
+        DbServerStats,
+        DbServerStatsLog,
         QueueStats,
         QueueStatsLog,
         EmojiAdded,
@@ -3781,8 +3816,8 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:236:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:251:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:251:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:266:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

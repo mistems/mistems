@@ -14,12 +14,19 @@ import { REQUEST } from '@nestjs/core';
 
 const ev = new Xev();
 
+/**
+ * 購読している間、DbServerStatsService に「見ている」合図を送る間隔。
+ * DbServerStatsService は最後の合図から 5 分たつと SELECT を止めるので、それより十分短くする。
+ */
+const watchingHeartbeatInterval = 60 * 1000;
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class DbServerStatsChannel extends Channel {
 	public readonly chName = 'dbServerStats';
 	public static shouldShare = true;
 	public static requireCredential = true as const;
 	public static kind = null;
+	private heartbeatId: NodeJS.Timeout | null = null;
 
 	constructor(
 		@Inject(REQUEST)
@@ -37,7 +44,15 @@ export class DbServerStatsChannel extends Channel {
 		if (!await this.roleService.isModerator(this.user)) return false;
 
 		ev.addListener('dbServerStats', this.onStats);
+		this.sendWatching();
+		this.heartbeatId = setInterval(this.sendWatching, watchingHeartbeatInterval);
 		return true;
+	}
+
+	@bindThis
+	private sendWatching() {
+		// DbServerStatsService が別のプロセスで動いていても届くよう、ev (cluster をまたぐ) で送る
+		ev.emit('dbServerStatsWatching', null);
 	}
 
 	@bindThis
@@ -66,5 +81,9 @@ export class DbServerStatsChannel extends Channel {
 	@bindThis
 	public dispose() {
 		ev.removeListener('dbServerStats', this.onStats);
+		if (this.heartbeatId) {
+			clearInterval(this.heartbeatId);
+			this.heartbeatId = null;
+		}
 	}
 }
