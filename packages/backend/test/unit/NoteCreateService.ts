@@ -204,4 +204,61 @@ describe('NoteCreateService', () => {
 			expect(data.localOnly).toBe(false);
 		});
 	});
+
+	describe('collectIntoFederatedChannelByHashtag (チャンネル連合のハッシュタグ)', () => {
+		const localUser = { id: 'local-user-id', host: null };
+		const remoteUser = { id: 'remote-user-id', host: 'remote.example' };
+		const federatedChannel = { id: 'federated-channel-id', federationPolicy: 'public', federationHashtag: 'S連合チャンネル_雑談' } as MiChannel;
+		const replyChannel = { id: 'reply-channel-id', federationPolicy: 'public' } as MiChannel;
+
+		const collect = async (data: Record<string, unknown>, user: { id: string; host: string | null } = remoteUser) => {
+			const service = noteCreateService['channelFederationHashtagService'];
+			const original = service.findCollectingChannel;
+			const calls: string[][] = [];
+			service.findCollectingChannel = async (tags: string[]) => {
+				calls.push(tags);
+				return tags.some(t => t.toLowerCase() === 's連合チャンネル_雑談') ? federatedChannel : null;
+			};
+			try {
+				await noteCreateService['collectIntoFederatedChannelByHashtag'](data as any, user);
+			} finally {
+				service.findCollectingChannel = original;
+			}
+			return { data, calls };
+		};
+
+		test('リモートの公開のノートでハッシュタグが一致すれば、チャンネルに入れる', async () => {
+			const { data } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['S連合チャンネル_雑談'] });
+			expect(data.channel).toBe(federatedChannel);
+		});
+
+		test.each(['home', 'followers', 'specified'])('公開以外 (%s) は入れない', async (visibility) => {
+			const { data, calls } = await collect({ channel: null, visibility, localOnly: false, apHashtags: ['S連合チャンネル_雑談'] });
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+
+		test('ローカルのユーザーのノートは入れない', async () => {
+			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['S連合チャンネル_雑談'] }, localUser);
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+
+		test('リプライでチャンネルが決まっていれば、そちらを優先する', async () => {
+			const { data, calls } = await collect({ channel: replyChannel, visibility: 'public', localOnly: false, apHashtags: ['S連合チャンネル_雑談'] });
+			expect(data.channel).toBe(replyChannel);
+			expect(calls.length).toBe(0);
+		});
+
+		test('一致するチャンネルがなければ入れない', async () => {
+			const { data } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['ほかのタグ'] });
+			expect(data.channel).toBe(null);
+		});
+
+		test('中身のないリノートは入れない', async () => {
+			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['S連合チャンネル_雑談'], renote: { id: 'x' } });
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+	});
 });

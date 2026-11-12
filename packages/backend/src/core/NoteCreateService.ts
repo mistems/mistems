@@ -11,6 +11,7 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
+import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
 import type { BlockingsRepository, ChannelFollowingsRepository, ChannelsRepository, DriveFilesRepository, FollowingsRepository, InstancesRepository, MiFollowing, MiMeta, MutingsRepository, NotesRepository, NoteThreadMutingsRepository, UserListMembershipsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
@@ -255,6 +256,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		private relayService: RelayService,
 		private federatedInstanceService: FederatedInstanceService,
 		private hashtagService: HashtagService,
+		private channelFederationHashtagService: ChannelFederationHashtagService,
 		private antennaService: AntennaService,
 		private webhookService: UserWebhookService,
 		private featuredService: FeaturedService,
@@ -588,6 +590,10 @@ export class NoteCreateService implements OnApplicationShutdown {
 		// ここまでの可視性/localOnly の決定 (サイレンス降格・親からの localOnly 伝播など) を
 		// 踏まえた上で、チャンネル側の federationPolicy を最終権限として適用する。
 		this.applyChannelFederationPolicy(data, user);
+
+		// リモートのユーザーの公開のノートに、連合するチャンネルのハッシュタグが (AP の tag で) 付いていたら、
+		// そのチャンネルに収蔵する。リプライでチャンネルが決まったときは、そちらを優先する。
+		await this.collectIntoFederatedChannelByHashtag(data, user);
 
 		if (data.text) {
 			if (data.text.length > DB_MAX_NOTE_TEXT_LENGTH) {
@@ -1004,6 +1010,27 @@ export class NoteCreateService implements OnApplicationShutdown {
 			// サイレンス等で home に降格済みなら維持、それ以外は public
 			data.visibility = 'public';
 		}
+	}
+
+	/**
+	 * リモートのユーザーの公開のノートを、ハッシュタグが一致する連合するチャンネルに入れる。
+	 * - ローカルのユーザーのノート、公開以外 (サイレンスなどで home に降格したものを含む) のノートは入れない
+	 * - すでにチャンネルが決まっている (リプライでチャンネルに入る) ノートはそのまま
+	 * - 連合しないチャンネルとアーカイブされたチャンネルには入れない
+	 * - 中身のないリノートは入れない
+	 */
+	@bindThis
+	private async collectIntoFederatedChannelByHashtag(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): Promise<void> {
+		if (this.userEntityService.isLocalUser(user)) return;
+		if (data.channel != null) return;
+		if (data.visibility !== 'public' || data.localOnly) return;
+		if (data.apHashtags == null || data.apHashtags.length === 0) return;
+		if (this.isRenote(data) && !this.isQuote(data)) return;
+
+		const channel = await this.channelFederationHashtagService.findCollectingChannel(data.apHashtags);
+		if (channel == null) return;
+
+		data.channel = channel;
 	}
 
 	@bindThis

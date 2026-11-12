@@ -192,6 +192,7 @@ import type {
 	ChannelsMyFavoritesResponse,
 	ChannelsOwnedRequest,
 	ChannelsOwnedResponse,
+	ChannelsRemoveNoteRequest,
 	ChannelsSearchRequest,
 	ChannelsSearchResponse,
 	ChannelsShowRequest,
@@ -802,6 +803,7 @@ export type Endpoints = {
 	'channels/mute/list': { req: EmptyRequest; res: ChannelsMuteListResponse };
 	'channels/my-favorites': { req: EmptyRequest; res: ChannelsMyFavoritesResponse };
 	'channels/owned': { req: ChannelsOwnedRequest; res: ChannelsOwnedResponse };
+	'channels/remove-note': { req: ChannelsRemoveNoteRequest; res: EmptyResponse };
 	'channels/search': { req: ChannelsSearchRequest; res: ChannelsSearchResponse };
 	'channels/show': { req: ChannelsShowRequest; res: ChannelsShowResponse };
 	'channels/timeline': { req: ChannelsTimelineRequest; res: ChannelsTimelineResponse };

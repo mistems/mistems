@@ -195,6 +195,7 @@ export type ChannelsMuteListResponse = operations['channels___mute___list']['res
 export type ChannelsMyFavoritesResponse = operations['channels___my-favorites']['responses']['200']['content']['application/json'];
 export type ChannelsOwnedRequest = operations['channels___owned']['requestBody']['content']['application/json'];
 export type ChannelsOwnedResponse = operations['channels___owned']['responses']['200']['content']['application/json'];
+export type ChannelsRemoveNoteRequest = operations['channels___remove-note']['requestBody']['content']['application/json'];
 export type ChannelsSearchRequest = operations['channels___search']['requestBody']['content']['application/json'];
 export type ChannelsSearchResponse = operations['channels___search']['responses']['200']['content']['application/json'];
 export type ChannelsShowRequest = operations['channels___show']['requestBody']['content']['application/json'];

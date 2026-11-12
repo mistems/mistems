@@ -1491,6 +1491,17 @@ declare module '../api.js' {
     ): Promise<SwitchCaseResponseType<E, P>>;
 
     /**
+     * Remove a remote note that was collected into the channel by its hashtag. The note itself is not deleted.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:channels*
+     */
+    request<E extends 'channels/remove-note', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
      * No description provided.
      * 
      * **Credential required**: *No*
