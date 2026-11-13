@@ -8,6 +8,32 @@ import { Splash } from '@/server/web/views/_splash.js';
 import type { CommonProps } from '@/server/web/views/_.js';
 import type { PropsWithChildren, Children } from '@kitajs/html';
 
+/*
+ * MISTEMS: viewport の interactive-widget=resizes-content は、Android だけに効かせる。
+ *
+ * - Android Chrome では、この指定が無いとキーボード表示中に新着ノートが来るたびに、
+ *   絵文字ピッカーのドロワーがずれる。そのため meta タグにはこの指定を残す。
+ * - iOS Safari は 27.2 まではこの指定を無視していたが、27.3 から従うようになった。
+ *   従うと、キーボード表示中にページがキーボードの上端まで縮み、
+ *   フッターの padding-bottom: env(safe-area-inset-bottom) がキーボードの上に空白として残る。
+ *   絵文字ピッカーの検索欄にフォーカスすると、ピッカーとキーボードの間にも空白ができ、
+ *   ピッカーが上へ押し上げられる。
+ * - そこで、iOS / iPadOS のときだけ、最初のレイアウトの前にこの指定を取り除く。
+ *   iOS のブラウザはどれも WebKit なので、Safari 以外のブラウザも同じ扱いにする。
+ *   iPadOS は UA が Mac と同じなので、タッチ点の数で見分ける。
+ *
+ * iOS のバージョンごとの見え方と、試した組み合わせは
+ * docs/2026-11-13-iOSでinteractive-widgetを外す.md にまとめている。
+ */
+const safeIosViewportFixJs = `(function () {
+	var ua = navigator.userAgent;
+	var isIos = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+	if (!isIos) return;
+	var meta = document.querySelector('meta[name="viewport"]');
+	if (meta == null) return;
+	meta.setAttribute('content', meta.getAttribute('content').replace(/,\\s*interactive-widget=[^,]*/, ''));
+})();`;
+
 export function Layout(props: PropsWithChildren<CommonProps<{
 	title?: string;
 	noindex?: boolean;
@@ -44,6 +70,8 @@ export function Layout(props: PropsWithChildren<CommonProps<{
 					<meta property="og:site_name" content={props.instanceName || 'Misskey'} />
 					<meta property="instance_url" content={props.instanceUrl} />
 					<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+					{/* MISTEMS: iOS では interactive-widget を外す (ファイル冒頭のコメントを参照) */}
+					<script>{safeIosViewportFixJs}</script>
 					<meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
 					<link rel="icon" href={props.icon || '/favicon.ico'} />
 					<link rel="apple-touch-icon" href={props.appleTouchIcon || '/apple-touch-icon.png'} />
