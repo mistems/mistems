@@ -7,13 +7,15 @@
 # db_server_stats テーブルに 1 行 INSERT して終わる。常駐しない。
 #
 # 必須環境変数:
-#   PGHOST, PGPORT(任意), PGUSER, PGPASSWORD, PGDATABASE
+#   PGHOST, PGPORT(任意), PGUSER, PGDATABASE
+#   PGPASSWORD は、TCP でパスワード認証するときだけ要る (peer 認証なら不要)
 #   MISSKEY_HOST_ID  ... 行を識別するホスト名（例: 'primary' / 'replica-1'）
 #
 # 任意環境変数:
 #   MISSKEY_DATA_DIR ... ディスク使用量を測るマウント点（既定: /var/lib/postgresql）
 #   MISSKEY_DATA_DEV ... I/O を測るブロックデバイス名（既定: 自動推定）
 #   MISSKEY_STATE_DIR ... 前回値を保存するディレクトリ（既定: /var/lib/misskey-stats）
+#                         実行するユーザーが書ける必要がある。systemd では StateDirectory= で作らせる
 
 set -eu
 

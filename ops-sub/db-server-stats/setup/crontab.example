@@ -2,14 +2,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # crontab だけで完結させる場合の例。
-# `crontab -u postgres -e` で開いて貼り付ける。
+# `crontab -u misskey_stats -e` で開いて貼り付ける (README の 2 で作る OS ユーザー)。
+# cron では StateDirectory が使えないので、先に前回値の置き場を作っておく:
+#   sudo install -d -o misskey_stats -g misskey_stats -m 755 /var/lib/misskey-stats
 #
 # 環境変数は `crontab -e` で行頭に書くか、スクリプト側で
 # `. /etc/misskey-db-stats.env` のように読み込ませる。
 
-PGHOST=127.0.0.1
+# peer 認証 (README の 2-A) なら Unix ソケットのディレクトリを指す
+PGHOST=/var/run/postgresql
 PGUSER=misskey_stats
-PGPASSWORD=...
 PGDATABASE=misskey
 MISSKEY_HOST_ID=primary
 

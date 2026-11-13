@@ -5,7 +5,8 @@
 # db_server_stats テーブルから古い行を削除する単発スクリプト。
 # 1 日 1 回呼ばれることを想定（cron / systemd timer などで）。
 #
-# 必須環境変数: PGHOST, PGUSER, PGPASSWORD, PGDATABASE
+# 必須環境変数: PGHOST, PGUSER, PGDATABASE
+#   (PGPASSWORD は、TCP でパスワード認証するときだけ要る。peer 認証なら不要)
 # 任意環境変数: MISSKEY_STATS_RETENTION (例: '24 hours' / '7 days', 既定: '24 hours')
 
 set -eu
