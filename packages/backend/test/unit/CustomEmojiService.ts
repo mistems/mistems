@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { afterEach, beforeAll, describe, test, expect } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, test, expect, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { EmojiEntityService } from '@/core/entities/EmojiEntityService.js';
@@ -812,6 +812,98 @@ describe('CustomEmojiService', () => {
 					expect(actual.emojis[2].name).toBe('emoji003');
 				});
 			});
+		});
+	});
+
+	describe('getLocalEmojisSorted', () => {
+		async function insert(name: string, override?: Partial<MiEmoji>) {
+			await emojisRepository.insert({
+				id: idService.gen(),
+				updatedAt: new Date(),
+				name,
+				host: null,
+				category: null,
+				originalUrl: `https://example.com/${name}.png`,
+				publicUrl: `https://example.com/${name}.png`,
+				type: 'image/png',
+				aliases: [],
+				license: null,
+				isSensitive: false,
+				localOnly: false,
+				roleIdsThatCanBeUsedThisEmojiAsReaction: [],
+				...override,
+			});
+		}
+
+		// 前のテストのキャッシュを持ち越さない
+		beforeEach(() => {
+			service['refreshLocalEmojiCaches']();
+		});
+
+		afterEach(async () => {
+			vi.restoreAllMocks();
+			vi.useRealTimers();
+			await emojisRepository.createQueryBuilder().delete().execute();
+		});
+
+		test('ローカルの絵文字だけを category, name の順で返す', async () => {
+			await insert('b', { category: 'cat2' });
+			await insert('a', { category: 'cat2' });
+			await insert('c', { category: 'cat1' });
+			await insert('remote', { host: 'example.com', category: 'cat1' });
+
+			const actual = await service.getLocalEmojisSorted();
+
+			expect(actual.map(e => e.name)).toEqual(['c', 'a', 'b']);
+		});
+
+		test('件数と最終更新日時が変わらなければ DB から読み直さない', async () => {
+			await insert('a');
+			const find = vi.spyOn(emojisRepository, 'find');
+
+			const first = await service.getLocalEmojisSorted();
+			const second = await service.getLocalEmojisSorted();
+
+			expect(find).toHaveBeenCalledTimes(1);
+			expect(second).toBe(first);
+		});
+
+		test('同時に来た呼び出しでは DB を 1 回だけ読む', async () => {
+			await insert('a');
+			const find = vi.spyOn(emojisRepository, 'find');
+
+			const [x, y] = await Promise.all([service.getLocalEmojisSorted(), service.getLocalEmojisSorted()]);
+
+			expect(find).toHaveBeenCalledTimes(1);
+			expect(y).toBe(x);
+		});
+
+		test('絵文字の追加・更新・削除でキャッシュを捨てたら読み直す', async () => {
+			await insert('a');
+			await service.getLocalEmojisSorted();
+
+			await insert('b');
+			service['refreshLocalEmojiCaches']();
+			const actual = await service.getLocalEmojisSorted();
+
+			expect(actual.map(e => e.name)).toEqual(['a', 'b']);
+		});
+
+		test('統計のキャッシュが切れて件数が変わっていたら読み直す (別のプロセスで追加されたとき)', async () => {
+			vi.useFakeTimers({ toFake: ['Date'] });
+			await insert('a');
+			await service.getLocalEmojisSorted();
+
+			// このプロセスのキャッシュは捨てずに追加する
+			await insert('b');
+			const stale = await service.getLocalEmojisSorted();
+			expect(stale.map(e => e.name)).toEqual(['a']);
+
+			// 統計のキャッシュ (3 分) が切れると、件数が変わったことに気づいて読み直す
+			vi.setSystemTime(Date.now() + 1000 * 60 * 4);
+			const actual = await service.getLocalEmojisSorted();
+
+			expect(actual.map(e => e.name)).toEqual(['a', 'b']);
 		});
 	});
 });
