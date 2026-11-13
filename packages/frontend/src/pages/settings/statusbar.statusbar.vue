@@ -31,14 +31,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkRadios>
 
 	<template v-if="statusbar.type === 'rss'">
-		<MkInput v-model="statusbar.props.url" manualSave type="url">
-			<template #label>URL</template>
-		</MkInput>
+		<div class="_gaps_s">
+			<MkInput v-model="rssUrlDraft" type="url">
+				<template #label>URL</template>
+				<template #caption>{{ i18n.ts._rssPreview.checkBeforeSave }}</template>
+			</MkInput>
+			<MkRssFeedPreview :url="rssPreviewUrl"/>
+			<div v-if="rssUrlDraft !== statusbar.props.url" class="_buttons">
+				<MkButton primary @click="saveRssUrl"><i class="ti ti-check"></i> {{ i18n.ts.save }}</MkButton>
+				<MkButton @click="rssUrlDraft = statusbar.props.url ?? ''">{{ i18n.ts.cancel }}</MkButton>
+			</div>
+		</div>
 		<MkSwitch v-model="statusbar.props.shuffle">
 			<template #label>{{ i18n.ts.shuffle }}</template>
 		</MkSwitch>
-		<MkInput v-model="statusbar.props.refreshIntervalSec" manualSave type="number" :min="1">
-			<template #label>{{ i18n.ts.refreshInterval }}</template>
+		<MkInput v-model="rssRefreshIntervalMinDraft" type="number" :min="RSS_MIN_REFRESH_INTERVAL_MIN" :max="RSS_MAX_REFRESH_INTERVAL_MIN" :step="1">
+			<template #label>{{ i18n.ts._widgetOptions._rss.refreshIntervalMin }}</template>
+			<template #suffix>{{ i18n.ts._time.minute }}</template>
+			<template #caption><span :class="{ [$style.invalidCaption]: !isValidRssRefreshIntervalMin(rssRefreshIntervalMinDraft) }">{{ i18n.tsx._widgetOptions._rss.refreshIntervalMinDescription({ min: RSS_MIN_REFRESH_INTERVAL_MIN, max: RSS_MAX_REFRESH_INTERVAL_MIN }) }}</span></template>
 		</MkInput>
 		<MkRange v-model="statusbar.props.marqueeDuration" :min="5" :max="150" :step="1">
 			<template #label>{{ i18n.ts.speed }}</template>
@@ -86,17 +96,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { reactive, computed, watch } from 'vue';
+import { reactive, computed, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
+import { debounce } from 'throttle-debounce';
 import MkSelect from '@/components/MkSelect.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkRadios from '@/components/MkRadios.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkRange from '@/components/MkRange.vue';
+import MkRssFeedPreview from '@/components/MkRssFeedPreview.vue';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
 import { deepClone } from '@/utility/clone.js';
+import { isValidRssRefreshIntervalMin, RSS_DEFAULT_REFRESH_INTERVAL_MIN, RSS_MAX_REFRESH_INTERVAL_MIN, RSS_MIN_REFRESH_INTERVAL_MIN } from '@/utility/fetch-rss.js';
 import { prefer } from '@/preferences.js';
 import type { MkSelectItem } from '@/components/MkSelect.vue';
 import type { StatusbarStore } from '@/preferences/def.js';
@@ -125,12 +138,46 @@ const userListsDef = computed(() => {
 	return (props.userLists ?? []).map(x => ({ label: x.name, value: x.id })) satisfies MkSelectItem[];
 });
 
+// URL は、プレビューで確かめてから保存する
+const rssUrlDraft = ref<string>(statusbar.props.url ?? '');
+watch(() => statusbar.props.url, (url) => {
+	rssUrlDraft.value = url ?? '';
+});
+
+// 入力の途中で取りに行かないよう、プレビューは入力が止まってから切り替える (保存するのは入力欄の今の値)
+const rssPreviewUrl = ref<string>(rssUrlDraft.value);
+const updateRssPreviewUrl = debounce(1000, (url: string) => {
+	rssPreviewUrl.value = url;
+});
+watch(rssUrlDraft, (url) => {
+	updateRssPreviewUrl(url);
+});
+
+function saveRssUrl() {
+	statusbar.props.url = rssUrlDraft.value;
+}
+
+// ステータスバーの設定は、ほかの種類と共通で秒で保存するので、RSS の設定画面だけ分に直して見せる
+function getSavedRssRefreshIntervalMin(): number {
+	return Math.max(RSS_MIN_REFRESH_INTERVAL_MIN, Math.round((statusbar.props.refreshIntervalSec ?? RSS_DEFAULT_REFRESH_INTERVAL_MIN * 60) / 60));
+}
+
+// 範囲の外の値や数でない値は保存しない (入力欄には残し、注意書きを赤くする)
+const rssRefreshIntervalMinDraft = ref<number>(getSavedRssRefreshIntervalMin());
+watch(rssRefreshIntervalMinDraft, (min) => {
+	if (!isValidRssRefreshIntervalMin(min)) return;
+	statusbar.props.refreshIntervalSec = min * 60;
+});
+watch(() => statusbar.props.refreshIntervalSec, () => {
+	rssRefreshIntervalMinDraft.value = getSavedRssRefreshIntervalMin();
+});
+
 watch(() => statusbar.type, () => {
 	if (statusbar.type === 'rss') {
 		statusbar.name = 'NEWS';
 		statusbar.props.url = 'http://feeds.afpbb.com/rss/afpbb/afpbbnews';
 		statusbar.props.shuffle = true;
-		statusbar.props.refreshIntervalSec = 120;
+		statusbar.props.refreshIntervalSec = RSS_DEFAULT_REFRESH_INTERVAL_MIN * 60;
 		statusbar.props.display = 'marquee';
 		statusbar.props.marqueeDuration = 100;
 		statusbar.props.marqueeReverse = false;
@@ -163,3 +210,9 @@ function del() {
 	prefer.commit('statusbars', prefer.s.statusbars.filter(x => x.id !== props._id));
 }
 </script>
+
+<style lang="scss" module>
+.invalidCaption {
+	color: var(--MI_THEME-error);
+}
+</style>
