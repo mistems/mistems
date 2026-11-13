@@ -169,8 +169,8 @@ describe('MkStreamingNotesTimeline: 歯抜けマーカー', () => {
 		await nextTick();
 
 		expect(renderedIds(container)).toEqual(['gap:0', 'n003', 'n002', 'n001']);
-		// 補給中はスピナー表示になるので、常に付いている aria-label で文言を確認する
-		expect(container.querySelector('[data-gap-id] button')?.getAttribute('aria-label')).toBe('間のノートを取得');
+		// 補給中はスピナー表示になるので、マーカーに常に付いている aria-label で文言を確認する
+		expect(container.querySelector('[data-gap-id]')?.getAttribute('aria-label')).toBe('間のノートを取得');
 		// 切断直前の最新 id (n003) から現在までを取りに行く
 		expect(misskeyApiMock).toHaveBeenLastCalledWith('notes/timeline', expect.objectContaining({ sinceId: 'n003', limit: 30 }));
 		expect(misskeyApiMock.mock.calls.at(-1)?.[1]).not.toHaveProperty('untilId');

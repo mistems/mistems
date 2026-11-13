@@ -21,7 +21,7 @@ function ids(items: readonly { id: string }[]): string[] {
 	return items.map(x => x.id);
 }
 
-function setup(initialItems: Note[], options: { canAutoFill?: () => boolean; getGapElement?: () => HTMLElement | null } = {}) {
+function setup(initialItems: Note[], options: { canAutoFill?: () => boolean; getGapElement?: () => HTMLElement | null; getNoteElement?: (noteId: string) => HTMLElement | null } = {}) {
 	const paginator = new Paginator('notes/timeline', { useShallowRef: true });
 	paginator.fetching.value = false;
 	paginator.items.value = initialItems;
@@ -31,6 +31,7 @@ function setup(initialItems: Note[], options: { canAutoFill?: () => boolean; get
 		canAutoFill: options.canAutoFill ?? (() => false),
 		getGapElement: options.getGapElement ?? (() => null),
 		getScrollContainer: () => null,
+		getNoteElement: options.getNoteElement,
 	});
 	paginator.onQueueOverflow = gaps.onQueueOverflow;
 
@@ -119,9 +120,8 @@ describe('useTimelineGaps', () => {
 			gaps.openGap({ sinceId: 'n002', untilId: 'n003' });
 			expect(fetchRange).toHaveBeenCalledTimes(1);
 			expect(fetchRange).toHaveBeenCalledWith({ sinceId: 'n002', untilId: 'n003', limit: 30 });
-			await nextTick();
 			// 空が返ったので即消える
-			expect(gaps.gaps.value).toHaveLength(0);
+			await vi.waitFor(() => expect(gaps.gaps.value).toHaveLength(0));
 		});
 	});
 
@@ -254,6 +254,82 @@ describe('useTimelineGaps', () => {
 			resolve([]);
 			await first;
 			expect(gaps.gaps.value).toHaveLength(0);
+		});
+	});
+
+	describe('fill (位置を保つ側の指定)', () => {
+		// 画面上の位置を、呼ぶたびに返す値で差し替えられる要素のスタブ
+		function movableElement(tops: number[]): HTMLElement {
+			let i = 0;
+			return {
+				getBoundingClientRect: () => ({ top: tops[Math.min(i++, tops.length - 1)], bottom: 0 }),
+			} as unknown as HTMLElement;
+		}
+
+		test('older: 古い側から取得して表示済みのノートを除き、sinceId を進めて、下のノートの位置を保つ', async () => {
+			const anchor = movableElement([300, 900]);
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')], {
+				getNoteElement: (id) => id === 'n002' ? anchor : null,
+			});
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+
+			// 昇順 30 件 n003..n032
+			fetchRange.mockResolvedValueOnce(descendingNotes('n032', 30).toReversed());
+			await gaps.fill(gap, 'older');
+
+			expect(fetchRange).toHaveBeenLastCalledWith({ sinceId: 'n002', untilId: null, limit: 30 });
+			expect(ids(paginator.items.value).slice(0, 3)).toEqual(['n100', 'n032', 'n031']);
+			expect(gap.sinceId).toBe('n032');
+			expect(gap.untilId).toBe('n100');
+			// マーカーは読み込んだノートの上に移る
+			expect(ids(gaps.displayItems.value).slice(0, 3)).toEqual(['n100', 'gap:0', 'n032']);
+			// 下のノート (n002) が 600px 下へずれた分だけスクロールする
+			expect(scrollBy).toHaveBeenCalledWith({ top: 600, behavior: 'instant' });
+			scrollBy.mockRestore();
+		});
+
+		test('older: 区間の上の端 (untilId) まで届いたらマーカーを消す', async () => {
+			const { paginator, gaps, fetchRange } = setup([note('n010'), note('n002'), note('n001')]);
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n010' })!;
+
+			// n003..n032 のうち、n010 以降は表示済み
+			fetchRange.mockResolvedValueOnce(descendingNotes('n032', 30).toReversed());
+			await gaps.fill(gap, 'older');
+
+			expect(ids(paginator.items.value)).toEqual(['n010', 'n009', 'n008', 'n007', 'n006', 'n005', 'n004', 'n003', 'n002', 'n001']);
+			expect(gaps.gaps.value).toHaveLength(0);
+		});
+
+		test('older: 新しい順にしか返さない endpoint では、新しい側から取り直す', async () => {
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')]);
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+
+			fetchRange.mockResolvedValueOnce(descendingNotes('n130', 30));
+			fetchRange.mockResolvedValueOnce(descendingNotes('n099', 30));
+			await gaps.fill(gap, 'older');
+
+			expect(fetchRange).toHaveBeenLastCalledWith({ sinceId: 'n002', untilId: 'n100', limit: 30 });
+			expect(ids(paginator.items.value).slice(0, 2)).toEqual(['n100', 'n099']);
+			expect(gap.untilId).toBe('n070');
+		});
+
+		test('newer: 新しい側から取得し、マーカーの上のノートの位置を保つ', async () => {
+			const above = movableElement([100, 100]);
+			const { gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')], {
+				getNoteElement: (id) => id === 'n100' ? above : null,
+			});
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+
+			fetchRange.mockResolvedValueOnce(descendingNotes('n099', 30));
+			await gaps.fill(gap, 'newer');
+
+			expect(fetchRange).toHaveBeenLastCalledWith({ sinceId: 'n002', untilId: 'n100', limit: 30 });
+			expect(gap.untilId).toBe('n070');
+			// 上のノートは動いていないのでスクロールしない
+			expect(scrollBy).not.toHaveBeenCalled();
+			scrollBy.mockRestore();
 		});
 	});
 

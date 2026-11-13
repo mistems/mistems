@@ -30,11 +30,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 			tag="div"
 		>
 			<template v-for="(item, i) in displayItems" :key="item.id">
-				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id">
-					<button class="_button" :class="$style.gapButton" :disabled="item.fetching" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching" @click="timelineGaps.fill(item)">
-						<template v-if="!item.fetching"><i class="ti ti-arrows-vertical"></i> {{ i18n.ts.fetchNotesBetween }}</template>
-						<MkLoading v-else :inline="true"/>
-					</button>
+				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id" role="group" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching">
+					<MkLoading v-if="item.fetching" :inline="true" :class="$style.gapLoading"/>
+					<div v-else :class="$style.gapButtons">
+						<!-- 上のノートを動かさずに、マーカーの下へ続きを読み込む -->
+						<button class="_button" :class="$style.gapButton" :title="i18n.ts.fetchNotesBetweenBelowDescription" @click="timelineGaps.fill(item, 'newer')">
+							<i class="ti ti-arrow-bar-to-down"></i> {{ i18n.ts.fetchNotesBetweenBelow }}
+						</button>
+						<!-- 下のノートを動かさずに、マーカーの上へ続きを読み込む (その分スクロールする) -->
+						<button class="_button" :class="$style.gapButton" :title="i18n.ts.fetchNotesBetweenAboveDescription" @click="timelineGaps.fill(item, 'older')">
+							<i class="ti ti-arrow-bar-to-up"></i> {{ i18n.ts.fetchNotesBetweenAbove }}
+						</button>
+					</div>
 				</div>
 				<div v-else-if="getPrevNote(i) != null && isSeparatorNeeded(getPrevNote(i)!.createdAt, item.createdAt)" :data-scroll-anchor="item.id">
 					<div :class="$style.date">
@@ -244,6 +251,7 @@ const timelineGaps = useTimelineGaps(paginator, {
 	canAutoFill: () => isTop() && !isPausingUpdate,
 	getGapElement: (gapId) => rootEl.value?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(gapId)}"]`) ?? null,
 	getScrollContainer: () => scrollContainer,
+	getNoteElement: (noteId) => rootEl.value?.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(noteId)}"]`) ?? null,
 });
 const displayItems = timelineGaps.displayItems;
 
@@ -662,22 +670,28 @@ defineExpose({
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
+.gapButtons {
+	display: flex;
+	gap: 8px;
+}
+
+.gapLoading {
+	display: block;
+	padding: 6px 0;
+}
+
 .gapButton {
 	display: block;
-	width: 100%;
+	flex: 1;
+	min-width: 0;
 	box-sizing: border-box;
 	padding: 10px 16px;
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	font-size: 90%;
 
-	&:hover:not(:disabled) {
+	&:hover {
 		background: var(--MI_THEME-buttonHoverBg);
-	}
-
-	&:disabled {
-		opacity: 0.7;
-		cursor: default;
 	}
 }
 </style>

@@ -35,6 +35,13 @@ export type TimelineGap = {
 
 export type TimelineItem = (Misskey.entities.Note & MisskeyEntity) | TimelineGap;
 
+/**
+ * 手動で補給するときに、画面上で位置を保つ側。
+ * - newer: マーカーより上 (新しい側) のノートを動かさない。区間の新しい側から取得し、マーカーの下に続けて並べる
+ * - older: マーカーより下 (古い側) のノートを動かさない。区間の古い側から取得し、マーカーの上に並べて、その分だけスクロールする
+ */
+export type TimelineGapKeep = 'newer' | 'older';
+
 export function isTimelineGap(item: TimelineItem): item is TimelineGap {
 	return (item as { _type?: unknown })._type === 'gap';
 }
@@ -48,19 +55,25 @@ const GAP_FETCH_LIMIT = SECOND_FETCH_LIMIT;
  */
 const MAX_AUTO_CONTINUE = 3;
 
+/** 手動補給のあと、位置を保つ要素を直し続ける最長のフレーム数と、位置が動かなければ止めるフレーム数 */
+const ANCHOR_MAX_FRAMES = 60;
+const ANCHOR_STABLE_FRAMES = 5;
+
 export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, options: {
 	/** 自動補給 (生成直後 / 自動継続) を今すぐ実行してよいか (先頭表示中かつ非アクティブでない、など) */
 	canAutoFill: () => boolean;
 	/** マーカーの DOM 要素 (補給後に見えていれば続けるための判定用) */
 	getGapElement: (gapId: string) => HTMLElement | null;
 	getScrollContainer: () => HTMLElement | null;
+	/** ノートの DOM 要素 (手動補給のあと、位置を保つノートを探すのに使う) */
+	getNoteElement?: (noteId: string) => HTMLElement | null;
 }): {
 	gaps: Ref<TimelineGap[]>;
 	displayItems: ComputedRef<TimelineItem[]>;
 	openGap: (init?: { sinceId?: string | null; untilId?: string | null }) => TimelineGap | null;
 	onQueueOverflow: (oldestRemainingQueuedId: string) => void;
 	bindUntil: (noteId: string) => void;
-	fill: (gap: TimelineGap) => Promise<void>;
+	fill: (gap: TimelineGap, keep?: TimelineGapKeep) => Promise<void>;
 	tryAutoFill: () => void;
 	onNoteRemoved: (noteId: string) => void;
 	reset: () => void;
@@ -199,14 +212,91 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 	}
 
 	/**
-	 * 区間を 1 ページ分補給する。手動クリック用 (自動継続の回数をリセットする)
+	 * 位置を保つ要素を探す関数と、その画面上の位置を控える。
+	 * newer はマーカーの直前 (新しい側) のノート、それが無ければマーカー自身。older は sinceId のノート。
+	 * 挿入で日付の区切りなどが変わると要素が作り直されるので、要素ではなく探し方を控える
 	 */
-	async function fill(gap: TimelineGap): Promise<void> {
-		gap.autoContinueCount = 0;
-		await fillPage(gap);
+	function captureAnchor(gap: TimelineGap, keep: TimelineGapKeep): { find: () => HTMLElement | null; top: number } | null {
+		let find: () => HTMLElement | null;
+		if (keep === 'older') {
+			const noteId = gap.sinceId;
+			find = () => options.getNoteElement?.(noteId) ?? null;
+		} else {
+			const items = displayItems.value;
+			const index = items.findIndex(x => x.id === gap.id);
+			let noteId: string | null = null;
+			for (let j = index - 1; j >= 0; j--) {
+				const item = items[j]!;
+				if (isTimelineGap(item)) continue;
+				noteId = item.id;
+				break;
+			}
+			find = noteId != null
+				? () => options.getNoteElement?.(noteId) ?? null
+				: () => options.getGapElement(gap.id);
+		}
+		const el = find();
+		if (el == null) return null;
+		return { find, top: el.getBoundingClientRect().top };
 	}
 
-	async function fillPage(gap: TimelineGap): Promise<void> {
+	/**
+	 * 控えた要素が補給の前と同じ位置に見えるようにスクロールする。
+	 * 差し込んだノートは描画のあとで高さが決まる (非同期の部品や content-visibility のため) ので、
+	 * 位置が落ち着くまで、毎フレーム直す (最長 ANCHOR_MAX_FRAMES フレーム)
+	 */
+	async function restoreAnchor(anchor: { find: () => HTMLElement | null; top: number } | null): Promise<void> {
+		if (anchor == null) return;
+		await nextTick();
+		let stableFrames = 0;
+		for (let frame = 0; frame < ANCHOR_MAX_FRAMES && stableFrames < ANCHOR_STABLE_FRAMES; frame++) {
+			const el = anchor.find();
+			if (el == null) return;
+			const delta = el.getBoundingClientRect().top - anchor.top;
+			if (Math.abs(delta) < 1) {
+				stableFrames++;
+			} else {
+				stableFrames = 0;
+				const container = options.getScrollContainer();
+				if (container != null) {
+					container.scrollBy({ top: delta, behavior: 'instant' });
+				} else {
+					window.scrollBy({ top: delta, behavior: 'instant' });
+				}
+			}
+			await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+		}
+	}
+
+	/**
+	 * 区間を 1 ページ分補給する。手動クリック用 (自動継続の回数をリセットする)。
+	 * keep を指定すると、その側のノートが画面上で動かないようにする
+	 */
+	async function fill(gap: TimelineGap, keep?: TimelineGapKeep): Promise<void> {
+		gap.autoContinueCount = 0;
+		await fillPage(gap, keep);
+	}
+
+	/**
+	 * 区間の新しい側 (untilId から) か古い側 (sinceId から) の 1 ページを取得する。
+	 * 古い側から取るときは、untilId 以降 (表示済み) のノートを除く
+	 */
+	async function fetchPage(gap: TimelineGap, fromOlder: boolean): Promise<{ notes: (Misskey.entities.Note & MisskeyEntity)[]; complete: boolean; fromOlder: boolean } | null> {
+		if (!fromOlder) {
+			const res = await paginator.fetchRange({ sinceId: gap.sinceId, untilId: gap.untilId, limit: GAP_FETCH_LIMIT });
+			if (res == null) return null;
+			return { notes: res, complete: res.length < GAP_FETCH_LIMIT, fromOlder: false };
+		}
+		const untilId = gap.untilId;
+		const res = await paginator.fetchRange({ sinceId: gap.sinceId, untilId: null, limit: GAP_FETCH_LIMIT });
+		if (res == null) return null;
+		const inRange = untilId == null ? res : res.filter(x => x.id < untilId);
+		// sinceId だけを渡しても新しい順に返す endpoint (roles/notes など) では区間の外しか返らないので、新しい側から取り直す
+		if (untilId != null && inRange.length === 0 && res.length > 0) return fetchPage(gap, false);
+		return { notes: inRange, complete: res.length < GAP_FETCH_LIMIT || inRange.length < res.length, fromOlder: true };
+	}
+
+	async function fillPage(gap: TimelineGap, keep?: TimelineGapKeep): Promise<void> {
 		if (gap.fetching) return;
 		gap.autoFillPending = false;
 
@@ -220,16 +310,16 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 			}
 		}
 
+		// 上限が確定していないマーカー (「現在まで」) は古い側からしか取れない
+		const fromOlder = gap.untilId == null || keep === 'older';
+
 		gap.fetching = true;
-		const res = await paginator.fetchRange({
-			sinceId: gap.sinceId,
-			untilId: gap.untilId,
-			limit: GAP_FETCH_LIMIT,
-		});
+		const page = await fetchPage(gap, fromOlder);
 		gap.fetching = false;
 
-		if (res == null) return; // 失敗時はマーカーを残して再試行できるようにする
+		if (page == null) return; // 失敗時はマーカーを残して再試行できるようにする
 		if (findGap(gap.id) == null) return; // reload 等で消えた
+		const res = page.notes;
 		if (res.length === 0) {
 			remove(gap);
 			return;
@@ -240,6 +330,7 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 		const descending = res.toSorted((a, b) => a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 		// 取得分は必ず両境界の間にあるので、上限確定済でも「現在まで」でも sinceId ノートの直前に入れればよい
 		// NOTE: 通常の fetch と違い _shouldInsertAd_ は立てない (補給ノートに広告を混ぜない)
+		const anchor = keep != null ? captureAnchor(gap, keep) : null;
 		const inserted = paginator.insertItemsBefore(gap.sinceId, descending);
 
 		if (inserted === 0 && !hasItem(gap.sinceId)) {
@@ -248,18 +339,20 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 			return;
 		}
 
-		if (gap.untilId != null) {
-			// 新しい側から埋めたので、残りは取得した最古より下
-			gap.untilId = descending[descending.length - 1]!.id;
-		} else {
+		if (page.fromOlder) {
 			// 古い側から埋めたので、残りは取得した最新より上
 			gap.sinceId = descending[0]!.id;
+		} else {
+			// 新しい側から埋めたので、残りは取得した最古より下
+			gap.untilId = descending[descending.length - 1]!.id;
 		}
 
-		if (res.length < GAP_FETCH_LIMIT || inserted === 0) {
+		if (page.complete || inserted === 0) {
 			remove(gap);
+			await restoreAnchor(anchor);
 			return;
 		}
+		await restoreAnchor(anchor);
 
 		// 残りがあり、マーカーがまだ画面内に見えていて、自動補給してよい状況なら続ける
 		// (v-appear は交差の変化でしか発火しないため、自前で判定する)
@@ -268,7 +361,7 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 		if (!isGapVisible(gap) || !options.canAutoFill()) return;
 		if (gap.autoContinueCount >= MAX_AUTO_CONTINUE) return; // 上限に達したら手動クリック待ち
 		gap.autoContinueCount++;
-		void fillPage(gap);
+		void fillPage(gap, keep);
 	}
 
 	function tryAutoFill(): void {

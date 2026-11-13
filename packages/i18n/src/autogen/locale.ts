@@ -2377,11 +2377,27 @@ export interface Locale extends ILocale {
      */
     "fetchNotesBetween": string;
     /**
+     * 下に読み込む
+     */
+    "fetchNotesBetweenBelow": string;
+    /**
+     * 上のノートの位置はそのままで、間のノートをこの下に読み込みます
+     */
+    "fetchNotesBetweenBelowDescription": string;
+    /**
+     * 上に読み込む
+     */
+    "fetchNotesBetweenAbove": string;
+    /**
+     * 下のノートの位置はそのままで、間のノートをこの上に読み込みます
+     */
+    "fetchNotesBetweenAboveDescription": string;
+    /**
      * タイムラインの切断中追加読み込み
      */
     "enableTimelineGapFill": string;
     /**
-     * 通信の切断やスリープのあいだにタイムラインへ流れてこなかったノートを、再接続したときに取り直します。取り直していない区間には「間のノートを取得」が表示されます。
+     * 通信の切断やスリープのあいだにタイムラインへ流れてこなかったノートを、再接続したときに取り直します。取り直していない区間には、間のノートを読み込むボタンが表示されます。
      */
     "enableTimelineGapFillDescription": string;
     /**
