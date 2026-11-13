@@ -20,12 +20,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkStreamingNotesTimeline
 		v-else-if="column.tl"
 		ref="timeline"
-		:key="column.tl + withRenotes + withReplies + onlyFiles"
+		:key="column.tl + withRenotes + withReplies + onlyFiles + withCollectedChannelNotes"
 		:src="column.tl"
 		:withRenotes="withRenotes"
 		:withReplies="withReplies"
 		:withSensitive="withSensitive"
 		:onlyFiles="onlyFiles"
+		:withCollectedChannelNotes="withCollectedChannelNotes"
 		:sound="true"
 		:customSound="soundSetting"
 	/>
@@ -57,6 +58,7 @@ const withRenotes = ref(props.column.withRenotes ?? true);
 const withReplies = ref(props.column.withReplies ?? false);
 const withSensitive = ref(props.column.withSensitive ?? true);
 const onlyFiles = ref(props.column.onlyFiles ?? false);
+const withCollectedChannelNotes = ref(props.column.withCollectedChannelNotes ?? true);
 
 watch(withRenotes, v => {
 	updateColumn(props.column.id, {
@@ -79,6 +81,12 @@ watch(withSensitive, v => {
 watch(onlyFiles, v => {
 	updateColumn(props.column.id, {
 		onlyFiles: v,
+	});
+});
+
+watch(withCollectedChannelNotes, v => {
+	updateColumn(props.column.id, {
+		withCollectedChannelNotes: v,
 	});
 });
 
@@ -154,6 +162,14 @@ const menu = computed<MenuItem[]>(() => {
 		text: i18n.ts.withSensitive,
 		ref: withSensitive,
 	});
+
+	if (props.column.tl === 'home' || props.column.tl === 'social') {
+		menuItems.push({
+			type: 'switch',
+			text: i18n.ts.withCollectedChannelNotes,
+			ref: withCollectedChannelNotes,
+		});
+	}
 
 	return menuItems;
 });

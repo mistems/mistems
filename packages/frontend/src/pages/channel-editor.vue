@@ -23,9 +23,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #label>{{ i18n.ts.sensitive }}</template>
 			</MkSwitch>
 
-			<MkSwitch v-model="allowRenoteToExternal">
+			<MkSwitch v-model="allowRenoteToExternal" :disabled="federationPolicy === 'public'">
 				<template #label>{{ i18n.ts._channel.allowRenoteToExternal }}</template>
+				<template v-if="federationPolicy === 'public'" #caption>{{ i18n.ts._channel.allowRenoteToExternalLockedByFederation }}</template>
 			</MkSwitch>
+
+			<MkSelect v-model="federationPolicy" :items="federationPolicyDef">
+				<template #label><i class="ti ti-whirl"></i> {{ i18n.ts._channel.federationPolicy }}</template>
+				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
+			</MkSelect>
+
+			<MkInput v-if="federationPolicy === 'public'" v-model="federationHashtag" :placeholder="channel?.federationHashtag == null ? i18n.ts._channel.federationHashtagAutoAssigned : undefined" :disabled="channelId != null && channel?.federationHashtag == null">
+				<template #label><i class="ti ti-hash"></i> {{ i18n.ts._channel.federationHashtag }}</template>
+				<template #prefix>#</template>
+				<template #caption>{{ i18n.ts._channel.federationHashtagDescription }}</template>
+			</MkInput>
 
 			<div>
 				<MkButton v-if="bannerId == null" @click="setBannerImage"><i class="ti ti-plus"></i> {{ i18n.ts._channel.setBanner }}</MkButton>
@@ -79,15 +91,20 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import MkFolder from '@/components/MkFolder.vue';
+import MkSelect from '@/components/MkSelect.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
 import { useRouter } from '@/router.js';
+import { useMkSelect } from '@/composables/use-mkselect.js';
 
 const router = useRouter();
 
 const props = defineProps<{
 	channelId?: string;
+	// 新しく作るときの初期値 (ほかのサーバーの連合チャンネルのハッシュタグから作るとき)
+	initialName?: string;
+	initialFederationHashtag?: string;
 }>();
 
 const channel = ref<Misskey.entities.Channel | null>(null);
@@ -98,7 +115,36 @@ const bannerId = ref<string | null>(null);
 const color = ref('#000');
 const isSensitive = ref(false);
 const allowRenoteToExternal = ref(true);
+const {
+	model: federationPolicy,
+	def: federationPolicyDef,
+} = useMkSelect({
+	items: [
+		{ label: i18n.ts._channel._federationPolicy.none, value: 'none' },
+		{ label: i18n.ts._channel._federationPolicy.public, value: 'public' },
+	],
+	initialValue: 'none' as 'none' | 'public',
+});
 const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
+// 連合するチャンネルのハッシュタグ (先頭の「#」は含めない)。まだ決まっていないときは空で、保存時にサーバーが決める
+const federationHashtag = ref('');
+
+// ハッシュタグを指定して作るときは、連合する設定で始める (連合しないとハッシュタグを使わないため)
+if (props.channelId == null) {
+	if (props.initialName != null) name.value = props.initialName;
+	if (props.initialFederationHashtag != null && props.initialFederationHashtag !== '') {
+		federationPolicy.value = 'public';
+		federationHashtag.value = props.initialFederationHashtag.replace(/^#/, '');
+	}
+}
+
+watch(federationPolicy, () => {
+	// 連合するチャンネルのノートは外のサーバーでリノートできるので、チャンネル外へのリノートの禁止とは両立しない。
+	// 連合するあいだは、チャンネル外へのリノートの許可を ON に固定する (スイッチは操作できなくなる)
+	if (federationPolicy.value === 'public') {
+		allowRenoteToExternal.value = true;
+	}
+});
 
 watch(() => bannerId.value, async () => {
 	if (bannerId.value == null) {
@@ -125,6 +171,8 @@ async function fetchChannel() {
 	pinnedNoteIds.value = result.pinnedNoteIds;
 	color.value = result.color;
 	allowRenoteToExternal.value = result.allowRenoteToExternal;
+	federationPolicy.value = result.federationPolicy ?? 'none';
+	federationHashtag.value = result.federationHashtag ?? '';
 
 	channel.value = result;
 }
@@ -147,7 +195,42 @@ function removePinnedNote(id: string) {
 	pinnedNoteIds.value = pinnedNoteIds.value.filter(x => x !== id);
 }
 
-function save() {
+async function save() {
+	// 連合の設定が変わる場合は確認する。
+	// 連合する方向 (none → public) は「外に出る」旨、
+	// 連合をやめる方向 (public → none) は「配信済みは取り消せない」旨を伝える。
+	const prev = channel.value?.federationPolicy ?? 'none';
+	const next = federationPolicy.value;
+	if (prev === 'none' && next === 'public') {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationPolicy,
+			text: i18n.ts._channel.federationPolicyEnableConfirm,
+		});
+		if (canceled) return;
+	} else if (prev === 'public' && next === 'none') {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationPolicy,
+			text: i18n.ts._channel.federationPolicyDisableConfirm,
+		});
+		if (canceled) return;
+	}
+
+	// ハッシュタグを変えると、リモートのユーザーのミュートやフォローが外れるので確認する
+	const prevHashtag = channel.value?.federationHashtag ?? null;
+	const nextHashtag = federationHashtag.value.trim().replace(/^#/, '');
+	// 欄が出ているのは連合するときだけなので、連合しないときは書き換えた値があっても送らない
+	const hashtagChanged = federationPolicy.value === 'public' && prevHashtag != null && nextHashtag !== '' && nextHashtag !== prevHashtag;
+	if (hashtagChanged) {
+		const { canceled } = await os.confirm({
+			type: 'warning',
+			title: i18n.ts._channel.federationHashtag,
+			text: i18n.ts._channel.federationHashtagChangeConfirm,
+		});
+		if (canceled) return;
+	}
+
 	const params = {
 		name: name.value,
 		description: description.value,
@@ -155,6 +238,7 @@ function save() {
 		color: color.value,
 		isSensitive: isSensitive.value,
 		allowRenoteToExternal: allowRenoteToExternal.value,
+		federationPolicy: federationPolicy.value,
 	} satisfies Misskey.entities.ChannelsCreateRequest;
 
 	if (props.channelId != null) {
@@ -162,9 +246,18 @@ function save() {
 			...params,
 			channelId: props.channelId,
 			pinnedNoteIds: pinnedNoteIds.value,
+			...(hashtagChanged ? { federationHashtag: nextHashtag } : {}),
+		}).then(updated => {
+			// 保存後に手元の状態を更新し、続けて編集した場合に確認ダイアログの判定が古くならないようにする
+			channel.value = updated;
+			federationHashtag.value = updated.federationHashtag ?? '';
 		});
 	} else {
-		os.apiWithDialog('channels/create', params).then(created => {
+		os.apiWithDialog('channels/create', {
+			...params,
+			// 空のときはサーバーがチャンネル名から決める
+			...(federationPolicy.value === 'public' && nextHashtag !== '' ? { federationHashtag: nextHashtag } : {}),
+		}).then(created => {
 			router.push('/channels/:channelId', {
 				params: {
 					channelId: created.id,

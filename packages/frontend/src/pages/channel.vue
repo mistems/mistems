@@ -22,6 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-if="$i != null && channel != null && $i.id === channel.userId" style="color: var(--MI_THEME-warn)"><i class="ti ti-user-star ti-fw"></i><span style="margin-left: 4px;">{{ i18n.ts.youAreAdmin }}</span></div>
 					</div>
 					<div v-if="channel.isSensitive" :class="$style.sensitiveIndicator">{{ i18n.ts.sensitive }}</div>
+					<div v-if="isFederatedChannel(channel)" v-tooltip="i18n.ts._channel._federationPolicy[channel.federationPolicy]" :class="$style.federationIndicator"><i class="ti ti-whirl"></i> {{ i18n.ts._channel._federationPolicy[channel.federationPolicy] }}</div>
 					<div :class="$style.bannerFade"></div>
 				</div>
 				<div v-if="channel.description" :class="$style.description">
@@ -63,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<template #footer>
-		<div :class="$style.footer">
+		<div v-if="isSubWindow" :class="$style.footer">
 			<div class="_spacer" style="--MI_SPACER-w: 700px; --MI_SPACER-min: 16px; --MI_SPACER-max: 16px;">
 				<div class="_buttonsCenter">
 					<MkButton inline rounded primary gradate @click="openPostForm()"><i class="ti ti-pencil"></i> {{ i18n.ts.postToTheChannel }}</MkButton>
@@ -77,8 +78,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { computed, watch, ref, markRaw, shallowRef } from 'vue';
 import * as Misskey from 'misskey-js';
-import { url } from '@@/js/config.js';
-import { useInterval } from '@@/js/use-interval.js';
+import { url, ui } from '@@/js/config.js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import MkPostForm from '@/components/MkPostForm.vue';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
@@ -89,6 +89,7 @@ import { $i, iAmModerator } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import { deviceKind } from '@/utility/device-kind.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
 import { favoritedChannelsCache } from '@/cache.js';
 import MkButton from '@/components/MkButton.vue';
@@ -103,8 +104,14 @@ import { notesSearchAvailable } from '@/utility/check-permissions.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { useRouter } from '@/router.js';
 import { Paginator } from '@/utility/paginator.js';
+import { miRegistryItem } from '@/registry-item.js';
+import { mainRouter } from '@/router.js';
 
 const router = useRouter();
+
+const isSubWindow = computed(() => {
+	return router.current !== mainRouter.current || (ui === 'deck' && router.current === mainRouter.current);
+});
 
 const props = defineProps<{
 	channelId: string;
@@ -124,14 +131,6 @@ const featuredPaginator = markRaw(new Paginator('notes/featured', {
 	})),
 }));
 
-useInterval(() => {
-	if (channel.value == null) return;
-	miLocalStorage.setItemAsJson(`channelLastReadedAt:${channel.value.id}`, Date.now());
-}, 3000, {
-	immediate: true,
-	afterMounted: true,
-});
-
 watch(() => props.channelId, async () => {
 	const _channel = await misskeyApi('channels/show', {
 		channelId: props.channelId,
@@ -143,16 +142,32 @@ watch(() => props.channelId, async () => {
 	}
 
 	if ((favorited.value || _channel.isFollowing) && _channel.lastNotedAt) {
-		const lastReadedAt: number = miLocalStorage.getItemAsJson(`channelLastReadedAt:${_channel.id}`) ?? 0;
+		const lastReadedAt: number = (miLocalStorage.getItemAsJson('channelsLastReadedAt') ?? {})[_channel.id] ?? 0;
 		const lastNotedAt = Date.parse(_channel.lastNotedAt);
 
-		if (lastNotedAt > lastReadedAt) {
-			miLocalStorage.setItemAsJson(`channelLastReadedAt:${_channel.id}`, lastNotedAt);
+		if (!lastReadedAt || lastNotedAt > lastReadedAt) {
+			saveLastReadedAt();
 		}
 	}
 
 	channel.value = _channel;
 }, { immediate: true });
+
+// チャンネルを素早く行き来したときに registry の get/set が交錯して古い値で上書きしないよう直列化する
+let saveLastReadedAtQueue: Promise<void> = Promise.resolve();
+
+function saveLastReadedAt() {
+	const channelId = props.channelId;
+	if (!channelId) return;
+	saveLastReadedAtQueue = saveLastReadedAtQueue.then(async () => {
+		const tmp = await miRegistryItem.get('channelsLastReadedAt');
+		tmp[channelId] = Date.now();
+		await miRegistryItem.set('channelsLastReadedAt', tmp);
+		miLocalStorage.setItemAsJson('channelsLastReadedAt', tmp);
+	}).catch(() => {
+		// 既読時刻の保存失敗は致命的でないので無視する
+	});
+}
 
 function edit() {
 	router.push('/channels/:channelId/edit', {
@@ -347,7 +362,8 @@ const headerTabs = computed(() => [{
 
 definePage(() => ({
 	title: channel.value ? channel.value.name : i18n.ts.channel,
-	icon: 'ti ti-device-tv',
+	// 連合するチャンネルは、グローバルタイムラインと同じアイコンで示す
+	icon: channel.value != null && isFederatedChannel(channel.value) ? 'ti ti-whirl' : 'ti ti-device-tv',
 }));
 </script>
 
@@ -431,5 +447,23 @@ definePage(() => ({
 	font-weight: bold;
 	font-size: 1em;
 	padding: 4px 7px;
+}
+
+.federationIndicator {
+	position: absolute;
+	z-index: 1;
+	bottom: 16px;
+	left: 16px;
+	background: rgba(0, 0, 0, 0.7);
+	color: #fff;
+	border-radius: 6px;
+	font-weight: bold;
+	font-size: 1em;
+	padding: 4px 7px;
+}
+
+// isSensitive のインジケータと併存する場合は上に積む (bannerStatus / sensitiveIndicator との座標衝突回避)
+.sensitiveIndicator + .federationIndicator {
+	bottom: 56px;
 }
 </style>

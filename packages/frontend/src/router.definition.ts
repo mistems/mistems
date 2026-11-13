@@ -373,7 +373,13 @@ export const ROUTE_DEF = [{
 	path: '/channels/new',
 	component: page(() => import('@/pages/channel-editor.vue')),
 	loginRequired: true,
+	// ほかのサーバーの連合チャンネルのハッシュタグから作るときに、名前とハッシュタグを入れておく
+	query: {
+		name: 'initialName',
+		federationHashtag: 'initialFederationHashtag',
+	},
 }, {
+	name: 'channel',
 	path: '/channels/:channelId',
 	component: page(() => import('@/pages/channel.vue')),
 }, {
