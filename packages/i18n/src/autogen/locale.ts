@@ -2635,7 +2635,7 @@ export interface Locale extends ILocale {
     /**
      * ポストを展開する
      */
-    "expandTweet": string;
+    "expandPost": string;
     /**
      * テーマエディター
      */
