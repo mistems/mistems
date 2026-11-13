@@ -36,10 +36,12 @@ export async function server() {
 		const { ChartManagementService } = await import('../core/chart/ChartManagementService.js');
 		const { QueueStatsService } = await import('../daemons/QueueStatsService.js');
 		const { ServerStatsService } = await import('../daemons/ServerStatsService.js');
+		const { DbServerStatsService } = await import('../daemons/DbServerStatsService.js');
 
 		app.get(ChartManagementService).start();
 		app.get(QueueStatsService).start();
 		app.get(ServerStatsService).start();
+		app.get(DbServerStatsService).start();
 	}
 
 	return app;

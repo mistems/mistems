@@ -147,6 +147,7 @@ export class MetaEntityService {
 			highlightMidPopularityThreshold: instance.highlightMidPopularityThreshold,
 			highlightHighPopularityThreshold: instance.highlightHighPopularityThreshold,
 			highlightExcludeEmojis: instance.highlightExcludeEmojis,
+			enableDbServerStats: instance.enableDbServerStats,
 		};
 
 		return packed;
