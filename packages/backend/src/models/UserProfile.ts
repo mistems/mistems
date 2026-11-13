@@ -227,7 +227,7 @@ export class MiUserProfile {
 	@JoinColumn()
 	public pinnedPage: MiPage | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false, select: false,
 	})

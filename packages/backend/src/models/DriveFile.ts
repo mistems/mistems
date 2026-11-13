@@ -55,7 +55,7 @@ export class MiDriveFile {
 	})
 	public name: string;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 128,
 		comment: 'The content type (MIME) of the DriveFile.',
@@ -129,7 +129,7 @@ export class MiDriveFile {
 	})
 	public webpublicAccessKey: string | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 1024, nullable: true,
 		comment: 'The URI of the DriveFile. it will be null when the DriveFile is local.',
@@ -155,21 +155,21 @@ export class MiDriveFile {
 	@JoinColumn()
 	public folder: MiDriveFolder | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is NSFW.',
 	})
 	public isSensitive: boolean;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is NSFW. (predict)',
 	})
 	public maybeSensitive: boolean;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 	})
@@ -178,7 +178,7 @@ export class MiDriveFile {
 	/**
 	 * 外部の(信頼されていない)URLへの直リンクか否か
 	 */
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is direct link to remote server.',

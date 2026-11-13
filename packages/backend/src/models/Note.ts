@@ -68,8 +68,7 @@ export class MiNote {
 	@JoinColumn()
 	public renote: MiNote | null;
 
-	// Partial index WHERE "threadId" IS NOT NULL. Managed by migration (1783062429920).
-	@Index('IDX_note_on_threadId', { synchronize: false })
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 256, nullable: true,
 	})

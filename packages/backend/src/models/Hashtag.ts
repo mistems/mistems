@@ -28,7 +28,7 @@ export class MiHashtag {
 	})
 	public mentionedUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -41,7 +41,7 @@ export class MiHashtag {
 	})
 	public mentionedLocalUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -54,7 +54,7 @@ export class MiHashtag {
 	})
 	public mentionedRemoteUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -67,7 +67,7 @@ export class MiHashtag {
 	})
 	public attachedUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})

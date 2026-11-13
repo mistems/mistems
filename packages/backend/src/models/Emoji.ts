@@ -36,7 +36,7 @@ export class MiEmoji {
 	@Column('varchar', {
 		length: 128, nullable: true,
 	})
-	@Index('IDX_EMOJI_CATEGORY')
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	public category: string | null;
 
 	@Column('varchar', {
