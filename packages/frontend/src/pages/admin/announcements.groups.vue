@@ -15,10 +15,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			withGaps
 			manualDragStart
 		>
-			<template #default="{ item, index, dragStart }">
+			<template #default="{ item, index, pointerStart }">
 				<div class="_panel" :class="$style.group" data-testid="announcement-group-item">
 					<div :class="$style.groupHeader">
-						<span :class="$style.handle" :draggable="true" @dragstart.stop="dragStart"><i class="ti ti-menu"></i></span>
+						<span :class="$style.handle" @pointerdown.stop="pointerStart"><i class="ti ti-menu"></i></span>
 						<i :class="[announcementGroupIconClass(item.icon), $style.preview]"></i>
 						<span :class="$style.groupName">{{ item.name || i18n.ts._announcement.groupName }}</span>
 						<button class="_button" :class="$style.iconButton" :disabled="index === 0" :aria-label="i18n.ts._announcement.moveUp" @click="move(index, -1)"><i class="ti ti-arrow-up"></i></button>
@@ -162,6 +162,7 @@ async function save() {
 	align-items: center;
 	justify-content: center;
 	cursor: move;
+	touch-action: none;
 }
 
 .preview {

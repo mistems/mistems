@@ -31,10 +31,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 					withGaps
 					manualDragStart
 				>
-					<template #default="{ item: { announcement }, index, dragStart }">
+					<template #default="{ item: { announcement }, index, pointerStart }">
 				<div :class="$style.row">
 				<div v-if="canReorder && announcement.id != null" :class="$style.reorderControls">
-					<span :class="$style.handle" :draggable="true" :aria-label="i18n.ts._announcement.reorder" @dragstart.stop="dragStart"><i class="ti ti-menu"></i></span>
+					<span :class="$style.handle" :aria-label="i18n.ts._announcement.reorder" @pointerdown.stop="pointerStart"><i class="ti ti-menu"></i></span>
 					<button class="_button" :class="$style.move" :disabled="index === 0" :aria-label="i18n.ts._announcement.moveUp" @click="move(index, -1)"><i class="ti ti-arrow-up"></i></button>
 					<button class="_button" :class="$style.move" :disabled="index === orderItems.length - 1" :aria-label="i18n.ts._announcement.moveDown" @click="move(index, 1)"><i class="ti ti-arrow-down"></i></button>
 				</div>
@@ -463,6 +463,7 @@ definePage(() => ({
 	align-items: center;
 	justify-content: center;
 	cursor: move;
+	touch-action: none;
 }
 
 .move {
