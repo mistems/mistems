@@ -28,7 +28,8 @@ export function isChannelFederationHashtag(tag: string): boolean {
  * 目印より後ろが空なら、ハッシュタグをそのまま返す。
  */
 export function channelNameFromFederationHashtag(tag: string): string {
-	const bare = tag.replace(/^#/, '');
+	// 目印は正規化した形で探す (isChannelFederationHashtag と同じく、半角カナや全角の「＿」でも見つける)
+	const bare = tag.replace(/^#/, '').normalize('NFKC');
 	const index = bare.indexOf(CHANNEL_FEDERATION_HASHTAG_MARKER);
 	if (index === -1) return bare;
 	const name = bare.slice(index + CHANNEL_FEDERATION_HASHTAG_MARKER.length);
