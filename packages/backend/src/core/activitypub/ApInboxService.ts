@@ -132,7 +132,11 @@ export class ApInboxService {
 			if (actor.lastFetchedAt == null || Date.now() - actor.lastFetchedAt.getTime() > 1000 * 60 * 60 * 24) {
 				setImmediate(() => {
 					// 同一ユーザーの情報を再度処理するので、使用済みのresolverを再利用してはいけない
-					this.apPersonService.updatePerson(actor.uri);
+					// ベストエフォートのバックグラウンド更新なので、失敗 (リモート応答なしのタイムアウト等) は
+					// unhandled rejection にせずログに留める
+					this.apPersonService.updatePerson(actor.uri).catch(err => {
+						this.logger.debug(`Background update of actor ${actor.uri} failed: ${err}`);
+					});
 				});
 			}
 		}
