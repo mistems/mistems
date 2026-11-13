@@ -304,10 +304,28 @@ export const ROUTE_DEF = [{
 	path: '/pages/new',
 	component: page(() => import('@/pages/page-editor/page-editor.vue')),
 	loginRequired: true,
+	children: [{
+		path: '/meta',
+		name: 'page-new-meta',
+		component: page(() => import('@/pages/page-editor/page-editor.meta.vue')),
+	}, {
+		path: '',
+		name: 'page-new-contents',
+		component: page(() => import('@/pages/page-editor/page-editor.contents.vue')),
+	}],
 }, {
 	path: '/pages/edit/:initPageId',
 	component: page(() => import('@/pages/page-editor/page-editor.vue')),
 	loginRequired: true,
+	children: [{
+		path: '/meta',
+		name: 'page-edit-meta',
+		component: page(() => import('@/pages/page-editor/page-editor.meta.vue')),
+	}, {
+		path: '',
+		name: 'page-edit-contents',
+		component: page(() => import('@/pages/page-editor/page-editor.contents.vue')),
+	}],
 }, {
 	path: '/pages',
 	component: page(() => import('@/pages/pages.vue')),
