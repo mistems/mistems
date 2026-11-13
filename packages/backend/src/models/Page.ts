@@ -14,7 +14,7 @@ export class MiPage {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('timestamp with time zone', {
 		comment: 'The updated date of the Page.',
 	})
@@ -98,7 +98,7 @@ export class MiPage {
 	@Column('enum', { enum: ['public', 'followers', 'specified'] })
 	public visibility: 'public' | 'followers' | 'specified';
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column({
 		...id(),
 		array: true, default: '{}',

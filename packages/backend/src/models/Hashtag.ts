@@ -8,6 +8,9 @@ import { id } from './util/id.js';
 import type { MiUser } from './User.js';
 
 @Entity('hashtag')
+// 前方一致検索 (hashtags/search) 用の text_pattern_ops インデックス。オペレータクラスは TypeORM で
+// 表現できないため migration (1794493981000) で管理し、ここでは同期対象外として宣言だけする
+@Index('IDX_hashtag_name_pattern', { synchronize: false })
 export class MiHashtag {
 	@PrimaryColumn(id())
 	public id: string;
@@ -25,7 +28,7 @@ export class MiHashtag {
 	})
 	public mentionedUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -38,7 +41,7 @@ export class MiHashtag {
 	})
 	public mentionedLocalUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -51,7 +54,7 @@ export class MiHashtag {
 	})
 	public mentionedRemoteUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
@@ -64,7 +67,7 @@ export class MiHashtag {
 	})
 	public attachedUserIds: MiUser['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 	})
