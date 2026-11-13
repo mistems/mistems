@@ -566,9 +566,6 @@ export default abstract class Chart<T extends Schema> {
 			]);
 
 			this.logger.debug(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
-
-			// TODO: この一連の処理が始まった後に新たにbufferに入ったものは消さないようにする
-			this.buffer = this.buffer.filter(q => q.group != null && (q.group !== logHour.group));
 		};
 
 		const groups = removeDuplicates(buffer.map(log => log.group));
