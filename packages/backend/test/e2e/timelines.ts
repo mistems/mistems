@@ -1111,6 +1111,54 @@ describe('Timelines', () => {
 					assert.strictEqual(res.body.some(note => note.id === carolNote.id), true);
 				});
 			});
+
+			describe('フォロー数が多い場合の DB フォールバック (LATERAL 高速パス)', () => {
+				test('フォロー数が閾値を超えていても正しい順序・件数のノートが返る', async () => {
+					const alice = await signup();
+					const followees = await Promise.all(Array.from({ length: 55 }, () => signup()));
+					await Promise.all(followees.map(u => api('following/create', { userId: u.id }, alice)));
+
+					// ID の新旧を確定させるため逐次投稿する (並列だと生成順序が不定になる)
+					const notes: Note[] = [];
+					for (const u of followees) {
+						notes.push(await post(u, { text: 'hi' }));
+					}
+
+					await vi.waitFor(async () => {
+						const res = await api('notes/timeline', { limit: 10 }, alice);
+
+						assert.strictEqual(res.body.length, 10);
+						assert.deepStrictEqual(res.body.map(n => n.id), notes.slice(-10).map(n => n.id).reverse());
+					}, waitForPushToTlOptions);
+				});
+
+				test('候補集合が凍結ユーザーで大きく削られても limit 件のノートが返る (safety net)', async () => {
+					const alice = await signup();
+					const followees = await Promise.all(Array.from({ length: 55 }, () => signup()));
+					await Promise.all(followees.map(u => api('following/create', { userId: u.id }, alice)));
+
+					const notes: Note[] = [];
+					for (const u of followees) {
+						notes.push(await post(u, { text: 'hi' }));
+					}
+
+					// 新しい方 25 人を凍結する。LATERAL 側の安全マージン (limit の3倍 = 30件)
+					// のうちほとんどが凍結ユーザーの投稿になり、素朴な Phase2 だけでは
+					// limit (10件) を満たせなくなる状況を作る
+					const recentFollowees = followees.slice(-25);
+					await Promise.all(recentFollowees.map(u => api('admin/suspend-user', { userId: u.id }, root)));
+					const suspendedNoteIds = new Set(notes.slice(-25).map(n => n.id));
+					const expectedIds = notes.filter(n => !suspendedNoteIds.has(n.id)).slice(-10).map(n => n.id).reverse();
+
+					await vi.waitFor(async () => {
+						const res = await api('notes/timeline', { limit: 10 }, alice);
+
+						assert.strictEqual(res.body.length, 10);
+						assert.strictEqual(res.body.every(n => !suspendedNoteIds.has(n.id)), true);
+						assert.deepStrictEqual(res.body.map(n => n.id), expectedIds);
+					}, waitForPushToTlOptions);
+				});
+			});
 		});
 
 		describe('Local TL', () => {
