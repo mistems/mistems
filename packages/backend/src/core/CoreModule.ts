@@ -152,6 +152,7 @@ import { ApMentionService } from './activitypub/models/ApMentionService.js';
 import { ApNoteService } from './activitypub/models/ApNoteService.js';
 import { ApPersonService } from './activitypub/models/ApPersonService.js';
 import { ApQuestionService } from './activitypub/models/ApQuestionService.js';
+import { RemoteNoteReactionSyncService } from './activitypub/RemoteNoteReactionSyncService.js';
 import { QueueModule } from './QueueModule.js';
 import { QueueService } from './QueueService.js';
 import { LoggerService } from './LoggerService.js';
@@ -309,6 +310,7 @@ const $ApMentionService: Provider = { provide: 'ApMentionService', useExisting: 
 const $ApNoteService: Provider = { provide: 'ApNoteService', useExisting: ApNoteService };
 const $ApPersonService: Provider = { provide: 'ApPersonService', useExisting: ApPersonService };
 const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting: ApQuestionService };
+const $RemoteNoteReactionSyncService: Provider = { provide: 'RemoteNoteReactionSyncService', useExisting: RemoteNoteReactionSyncService };
 //#endregion
 
 @Module({
@@ -464,6 +466,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ApNoteService,
 		ApPersonService,
 		ApQuestionService,
+		RemoteNoteReactionSyncService,
 		QueueService,
 		TelemetryService,
 		TimelineDbFallbackService,
@@ -616,6 +619,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$ApNoteService,
 		$ApPersonService,
 		$ApQuestionService,
+		$RemoteNoteReactionSyncService,
 		$TelemetryService,
 		$TimelineDbFallbackService,
 		//#endregion
@@ -769,6 +773,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ApNoteService,
 		ApPersonService,
 		ApQuestionService,
+		RemoteNoteReactionSyncService,
 		QueueService,
 		TelemetryService,
 		TimelineDbFallbackService,
@@ -919,6 +924,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$ApNoteService,
 		$ApPersonService,
 		$ApQuestionService,
+		$RemoteNoteReactionSyncService,
 		$TelemetryService,
 		$TimelineDbFallbackService,
 		//#endregion
