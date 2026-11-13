@@ -3835,3 +3835,7 @@ _frontendVariants:
   skippedTitle: "ビルドできなかった variant"
   noPermission: "この画面を表示する権限がありません。"
   loadFailed: "variant の一覧を読み込めませんでした。"
+_emojiPreview:
+  title: "絵文字として確認"
+  currentTheme: "今のテーマ"
+  defaultTheme: "既定のテーマ"

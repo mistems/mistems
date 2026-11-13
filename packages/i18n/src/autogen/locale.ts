@@ -14358,4 +14358,18 @@ export interface Locale extends ILocale {
          */
         "loadFailed": string;
     };
+    "_emojiPreview": {
+        /**
+         * 絵文字として確認
+         */
+        "title": string;
+        /**
+         * 今のテーマ
+         */
+        "currentTheme": string;
+        /**
+         * 既定のテーマ
+         */
+        "defaultTheme": string;
+    };
 }
