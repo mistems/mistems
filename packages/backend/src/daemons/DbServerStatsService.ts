@@ -13,11 +13,17 @@ import type { OnApplicationShutdown } from '@nestjs/common';
 
 const ev = new Xev();
 
-/** db_server_stats を見に行く間隔。収集スクリプトの既定の実行間隔 (60 秒) より短くして、新しい行を待たせすぎない */
-const interval = 30 * 1000;
+/**
+ * db_server_stats を見に行く間隔。ウィジェットは時刻を横軸にして 100 秒ぶんを描くので、
+ * 収集スクリプトの実行間隔 (60 秒) よりずっと短くし、新しい行が描かれるまでの遅れを小さくする
+ */
+const interval = 10 * 1000;
 
 /** requestLog で返す最大件数 */
 const logCapacity = 200;
+
+/** これより古い行は、ホストごとの最新の行を探すときに見ない (収集が止まったホストを配信し続けないため) */
+const latestWindow = '10 minutes';
 
 /** 最後の dbServerStatsWatching からこの時間がたったら SELECT を止める */
 const watchTimeout = 5 * 60 * 1000;
@@ -79,7 +85,8 @@ const rowToStats = (row: Row): DbServerStats => ({
 @Injectable()
 export class DbServerStatsService implements OnApplicationShutdown {
 	private intervalId: NodeJS.Timeout | null = null;
-	private lastTs: string | null = null;
+	/** ホストごとに、最後に配信した行の ts */
+	private lastTsByHost = new Map<string, string>();
 	private lastWatchedAt = 0;
 
 	constructor(
@@ -124,19 +131,30 @@ export class DbServerStatsService implements OnApplicationShutdown {
 	}
 
 	@bindThis
+	private async fetchLatestPerHost(): Promise<DbServerStats[]> {
+		try {
+			const rows: Row[] = await this.db.query(
+				`SELECT DISTINCT ON ("host_id") * FROM "db_server_stats" WHERE "ts" > now() - interval '${latestWindow}' ORDER BY "host_id", "ts" DESC`,
+			);
+			return rows.map(rowToStats);
+		} catch {
+			return [];
+		}
+	}
+
+	@bindThis
 	private async tick(): Promise<void> {
 		// 管理画面での切り替えを再起動なしで反映するため、毎回フラグを見る
 		if (!this.meta.enableDbServerStats) return;
 		if (Date.now() - this.lastWatchedAt >= watchTimeout) return;
 
-		const [stats] = await this.fetch(1);
-		if (stats == null) return;
-
-		// 同じ ts の行は配信しない（収集スクリプトがまだ次の行を入れていない）
-		if (stats.ts === this.lastTs) return;
-		this.lastTs = stats.ts;
-
-		ev.emit('dbServerStats', stats);
+		// DB サーバーが複数台あると、同じ時刻に複数の行が入る。ホストごとに最新の行を配信する
+		for (const stats of await this.fetchLatestPerHost()) {
+			// 同じ ts の行は配信しない（収集スクリプトがまだ次の行を入れていない）
+			if (this.lastTsByHost.get(stats.hostId) === stats.ts) continue;
+			this.lastTsByHost.set(stats.hostId, stats.ts);
+			ev.emit('dbServerStats', stats);
+		}
 	}
 
 	@bindThis

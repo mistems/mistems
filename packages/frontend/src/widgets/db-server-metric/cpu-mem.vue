@@ -45,9 +45,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { genId } from '@/utility/id.js';
+import { buildDbServerMetricPoints, DB_SERVER_METRIC_MS_PER_UNIT } from '@/utility/db-server-metric-chart.js';
+import type { DbServerMetricSample } from '@/utility/db-server-metric-chart.js';
 
 const props = defineProps<{
 	history: Misskey.entities.DbServerStats[];
@@ -60,29 +62,42 @@ const cpuMaskId = genId();
 const memGradientId = genId();
 const memMaskId = genId();
 
-const recent = computed(() => props.history.slice(-50));
+// サーバーメトリクスのウィジェットと同じ間隔で右端の時刻を進め、グラフを流す
+const now = ref(Date.now());
+const nowTimer = window.setInterval(() => {
+	now.value = Date.now();
+}, DB_SERVER_METRIC_MS_PER_UNIT);
+onUnmounted(() => {
+	window.clearInterval(nowTimer);
+});
 
-const cpuRatios = computed(() => recent.value.map(s => s.cpu ?? 0));
-const memRatios = computed(() => recent.value.map(s => {
-	if (s.memUsed == null || s.memTotal == null || s.memTotal === 0) return 0;
-	return s.memUsed / s.memTotal;
-}));
+const cpuSamples = computed<DbServerMetricSample[]>(() => props.history
+	.filter(s => s.cpu != null)
+	.map(s => ({ time: Date.parse(s.ts), value: s.cpu! })));
+const memSamples = computed<DbServerMetricSample[]>(() => props.history
+	.filter(s => s.memUsed != null && s.memTotal != null && s.memTotal !== 0)
+	.map(s => ({ time: Date.parse(s.ts), value: s.memUsed! / s.memTotal! })));
 
-const cpuPolylinePoints = computed(() =>
-	cpuRatios.value
-		.map((r, i) => `${viewBoxX - (cpuRatios.value.length - 1 - i)},${(1 - r) * viewBoxY}`)
-		.join(' '),
-);
-const memPolylinePoints = computed(() =>
-	memRatios.value
-		.map((r, i) => `${viewBoxX - (memRatios.value.length - 1 - i)},${(1 - r) * viewBoxY}`)
-		.join(' '),
-);
-const cpuPolygonPoints = computed(() => `${viewBoxX - (cpuRatios.value.length - 1)},${viewBoxY} ${cpuPolylinePoints.value} ${viewBoxX},${viewBoxY}`);
-const memPolygonPoints = computed(() => `${viewBoxX - (memRatios.value.length - 1)},${viewBoxY} ${memPolylinePoints.value} ${viewBoxX},${viewBoxY}`);
+const toPolyline = (points: [number, number][]) => points.map(([x, y]) => `${x},${y}`).join(' ');
+const toPolygon = (points: [number, number][]) => points.length === 0
+	? ''
+	: `${points[0][0]},${viewBoxY} ${toPolyline(points)} ${points[points.length - 1][0]},${viewBoxY}`;
 
-const cpuP = computed(() => ((cpuRatios.value.at(-1) ?? 0) * 100).toFixed(0));
-const memP = computed(() => ((memRatios.value.at(-1) ?? 0) * 100).toFixed(0));
+const cpuPoints = computed(() => buildDbServerMetricPoints(cpuSamples.value, now.value, viewBoxX, viewBoxY));
+const memPoints = computed(() => buildDbServerMetricPoints(memSamples.value, now.value, viewBoxX, viewBoxY));
+const cpuPolylinePoints = computed(() => toPolyline(cpuPoints.value));
+const memPolylinePoints = computed(() => toPolyline(memPoints.value));
+const cpuPolygonPoints = computed(() => toPolygon(cpuPoints.value));
+const memPolygonPoints = computed(() => toPolygon(memPoints.value));
+
+// 数字は最新の行の値を出す。最新の行で測れなかった値は、1 つ前の行の値で埋めずに「-」にする
+const latest = computed(() => props.history.at(-1) ?? null);
+const cpuP = computed(() => latest.value?.cpu != null ? (latest.value.cpu * 100).toFixed(0) : '-');
+const memP = computed(() => {
+	const s = latest.value;
+	if (s == null || s.memUsed == null || s.memTotal == null || s.memTotal === 0) return '-';
+	return (s.memUsed / s.memTotal * 100).toFixed(0);
+});
 </script>
 
 <style lang="scss" module>
