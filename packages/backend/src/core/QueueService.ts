@@ -23,6 +23,7 @@ import type {
 	DbJobData,
 	ArchiveAnnouncementJobData,
 	DeliverJobData,
+	RefetchNoteJobData,
 	RelationshipJobData,
 	SystemWebhookDeliverJobData,
 	ThinUser,
@@ -33,6 +34,7 @@ import type {
 	DeliverQueue,
 	EndedPollNotificationQueue,
 	PostScheduledNoteQueue,
+	RefetchNoteQueue,
 	InboxQueue,
 	ObjectStorageQueue,
 	RelationshipQueue,
@@ -47,6 +49,7 @@ export const QUEUE_TYPES = [
 	'system',
 	'endedPollNotification',
 	'postScheduledNote',
+	'refetchNote',
 	'deliver',
 	'inbox',
 	'db',
@@ -109,6 +112,7 @@ export class QueueService {
 		@Inject('queue:system') public systemQueue: SystemQueue,
 		@Inject('queue:endedPollNotification') public endedPollNotificationQueue: EndedPollNotificationQueue,
 		@Inject('queue:postScheduledNote') public postScheduledNoteQueue: PostScheduledNoteQueue,
+		@Inject('queue:refetchNote') public refetchNoteQueue: RefetchNoteQueue,
 		@Inject('queue:deliver') public deliverQueue: DeliverQueue,
 		@Inject('queue:inbox') public inboxQueue: InboxQueue,
 		@Inject('queue:db') public dbQueue: DbQueue,
@@ -332,6 +336,15 @@ export class QueueService {
 				age: 3600 * 24 * 7, // keep up to 7 days
 				count: 100,
 			},
+		});
+	}
+
+	@bindThis
+	public enqueueRefetchNote(noteId: string) {
+		return this.refetchNoteQueue.add('refetchNote', { noteId }, {
+			jobId: noteId, // 同一ノートの重複 enqueue を de-dup する
+			removeOnComplete: true,
+			removeOnFail: true,
 		});
 	}
 
@@ -773,6 +786,7 @@ export class QueueService {
 			case 'system': return this.systemQueue;
 			case 'endedPollNotification': return this.endedPollNotificationQueue;
 			case 'postScheduledNote': return this.postScheduledNoteQueue;
+			case 'refetchNote': return this.refetchNoteQueue;
 			case 'deliver': return this.deliverQueue;
 			case 'inbox': return this.inboxQueue;
 			case 'db': return this.dbQueue;

@@ -16,6 +16,7 @@ import { UserWebhookDeliverProcessorService } from './processors/UserWebhookDeli
 import { SystemWebhookDeliverProcessorService } from './processors/SystemWebhookDeliverProcessorService.js';
 import { EndedPollNotificationProcessorService } from './processors/EndedPollNotificationProcessorService.js';
 import { PostScheduledNoteProcessorService } from './processors/PostScheduledNoteProcessorService.js';
+import { RefetchNoteProcessorService } from './processors/RefetchNoteProcessorService.js';
 import { DeliverProcessorService } from './processors/DeliverProcessorService.js';
 import { InboxProcessorService } from './processors/InboxProcessorService.js';
 import { DeleteDriveFilesProcessorService } from './processors/DeleteDriveFilesProcessorService.js';
@@ -90,6 +91,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 	private objectStorageQueueWorker: Bull.Worker;
 	private endedPollNotificationQueueWorker: Bull.Worker;
 	private postScheduledNoteQueueWorker: Bull.Worker;
+	private refetchNoteQueueWorker: Bull.Worker;
 
 	constructor(
 		@Inject(DI.config)
@@ -101,6 +103,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 		private systemWebhookDeliverProcessorService: SystemWebhookDeliverProcessorService,
 		private endedPollNotificationProcessorService: EndedPollNotificationProcessorService,
 		private postScheduledNoteProcessorService: PostScheduledNoteProcessorService,
+		private refetchNoteProcessorService: RefetchNoteProcessorService,
 		private deliverProcessorService: DeliverProcessorService,
 		private inboxProcessorService: InboxProcessorService,
 		private deleteDriveFilesProcessorService: DeleteDriveFilesProcessorService,
@@ -544,6 +547,31 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			});
 		}
 		//#endregion
+
+		//#region refetch note
+		{
+			const logger = this.logger.createSubLogger('refetch-note');
+
+			this.refetchNoteQueueWorker = new Bull.Worker(QUEUE.REFETCH_NOTE, (job) => {
+				return runQueueJob(
+					this.telemetryService,
+					'Queue: RefetchNote',
+					() => this.refetchNoteProcessorService.process(job),
+					err => {
+						logger.error(`failed(${err.name}: ${err.message}) id=${job.id}`, { job: renderJob(job), e: renderError(err) });
+						this.telemetryService.captureMessage(`Queue: RefetchNote: ${err.name}: ${err.message}`, {
+							level: 'error',
+							extra: { job, err },
+						});
+					},
+				);
+			}, {
+				...baseWorkerOptions(this.config, QUEUE.REFETCH_NOTE),
+				autorun: false,
+				concurrency: 4,
+			});
+		}
+		//#endregion
 	}
 
 	@bindThis
@@ -559,6 +587,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			this.objectStorageQueueWorker.run(),
 			this.endedPollNotificationQueueWorker.run(),
 			this.postScheduledNoteQueueWorker.run(),
+			this.refetchNoteQueueWorker.run(),
 		]);
 	}
 
@@ -575,6 +604,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 			this.objectStorageQueueWorker.close(),
 			this.endedPollNotificationQueueWorker.close(),
 			this.postScheduledNoteQueueWorker.close(),
+			this.refetchNoteQueueWorker.close(),
 		]);
 	}
 

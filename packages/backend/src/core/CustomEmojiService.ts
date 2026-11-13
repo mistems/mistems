@@ -8,6 +8,7 @@ import * as Redis from 'ioredis';
 import { In, IsNull } from 'typeorm';
 import { EmojiEntityService } from '@/core/entities/EmojiEntityService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
+import type { GlobalEvents } from '@/core/GlobalEventService.js';
 import { IdService } from '@/core/IdService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { UtilityService } from '@/core/UtilityService.js';
@@ -65,6 +66,10 @@ export class CustomEmojiService implements OnApplicationShutdown {
 	constructor(
 		@Inject(DI.redis)
 		private redisClient: Redis.Redis,
+
+		@Inject(DI.redisForSub)
+		private redisForSub: Redis.Redis,
+
 		@Inject(DI.emojisRepository)
 		private emojisRepository: EmojisRepository,
 		private utilityService: UtilityService,
@@ -87,6 +92,35 @@ export class CustomEmojiService implements OnApplicationShutdown {
 				}]));
 			},
 		});
+
+		this.redisForSub.on('message', this.onMessage);
+	}
+
+	@bindThis
+	private async onMessage(_: string, data: string): Promise<void> {
+		const obj = JSON.parse(data);
+
+		if (obj.channel === 'internal') {
+			const { type, body } = obj.message as GlobalEvents['internal']['payload'];
+			switch (type) {
+				case 'remoteEmojiUpdated': {
+					// リモート絵文字 (name, host) が更新されたので、当該キーのプロセスローカルキャッシュを破棄する (§7-1)。
+					this.emojisCache.delete(`${body.name} ${body.host}`);
+					break;
+				}
+				default:
+					break;
+			}
+		}
+	}
+
+	/**
+	 * リモート絵文字 (name, host) が更新されたことをクラスタ全体へ通知し、各プロセスの emojisCache を無効化する (§7-1)。
+	 * publishInternalEvent は redis pub/sub 経由で発行元プロセス自身にも届くため、ここでローカルの delete は行わない。
+	 */
+	@bindThis
+	public invalidateRemoteEmojiCache(name: string, host: string): void {
+		this.globalEventService.publishInternalEvent('remoteEmojiUpdated', { name, host });
 	}
 
 	@bindThis
@@ -603,6 +637,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 
 	@bindThis
 	public dispose(): void {
+		this.redisForSub.off('message', this.onMessage);
 		this.emojisCache.dispose();
 	}
 
