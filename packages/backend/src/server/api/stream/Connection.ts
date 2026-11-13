@@ -33,6 +33,7 @@ import { AntennaChannel } from '@/server/api/stream/channels/antenna.js';
 import { ChannelChannel } from '@/server/api/stream/channels/channel.js';
 import { DriveChannel } from '@/server/api/stream/channels/drive.js';
 import { ServerStatsChannel } from '@/server/api/stream/channels/server-stats.js';
+import { DbServerStatsChannel } from '@/server/api/stream/channels/db-server-stats.js';
 import { QueueStatsChannel } from '@/server/api/stream/channels/queue-stats.js';
 import { AdminChannel } from '@/server/api/stream/channels/admin.js';
 import { ChatUserChannel } from '@/server/api/stream/channels/chat-user.js';
@@ -370,6 +371,7 @@ export default class Connection {
 			case 'channel': return ChannelChannel;
 			case 'drive': return DriveChannel;
 			case 'serverStats': return ServerStatsChannel;
+			case 'dbServerStats': return DbServerStatsChannel;
 			case 'queueStats': return QueueStatsChannel;
 			case 'admin': return AdminChannel;
 			case 'chatUser': return ChatUserChannel;

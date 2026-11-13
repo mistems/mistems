@@ -19,6 +19,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 				<SearchMarker>
 					<div class="_panel" style="padding: 16px;">
+						<MkSwitch v-model="enableDbServerStats" @change="onChange_enableDbServerStats">
+							<template #label><SearchLabel>{{ i18n.ts.enableDbServerStats }}</SearchLabel></template>
+							<template #caption>{{ i18n.ts.enableDbServerStatsDescription }}</template>
+						</MkSwitch>
+					</div>
+				</SearchMarker>
+
+				<SearchMarker>
+					<div class="_panel" style="padding: 16px;">
 						<MkSwitch v-model="enableIdenticonGeneration" @change="onChange_enableIdenticonGeneration">
 							<template #label><SearchLabel>{{ i18n.ts.enableIdenticonGeneration }}</SearchLabel></template>
 							<template #caption>{{ i18n.ts.turnOffToImprovePerformance }}</template>
@@ -193,6 +202,7 @@ import MkFormFooter from '@/components/MkFormFooter.vue';
 const meta = await misskeyApi('admin/meta');
 
 const enableServerMachineStats = ref(meta.enableServerMachineStats);
+const enableDbServerStats = ref(meta.enableDbServerStats);
 const enableIdenticonGeneration = ref(meta.enableIdenticonGeneration);
 const enableChartsForRemoteUser = ref(meta.enableChartsForRemoteUser);
 const enableStatsForFederatedInstances = ref(meta.enableStatsForFederatedInstances);
@@ -204,6 +214,12 @@ function onChange_enableServerMachineStats(value: boolean) {
 		enableServerMachineStats: value,
 	}).then(() => {
 		fetchInstance(true);
+	});
+}
+
+function onChange_enableDbServerStats(value: boolean) {
+	os.apiWithDialog('admin/update-meta', {
+		enableDbServerStats: value,
 	});
 }
 
