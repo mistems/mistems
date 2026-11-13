@@ -6771,6 +6771,82 @@ export interface Locale extends ILocale {
          * オンにすると、このお知らせは通知されず、既読にする必要もなくなります。
          */
         "silenceDescription": string;
+        /**
+         * グループ
+         */
+        "groups": string;
+        /**
+         * グループ
+         */
+        "group": string;
+        /**
+         * なし（その他）
+         */
+        "noGroup": string;
+        /**
+         * グループを追加
+         */
+        "addGroup": string;
+        /**
+         * グループの名前
+         */
+        "groupName": string;
+        /**
+         * アイコン
+         */
+        "groupIcon": string;
+        /**
+         * Tabler Icons のアイコンの名前を入れます（例: ti-speakerphone）。
+         */
+        "groupIconDescription": string;
+        /**
+         * お知らせのページで、お知らせをグループごとのタブに分けて表示します。グループに入っていないお知らせは「その他」のタブに入ります。
+         */
+        "groupsDescription": string;
+        /**
+         * グループ「{name}」を削除しますか？ このグループのお知らせは「その他」に移ります。
+         */
+        "deleteGroupConfirm": ParameterizedString<"name">;
+        /**
+         * グループで絞り込む
+         */
+        "filterByGroup": string;
+        /**
+         * このタブを非通知にする
+         */
+        "muteGroup": string;
+        /**
+         * このタブの非通知を解除する
+         */
+        "unmuteGroup": string;
+        /**
+         * このタブは非通知です。新しいお知らせを、バッジやダイアログで知らせません。
+         */
+        "mutedTabInfo": string;
+        /**
+         * お知らせのグループごとの通知
+         */
+        "groupNotifications": string;
+        /**
+         * オフにしたグループのお知らせは、バッジやダイアログで知らせません。お知らせのページのタブでは読めます。既読の確認が必要なお知らせと、あなた宛てのお知らせは、オフにしても知らせます。
+         */
+        "groupNotificationsDescription": string;
+        /**
+         * 表示順の並べ替え
+         */
+        "reorder": string;
+        /**
+         * 左のつまみをドラッグするか、矢印のボタンで並べ替えると、すぐに保存されます。お知らせのページでは、グループのタブでもこの順番で表示されます。新しいお知らせは先頭に入ります。
+         */
+        "reorderDescription": string;
+        /**
+         * 上へ移動
+         */
+        "moveUp": string;
+        /**
+         * 下へ移動
+         */
+        "moveDown": string;
     };
     "_initialAccountSetting": {
         /**
@@ -12408,6 +12484,22 @@ export interface Locale extends ILocale {
          * ノートのリノートのロックを解除
          */
         "unlockNoteRenote": string;
+        /**
+         * お知らせのグループを作成
+         */
+        "createAnnouncementGroup": string;
+        /**
+         * お知らせのグループを更新
+         */
+        "updateAnnouncementGroup": string;
+        /**
+         * お知らせのグループを削除
+         */
+        "deleteAnnouncementGroup": string;
+        /**
+         * お知らせの表示順を変更
+         */
+        "reorderAnnouncements": string;
     };
     "_fileViewer": {
         /**
