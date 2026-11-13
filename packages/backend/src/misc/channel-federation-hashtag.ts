@@ -69,8 +69,8 @@ export function buildChannelFederationHashtag(params: {
 
 /**
  * ノートの本文 (MFM) から、連合するチャンネルの形をしたハッシュタグを取り出す。
- * MISTEMS どうしでは、チャンネルのハッシュタグを AP の tag に入れず本文の付記にだけ書くので、
- * 受け取る側は本文から読む。
+ * 古い MISTEMS は、チャンネルのハッシュタグを AP の tag に入れず本文の付記にだけ書いていたので、
+ * 受け取る側は AP の tag に加えて本文からも読む。
  */
 export function extractChannelFederationHashtagsFromText(text: string | null | undefined): string[] {
 	if (text == null || !text.includes(CHANNEL_FEDERATION_HASHTAG_MARKER)) return [];

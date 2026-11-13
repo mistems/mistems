@@ -26,6 +26,8 @@ import type { MiUserKeypair } from '@/models/UserKeypair.js';
 import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, ChannelsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { sanitizeChannelFederationHashtagPart } from '@/misc/channel-federation-hashtag.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
+import { extractHashtags } from '@/misc/extract-hashtags.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { IdService } from '@/core/IdService.js';
 import { UtilityService } from '@/core/UtilityService.js';
@@ -430,29 +432,34 @@ export class ApRendererService {
 
 		const files = await getPromisedFiles(note.fileIds);
 
-		// チャンネルノートには、リモートの読者向けにチャンネル名とURLを本文へ付記する。
-		// この固定URLはリモートユーザーがチャンネル単位でワードミュートするためのアンカーを兼ねるため、
-		// content だけでなく _misskey_content / source (Misskey系受信側が優先する原文) にも必ず含める。
-		// チャンネル行が取得できなくても URL は落とさない (ミュートアンカーの省略条件を作らない)。
+		// チャンネルノートには、リモートの読者向けに本文へ付記する。
+		// - 連合するチャンネル (ハッシュタグがある): ハッシュタグだけを書く。ハッシュタグは note.tags にも
+		//   入っているので AP の tag にも載り、相手のサーバーではハッシュタグのページから辿れる。
+		//   ワードミュートのアンカーもこのハッシュタグが兼ねる
+		// - それ以外: 従来どおり「From: 「チャンネル名」 URL」を書く。この固定 URL がワードミュートの
+		//   アンカーを兼ねるので、チャンネル行が取得できなくても URL は落とさない
+		// content だけでなく _misskey_content / source (Misskey 系の受信側が優先する原文) にも含める。
 		let text = note.text ?? '';
 		if (note.channelId != null) {
 			const channel = note.channel ?? await this.channelsRepository.findOneBy({ id: note.channelId });
-			const channelUrl = `${this.config.url}/channels/${note.channelId}`;
-			// チャンネル名は source (MFM原文) にも載るため、改行/制御文字と MFM/メンション記号を潰して
-			// 受信側での「From:」行偽装やミュートアンカー汚染を防ぐ (URL 部分がアンカー本体)
-			const safeName = channel != null
-				? channel.name.replace(/[\r\n\u0000-\u001f]/g, ' ').replace(/[@#$`[\]]/g, '').trim()
-				: null;
-			const namePart = safeName ? `「${safeName}」 ` : '';
-			// 連合するチャンネルのハッシュタグは、本文の付記に文字列として書くだけにする。
-			// AP の tag (hashtagTags) にもローカルの note.tags にも入れないので、相手のサーバーでも
-			// 自分のサーバーでも、ハッシュタグのページやトレンドには数えられない。
 			// 保存時に文字・数字・下線だけに限っているが、念のためここでも使えない文字を落とす。
 			const safeHashtag = channel?.federationHashtag != null
 				? sanitizeChannelFederationHashtagPart(channel.federationHashtag)
 				: '';
-			const hashtagPart = safeHashtag ? `#${safeHashtag} ` : '';
-			text = `${text}\n\nFrom: ${namePart}${hashtagPart}${channelUrl}`.trim();
+			if (safeHashtag !== '') {
+				const hashtag = `#${safeHashtag}`;
+				const alreadyWritten = extractHashtags(mfm.parse(text)).some(tag => normalizeTag(tag) === normalizeTag(safeHashtag));
+				if (!alreadyWritten) text = `${text}\n\n${hashtag}`.trim();
+			} else {
+				const channelUrl = `${this.config.url}/channels/${note.channelId}`;
+				// チャンネル名は source (MFM原文) にも載るため、改行/制御文字と MFM/メンション記号を潰して
+				// 受信側での「From:」行偽装やミュートアンカー汚染を防ぐ (URL 部分がアンカー本体)
+				const safeName = channel != null
+					? channel.name.replace(/[\r\n\u0000-\u001f]/g, ' ').replace(/[@#$`[\]]/g, '').trim()
+					: null;
+				const namePart = safeName ? `「${safeName}」 ` : '';
+				text = `${text}\n\nFrom: ${namePart}${channelUrl}`.trim();
+			}
 		}
 
 		let poll: MiPoll | null = null;

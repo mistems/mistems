@@ -11,7 +11,7 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
-import { extractChannelFederationHashtagsFromText } from '@/misc/channel-federation-hashtag.js';
+import { extractChannelFederationHashtagsFromText, isValidChannelFederationHashtag } from '@/misc/channel-federation-hashtag.js';
 import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
@@ -632,6 +632,14 @@ export class NoteCreateService implements OnApplicationShutdown {
 		// if the host is media-silenced, custom emojis are not allowed
 		if (this.utilityService.isMediaSilencedHost(this.meta.mediaSilencedHosts, user.host)) emojis = [];
 
+		// 連合するチャンネルへのローカルの投稿には、チャンネルのハッシュタグを付ける。
+		// AP の tag にも載るので、ほかのサーバーでもハッシュタグのページから辿れる。
+		// 上限の 32 個で落ちないよう、先頭に置く。
+		const channelHashtag = this.getOwnChannelFederationHashtag(data, user);
+		if (channelHashtag != null && !tags.some(tag => normalizeTag(tag) === normalizeTag(channelHashtag))) {
+			tags = [channelHashtag, ...tags];
+		}
+
 		tags = tags.filter(tag => Array.from(tag).length <= 128).splice(0, 32);
 
 		if (data.reply && (user.id !== data.reply.userId) && !mentionedUsers.some(u => u.id === data.reply!.userId)) {
@@ -1028,15 +1036,34 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.visibility !== 'public' || data.localOnly) return;
 		if (this.isRenote(data) && !this.isQuote(data)) return;
 
-		// AP の tag のハッシュタグに加えて、本文の付記に書かれたハッシュタグも見る
-		// (MISTEMS どうしでは、チャンネルのハッシュタグを tag に入れず本文にだけ書くため)
-		const tags = [...(data.apHashtags ?? []), ...extractChannelFederationHashtagsFromText(data.text)];
+		// AP の tag のハッシュタグに加えて、本文に書かれたチャンネルのハッシュタグも見る。
+		// 古い MISTEMS は、チャンネルのハッシュタグを tag に入れず本文の付記にだけ書いていた。
+		// 本文にだけあるものは、ノートのハッシュタグにも足して、ハッシュタグのページに出るようにする。
+		const textTags = extractChannelFederationHashtagsFromText(data.text);
+		if (data.apHashtags != null && textTags.length > 0) {
+			const known = new Set(data.apHashtags.map(tag => normalizeTag(tag)));
+			data.apHashtags = [...data.apHashtags, ...textTags.filter(tag => !known.has(normalizeTag(tag)))];
+		}
+		const tags = [...(data.apHashtags ?? []), ...textTags];
 		if (tags.length === 0) return;
 
 		const channel = await this.channelFederationHashtagService.findCollectingChannel(tags);
 		if (channel == null) return;
 
 		data.channel = channel;
+	}
+
+	/**
+	 * ローカルのユーザーが連合するチャンネルへ公開で投稿するときの、そのチャンネルのハッシュタグ。
+	 * ローカル限定になったノートと、連合しないチャンネルへの投稿には付けない。
+	 */
+	@bindThis
+	private getOwnChannelFederationHashtag(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): string | null {
+		if (!this.userEntityService.isLocalUser(user)) return null;
+		if (data.localOnly || !this.doesChannelFederate(data.channel)) return null;
+		const hashtag = data.channel?.federationHashtag;
+		if (hashtag == null || !isValidChannelFederationHashtag(hashtag)) return null;
+		return hashtag;
 	}
 
 	@bindThis

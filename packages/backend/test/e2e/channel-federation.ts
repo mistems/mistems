@@ -150,12 +150,12 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(res.status, 404);
 		});
 
-		test('連合するチャンネルのノートは本文にチャンネルの URL を付けて返す', async () => {
+		test('連合するチャンネルのノートは本文にチャンネルのハッシュタグを付けて返す', async () => {
 			const channel = (await api('channels/create', { name: 'ap-public', federationPolicy: 'public' }, alice)).body;
 			const note = await post(alice, { text: 'hello', channelId: channel.id });
 			const res = await simpleGet(`/notes/${note.id}`, AP);
 			assert.strictEqual(res.status, 200);
-			assert.ok((res.body as any).content.includes(`/channels/${channel.id}`));
+			assert.ok((res.body as any).content.includes(channel.federationHashtag!), (res.body as any).content);
 		});
 
 		test('連合を none に戻したチャンネルのノートは以後返さない', async () => {
@@ -240,18 +240,34 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(castAsError(res.body as any).error.code, 'ACCESS_DENIED');
 		});
 
-		test('AP では本文の付記にハッシュタグを書き、tag には入れない。ローカルの tags にも入れない', async () => {
+		test('連合するチャンネルへの投稿は、ローカルの tags と AP の tag にハッシュタグが入り、付記はハッシュタグだけになる', async () => {
 			const channel = (await api('channels/create', { name: 'hashtag-ap', federationPolicy: 'public' }, alice)).body;
 			const note = await post(alice, { text: 'hello', channelId: channel.id });
-			assert.deepStrictEqual(note.tags ?? [], []);
+			assert.deepStrictEqual(note.tags, [channel.federationHashtag!.toLowerCase()]);
 
 			const res = await simpleGet(`/notes/${note.id}`, 'application/activity+json');
 			assert.strictEqual(res.status, 200);
 			const body = res.body as any;
-			assert.ok(body.content.includes(`#${channel.federationHashtag}`), body.content);
-			assert.ok(body.content.includes(`/channels/${channel.id}`));
-			const tags = (body.tag ?? []) as { type: string }[];
-			assert.strictEqual(tags.filter(t => t.type === 'Hashtag').length, 0);
+			assert.strictEqual(body._misskey_content, `hello\n\n#${channel.federationHashtag}`);
+			assert.ok(!body.content.includes(`/channels/${channel.id}`), body.content);
+			assert.ok(!body.content.includes('From: '), body.content);
+			const tags = (body.tag ?? []) as { type: string; name?: string }[];
+			assert.deepStrictEqual(tags.filter(t => t.type === 'Hashtag').map(t => t.name?.toLowerCase()), [`#${channel.federationHashtag!.toLowerCase()}`]);
+
+			// 自分のサーバーのハッシュタグのページにも出る
+			const searched = await api('notes/search-by-tag', { tag: channel.federationHashtag! }, alice);
+			assert.strictEqual(searched.status, 200);
+			assert.ok((searched.body as { id: string }[]).some(n => n.id === note.id));
+		});
+
+		test('連合しないチャンネルとローカル限定の投稿には、ハッシュタグを付けない', async () => {
+			const channel = (await api('channels/create', { name: 'hashtag-none', federationPolicy: 'public' }, alice)).body;
+			const localOnly = await post(alice, { text: 'local', channelId: channel.id, localOnly: true });
+			assert.deepStrictEqual(localOnly.tags ?? [], []);
+
+			const closed = (await api('channels/create', { name: 'hashtag-closed', federationPolicy: 'none' }, alice)).body;
+			const note = await post(alice, { text: 'closed', channelId: closed.id });
+			assert.deepStrictEqual(note.tags ?? [], []);
 		});
 
 		test('「連合チャンネル_」を含むハッシュタグはトレンドに数えない', async () => {

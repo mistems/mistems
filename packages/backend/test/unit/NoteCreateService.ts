@@ -255,12 +255,22 @@ describe('NoteCreateService', () => {
 			expect(data.channel).toBe(null);
 		});
 
-		test('AP の tag になくても、本文の付記にハッシュタグがあれば入れる (MISTEMS どうしの同じ名前のチャンネル)', async () => {
+		test('AP の tag になくても、本文の付記にハッシュタグがあれば入れ、ノートのハッシュタグにも足す (古い MISTEMS の付記)', async () => {
 			const { data } = await collect({
-				channel: null, visibility: 'public', localOnly: false, apHashtags: [],
+				channel: null, visibility: 'public', localOnly: false, apHashtags: ['ほかのタグ'],
 				text: 'hello\n\nFrom: 「雑談」 #連合チャンネル_雑談 https://b.test/channels/x',
 			});
 			expect(data.channel).toBe(federatedChannel);
+			expect(data.apHashtags).toEqual(['ほかのタグ', '連合チャンネル_雑談']);
+		});
+
+		test('AP の tag と本文の両方にあるハッシュタグは、ノートのハッシュタグに重ねない', async () => {
+			const { data } = await collect({
+				channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'],
+				text: 'hello\n\n#連合チャンネル_雑談',
+			});
+			expect(data.channel).toBe(federatedChannel);
+			expect(data.apHashtags).toEqual(['連合チャンネル_雑談']);
 		});
 
 		test('本文のふつうのハッシュタグは、収蔵の判定に使わない', async () => {

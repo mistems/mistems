@@ -6,7 +6,7 @@
  */
 
 import { describe, test, beforeAll, vi } from 'vitest';
-import assert, { rejects, strictEqual } from 'node:assert';
+import assert, { deepStrictEqual, rejects, strictEqual } from 'node:assert';
 import * as Misskey from 'misskey-js';
 import { createAccount, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, waitForFollowRelation, WAIT_FOR_FEDERATION } from './utils.js';
 
@@ -90,14 +90,13 @@ describe('Channel federation', () => {
 			}, WAIT_FOR_FEDERATION);
 		});
 
-		test('F3: 相手から見た本文の末尾に、チャンネル名と URL が付く', async () => {
+		test('F3: 相手から見た本文の末尾には、チャンネルのハッシュタグだけが付く (From と URL は付かない)', async () => {
 			assert(noteInB.text != null);
-			assert(
-				noteInB.text.endsWith(`From: 「${channel.name}」 #${channel.federationHashtag} https://a.test/channels/${channel.id}`),
-				`unexpected text: ${noteInB.text}`,
-			);
+			assert(noteInB.text.endsWith(`\n\n#${channel.federationHashtag}`), `unexpected text: ${noteInB.text}`);
+			strictEqual(noteInB.text.includes('From:'), false);
+			strictEqual(noteInB.text.includes(`https://a.test/channels/${channel.id}`), false);
 			// 元のノートの本文は書き換えない
-			strictEqual(note.text?.includes('From:'), false);
+			strictEqual(note.text?.includes(`#${channel.federationHashtag}`), false);
 		});
 
 		test('F4: 相手からのリプライが、同じチャンネルに入る', async () => {
@@ -254,13 +253,13 @@ describe('Channel federation', () => {
 			strictEqual(channelInA.federationHashtag, `連合チャンネル_${channelInA.name.replace(/[^\p{L}\p{N}_]/gu, '')}`);
 			strictEqual(channelInB.federationHashtag, channelInA.federationHashtag);
 
-			// a.test のチャンネルのノートは、b.test の同じ名前のチャンネルに入る (AP の tag ではなく本文の付記から読む)
+			// a.test のチャンネルのノートは、b.test の同じ名前のチャンネルに入る
 			const fromA = await postToChannel(alice, channelInA.id);
 			await vi.waitFor(async () => {
 				const notes = await bob.client.request('channels/timeline', { channelId: channelInB.id, limit: 100 });
 				const found = notes.find(n => n.uri === `https://a.test/notes/${fromA.id}`);
 				assert(found != null);
-				strictEqual((found.tags ?? []).length, 0);
+				assert((found.tags ?? []).includes(channelInA.federationHashtag!.toLowerCase()), JSON.stringify(found.tags));
 			}, WAIT_FOR_FEDERATION);
 
 			// b.test のチャンネルのノートは、a.test の同じ名前のチャンネルに入る
@@ -270,16 +269,17 @@ describe('Channel federation', () => {
 			}, WAIT_FOR_FEDERATION);
 		});
 
-		test('H2: 相手には本文の付記にハッシュタグが届くが、相手のノートの tags には入らず、ハッシュタグの検索にも出ない', async () => {
+		test('H2: 相手に同じ名前のチャンネルがなくても、ハッシュタグは相手のノートの tags に入り、ハッシュタグの検索に出る', async () => {
 			const note = await postToChannel(alice, channel.id);
-			strictEqual((note.tags ?? []).length, 0);
+			deepStrictEqual(note.tags, [hashtag.toLowerCase()]);
 			const noteInB = await waitForNoteInBobHome(note.id);
 
-			assert(noteInB.text?.includes(`#${hashtag} https://a.test/channels/${channel.id}`), `unexpected text: ${noteInB.text}`);
-			strictEqual((noteInB.tags ?? []).length, 0);
+			strictEqual(noteInB.channelId ?? null, null);
+			assert(noteInB.text?.endsWith(`\n\n#${hashtag}`), `unexpected text: ${noteInB.text}`);
+			deepStrictEqual(noteInB.tags, [hashtag.toLowerCase()]);
 
 			const searched = await bob.client.request('notes/search-by-tag', { tag: hashtag, limit: 100 });
-			strictEqual(searched.some(n => n.uri === noteInB.uri), false);
+			assert(searched.some(n => n.uri === noteInB.uri));
 		});
 
 		test('H3: 相手のユーザーがハッシュタグを付けて公開で投稿すると、チャンネルに入る。外せばチャンネルのタイムラインから消える', async () => {

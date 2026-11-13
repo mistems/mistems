@@ -326,7 +326,7 @@ describe('ActivityPub', () => {
 		});
 
 		describe('チャンネルノートの本文付記 (チャンネル連合)', () => {
-			const createChannelNote = (text: string | null, channel: MiChannel | null) => ({
+			const createChannelNote = (text: string | null, channel: MiChannel | null, tags: string[] = []) => ({
 				id: genAidx(Date.now()),
 				userId: genAidx(Date.now()),
 				text,
@@ -338,7 +338,7 @@ describe('ActivityPub', () => {
 				mentionedRemoteUsers: '[]',
 				fileIds: [],
 				emojis: [],
-				tags: [],
+				tags,
 				hasPoll: false,
 				replyId: null,
 				renoteId: null,
@@ -346,7 +346,7 @@ describe('ActivityPub', () => {
 				channel,
 			} as unknown as MiNote);
 
-			test('本文末尾にチャンネル名と URL を付け (MFM 原文にも付ける)、元のノートは書き換えない', async () => {
+			test('ハッシュタグのないチャンネルでは、本文末尾にチャンネル名と URL を付け (MFM 原文にも付ける)、元のノートは書き換えない', async () => {
 				const channel = { id: genAidx(Date.now()), name: 'テスト\nチャンネル @alice #tag' } as MiChannel;
 				const note = createChannelNote('**hello**', channel);
 				const rendered = await rendererService.renderNote(note, false);
@@ -360,17 +360,26 @@ describe('ActivityPub', () => {
 				assert.ok(rendered.content?.includes(anchor));
 			});
 
-			test('連合するチャンネルのハッシュタグを付記に書き、AP の tag には入れない', async () => {
+			test('連合するチャンネルでは、付記はハッシュタグだけにし (From と URL は付けない)、AP の tag にも載せる', async () => {
 				const channel = { id: genAidx(Date.now()), name: '雑談', federationPolicy: 'public', federationHashtag: '連合チャンネル_雑談' } as MiChannel;
-				const note = createChannelNote('**hello**', channel);
+				const note = createChannelNote('**hello**', channel, ['連合チャンネル_雑談']);
 				const rendered = await rendererService.renderNote(note, false);
 
-				assert.ok(rendered._misskey_content?.startsWith('**hello**\n\nFrom: 「雑談」 #連合チャンネル_雑談 '), rendered._misskey_content ?? 'undefined');
-				assert.ok(rendered._misskey_content?.endsWith(`/channels/${channel.id}`));
+				assert.strictEqual(rendered._misskey_content, '**hello**\n\n#連合チャンネル_雑談');
+				assert.strictEqual(rendered.source?.content, rendered._misskey_content);
 				assert.ok(rendered.content?.includes('連合チャンネル_雑談'));
-				const tags = (rendered.tag ?? []) as { type: string }[];
-				assert.strictEqual(tags.filter(t => t.type === 'Hashtag').length, 0);
-				assert.deepStrictEqual(note.tags, []);
+				assert.ok(!rendered.content?.includes('From: '), rendered.content);
+				assert.ok(!rendered.content?.includes(`/channels/${channel.id}`), rendered.content);
+				const tags = (rendered.tag ?? []) as { type: string; name?: string }[];
+				assert.deepStrictEqual(tags.filter(t => t.type === 'Hashtag').map(t => t.name), ['#連合チャンネル_雑談']);
+			});
+
+			test('本文にすでにチャンネルのハッシュタグがあれば、付記を重ねない', async () => {
+				const channel = { id: genAidx(Date.now()), name: '雑談', federationPolicy: 'public', federationHashtag: '連合チャンネル_雑談' } as MiChannel;
+				const note = createChannelNote('hello #連合チャンネル_雑談', channel, ['連合チャンネル_雑談']);
+				const rendered = await rendererService.renderNote(note, false);
+
+				assert.strictEqual(rendered._misskey_content, 'hello #連合チャンネル_雑談');
 			});
 
 			test('チャンネルが見つからなくても URL は付ける', async () => {
