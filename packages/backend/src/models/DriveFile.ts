@@ -10,11 +10,18 @@ import { MiDriveFolder } from './DriveFolder.js';
 
 @Entity('drive_file')
 @Index(['userId', 'folderId', 'id'])
+// ドライブ使用量の集計 (userId = ? AND isLink = ?) 用。単独 (userId) はこの複合と
+// (userId, folderId, id) の先頭列に包含されるため migration (1785227588654) で削除した
+@Index('IDX_drive_file_on_userId_and_isLink', ['userId', 'isLink'])
+// Covering partial index ("userId") INCLUDE ("size") WHERE "isLink" = false. Managed by migration (1794126500691).
+// calcDriveUsageOf の SUM(size) をヒープを読まない index-only scan にする。
+// INCLUDE は @Index で表現できないため synchronize: false で migration のみで管理する
+@Index('IDX_drive_file_userId_size_notlink', { synchronize: false })
 export class MiDriveFile {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Covered by the composite indexes (userId, folderId, id) and (userId, isLink).
 	@Column({
 		...id(),
 		nullable: true,
@@ -48,7 +55,7 @@ export class MiDriveFile {
 	})
 	public name: string;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 128,
 		comment: 'The content type (MIME) of the DriveFile.',
@@ -122,7 +129,7 @@ export class MiDriveFile {
 	})
 	public webpublicAccessKey: string | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 1024, nullable: true,
 		comment: 'The URI of the DriveFile. it will be null when the DriveFile is local.',
@@ -148,21 +155,21 @@ export class MiDriveFile {
 	@JoinColumn()
 	public folder: MiDriveFolder | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is NSFW.',
 	})
 	public isSensitive: boolean;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is NSFW. (predict)',
 	})
 	public maybeSensitive: boolean;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 	})
@@ -171,7 +178,7 @@ export class MiDriveFile {
 	/**
 	 * 外部の(信頼されていない)URLへの直リンクか否か
 	 */
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the DriveFile is direct link to remote server.',

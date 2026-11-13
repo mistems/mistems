@@ -13,7 +13,7 @@ export class MiGalleryPost {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('timestamp with time zone', {
 		comment: 'The updated date of the GalleryPost.',
 	})
@@ -42,14 +42,14 @@ export class MiGalleryPost {
 	@JoinColumn()
 	public user: MiUser | null;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column({
 		...id(),
 		array: true, default: '{}',
 	})
 	public fileIds: MiDriveFile['id'][];
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('boolean', {
 		default: false,
 		comment: 'Whether the post is sensitive.',
@@ -62,7 +62,7 @@ export class MiGalleryPost {
 	})
 	public likedCount: number;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('varchar', {
 		length: 128, array: true, default: '{}',
 	})
