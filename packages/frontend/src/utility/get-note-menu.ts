@@ -513,6 +513,49 @@ export function getNoteMenu(props: {
 			});
 		}
 
+		if (appearNote.userId === $i.id) {
+			menuItems.push({ type: 'divider' });
+			menuItems.push(appearNote.userRenoteLock ? {
+				icon: 'ti ti-repeat',
+				text: i18n.ts._renoteLock.allowRenote,
+				action: () => {
+					misskeyApi('notes/renote-lock/delete', { noteId: appearNote.id }).then(() => {
+						appearNote.userRenoteLock = false;
+					});
+				},
+			} : {
+				icon: 'ti ti-repeat-off',
+				text: i18n.ts._renoteLock.prohibitRenote,
+				action: () => {
+					misskeyApi('notes/renote-lock/create', { noteId: appearNote.id }).then(() => {
+						appearNote.userRenoteLock = true;
+					});
+				},
+			});
+		}
+
+		if ($i.isModerator || $i.isAdmin) {
+			menuItems.push({ type: 'divider' });
+			menuItems.push(appearNote.moderationRenoteLock ? {
+				icon: 'ti ti-lock-open',
+				text: i18n.ts._renoteLock.unlockByModeration,
+				action: () => {
+					os.apiWithDialog('admin/notes/renote-lock/delete', { noteId: appearNote.id }).then(() => {
+						appearNote.moderationRenoteLock = false;
+					});
+				},
+			} : {
+				icon: 'ti ti-lock',
+				text: i18n.ts._renoteLock.lockByModeration,
+				danger: true,
+				action: () => {
+					os.apiWithDialog('admin/notes/renote-lock/create', { noteId: appearNote.id }).then(() => {
+						appearNote.moderationRenoteLock = true;
+					});
+				},
+			});
+		}
+
 		if (appearNote.userId === $i.id || $i.isModerator || $i.isAdmin) {
 			menuItems.push({ type: 'divider' });
 			if (appearNote.userId === $i.id) {

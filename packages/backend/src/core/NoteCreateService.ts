@@ -178,6 +178,7 @@ type Option = {
 	poll?: IPoll | null;
 	localOnly?: boolean | null;
 	reactionAcceptance?: MiNote['reactionAcceptance'];
+	userRenoteLock?: boolean | null;
 	cw?: string | null;
 	visibility?: string;
 	visibleUsers?: MinimumUser[] | null;
@@ -293,6 +294,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		channelId: MiChannel['id'] | null;
 		localOnly: boolean;
 		reactionAcceptance: MiNote['reactionAcceptance'];
+		userRenoteLock?: boolean;
 		poll: IPoll | null;
 		apMentions?: MinimumUser[] | null;
 		apHashtags?: string[] | null;
@@ -369,6 +371,15 @@ export class NoteCreateService implements OnApplicationShutdown {
 					throw new IdentifiableError('7e435f4a-780d-4cfc-a15a-42519bd6fb67', 'Channel does not allow renote to external');
 				}
 			}
+
+			// リノートロックのチェック (純粋リノートと引用リノートの両方が対象)
+			if (renote.moderationRenoteLock) {
+				// モデレーションによるロック: 所有者を含む全員のリノートを禁止
+				throw new IdentifiableError('5f8d7a3c-2b1e-4c9a-9e7d-1a2b3c4d5e6f', 'Renote of this note has been locked by moderation');
+			} else if (renote.userRenoteLock && renote.userId !== user.id) {
+				// ユーザーによるロック: 所有者本人以外のリノートを禁止
+				throw new IdentifiableError('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'Renote of this note has been locked by the author');
+			}
 		}
 
 		let reply: MiNote | null = null;
@@ -430,6 +441,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			cw: data.cw,
 			localOnly: data.localOnly,
 			reactionAcceptance: data.reactionAcceptance,
+			userRenoteLock: data.userRenoteLock,
 			visibility: data.visibility,
 			visibleUsers,
 			channel,
@@ -665,6 +677,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			userId: user.id,
 			localOnly: data.localOnly!,
 			reactionAcceptance: data.reactionAcceptance ?? null,
+			userRenoteLock: data.userRenoteLock ?? false,
 			visibility: data.visibility as any,
 			visibleUserIds: data.visibility === 'specified'
 				? data.visibleUsers
