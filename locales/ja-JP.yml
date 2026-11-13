@@ -3657,6 +3657,8 @@ _serverSetupWizard:
 
 _uploader:
   editImage: "画像の編集"
+  rotateLeft: "左に回転"
+  rotateRight: "右に回転"
   compressedToX: "{x}に圧縮"
   savedXPercent: "{x}%節約"
   abortConfirm: "アップロードされていないファイルがありますが、中止しますか？"
