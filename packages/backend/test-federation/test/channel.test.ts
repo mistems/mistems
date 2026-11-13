@@ -320,6 +320,35 @@ describe('Channel federation', () => {
 			strictEqual(await channelTimelineHas(disabled.id, inA.uri!), false);
 		});
 
+		test('H7: 収蔵された bob のノートは、bob をフォローしている alice のホーム・ソーシャルに既定では出て、withCollectedChannelNotes: false では出ない', async () => {
+			// alice がフォローしていないチャンネル (carol のもの) に収蔵させる
+			const carolChannel = await createChannel(carol, 'public');
+			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${carolChannel.federationHashtag}` })).createdNote;
+			const uri = `https://b.test/notes/${posted.id}`;
+
+			const inA = await vi.waitFor(async () => {
+				const notes = await carol.client.request('channels/timeline', { channelId: carolChannel.id, limit: 100 });
+				const found = notes.find(n => n.uri === uri);
+				assert(found != null);
+				return found;
+			}, WAIT_FOR_FEDERATION);
+			strictEqual(inA.channelId, carolChannel.id);
+
+			const home = await alice.client.request('notes/timeline', { limit: 100 });
+			assert(home.some(n => n.uri === uri), 'notes/timeline (既定)');
+			const homeWithout = await alice.client.request('notes/timeline', { limit: 100, withCollectedChannelNotes: false });
+			strictEqual(homeWithout.some(n => n.uri === uri), false, 'notes/timeline (false)');
+
+			const social = await alice.client.request('notes/hybrid-timeline', { limit: 100 });
+			assert(social.some(n => n.uri === uri), 'notes/hybrid-timeline (既定)');
+			const socialWithout = await alice.client.request('notes/hybrid-timeline', { limit: 100, withCollectedChannelNotes: false });
+			strictEqual(socialWithout.some(n => n.uri === uri), false, 'notes/hybrid-timeline (false)');
+
+			// bob をフォローしていない carol のホームには出ない
+			const carolHome = await carol.client.request('notes/timeline', { limit: 100 });
+			strictEqual(carolHome.some(n => n.uri === uri), false, 'carol の notes/timeline');
+		});
+
 		test('H6: a.test のトレンドに、チャンネルのハッシュタグは出ない', async () => {
 			const plainTag = `plain${crypto.randomUUID().substring(0, 8)}`;
 			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${plainTag} #${hashtag}` })).createdNote;

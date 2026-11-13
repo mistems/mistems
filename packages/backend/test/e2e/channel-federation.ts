@@ -6,7 +6,7 @@
 process.env.NODE_ENV = 'test';
 
 import * as assert from 'assert';
-import { beforeAll, describe, test } from 'vitest';
+import { afterAll, beforeAll, describe, test } from 'vitest';
 import { api, castAsError, initTestDb, post, signup, simpleGet } from '../utils.js';
 import type * as misskey from 'misskey-js';
 import { MiNote, MiUser } from '@/models/_.js';
@@ -343,6 +343,93 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			const res = await api('channels/remove-note', { noteId: note.id }, alice);
 			assert.strictEqual(res.status, 400);
 			assert.strictEqual(castAsError(res.body as any).error.code, 'NOT_IN_CHANNEL');
+		});
+	});
+
+	describe.each([
+		{ enableFanoutTimeline: true },
+		{ enableFanoutTimeline: false },
+	])('チャンネルに収蔵されたリモートのノートをフォロワーのホームに出す (enableFanoutTimeline: $enableFanoutTimeline)', ({ enableFanoutTimeline }) => {
+		beforeAll(async () => {
+			await api('admin/update-meta', { enableFanoutTimeline }, alice);
+		});
+
+		afterAll(async () => {
+			await api('admin/update-meta', { enableFanoutTimeline: true }, alice);
+		});
+
+		// e2e には相手のサーバーがないので、フォローしてから投稿させ、DB の上でリモートのユーザーとチャンネルのノートに書き換える。
+		// enableFanoutTimeline のときは、ローカルのノートとして配られた homeTimeline の分がそのまま残るので、
+		// 収蔵したノートを投稿者のフォロワーにも配った (pushToTl) のと同じ状態になる
+		const setup = async (suffix: string) => {
+			const follower = await signup({ username: `col_f_${suffix}_${enableFanoutTimeline ? 'r' : 'd'}` });
+			const author = await signup({ username: `col_a_${suffix}_${enableFanoutTimeline ? 'r' : 'd'}` });
+			const channel = (await api('channels/create', { name: `collected-${suffix}`, federationPolicy: 'public' }, alice)).body;
+			await api('following/create', { userId: author.id }, follower);
+			const note = await post(author, { text: 'collected note' });
+			const db = await initTestDb(true);
+			try {
+				await db.getRepository(MiUser).update({ id: author.id }, { host: 'remote.example' });
+				await db.getRepository(MiNote).update({ id: note.id }, { userHost: 'remote.example', channelId: channel.id });
+			} finally {
+				await db.destroy();
+			}
+			return { follower, author, channel, note };
+		};
+
+		test('notes/timeline: 既定では出て、withCollectedChannelNotes: false では出ない', async () => {
+			const { follower, note } = await setup('home');
+
+			const res = await api('notes/timeline', { limit: 100 }, follower);
+			assert.strictEqual(res.status, 200);
+			assert.ok(res.body.some(n => n.id === note.id));
+
+			const res2 = await api('notes/timeline', { limit: 100, withCollectedChannelNotes: false }, follower);
+			assert.strictEqual(res2.status, 200);
+			assert.ok(!res2.body.some(n => n.id === note.id));
+		});
+
+		test('notes/hybrid-timeline: 既定では出て、withCollectedChannelNotes: false では出ない', async () => {
+			const { follower, note } = await setup('hybrid');
+
+			const res = await api('notes/hybrid-timeline', { limit: 100 }, follower);
+			assert.strictEqual(res.status, 200);
+			assert.ok(res.body.some(n => n.id === note.id));
+
+			const res2 = await api('notes/hybrid-timeline', { limit: 100, withCollectedChannelNotes: false }, follower);
+			assert.strictEqual(res2.status, 200);
+			assert.ok(!res2.body.some(n => n.id === note.id));
+		});
+
+		test('チャンネルをフォローしていれば、withCollectedChannelNotes: false でも出る', async () => {
+			const { follower, channel, note } = await setup('chfollow');
+			await api('channels/follow', { channelId: channel.id }, follower);
+
+			const res = await api('notes/timeline', { limit: 100, withCollectedChannelNotes: false }, follower);
+			assert.strictEqual(res.status, 200);
+			assert.ok(res.body.some(n => n.id === note.id));
+		});
+
+		test('チャンネルをミュートしていれば出ない', async () => {
+			const { follower, channel, note } = await setup('chmute');
+			await api('channels/mute/create', { channelId: channel.id }, follower);
+
+			const res = await api('notes/timeline', { limit: 100 }, follower);
+			assert.strictEqual(res.status, 200);
+			assert.ok(!res.body.some(n => n.id === note.id));
+
+			const res2 = await api('notes/hybrid-timeline', { limit: 100 }, follower);
+			assert.strictEqual(res2.status, 200);
+			assert.ok(!res2.body.some(n => n.id === note.id));
+		});
+
+		test('投稿者をフォローしていない人のホームには出ない', async () => {
+			const { note } = await setup('nofollow');
+			const stranger = await signup({ username: `col_s_${enableFanoutTimeline ? 'r' : 'd'}` });
+
+			const res = await api('notes/timeline', { limit: 100 }, stranger);
+			assert.strictEqual(res.status, 200);
+			assert.ok(!res.body.some(n => n.id === note.id));
 		});
 	});
 });
