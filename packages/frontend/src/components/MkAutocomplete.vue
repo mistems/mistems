@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}">
+<div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}" @pointerup="onPointerup">
 	<ol v-if="type === 'user'" ref="suggests" :class="$style.list">
 		<li v-for="user in users" tabindex="-1" :class="$style.item" @click="complete(type, user)" @keydown="onKeydown">
 			<img :class="$style.avatar" :src="user.avatarUrl"/>
@@ -20,15 +20,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<span class="name">{{ hashtag }}</span>
 		</li>
 	</ol>
-	<ol v-else-if="type === 'emoji' || type === 'emojiComplete' && emojis.length > 0" ref="suggests" :class="$style.list">
+	<!-- MISTEMS: 絵文字の候補が 0 件のときは一覧を出さない (閉じずに検索を続ける) -->
+	<ol v-else-if="(type === 'emoji' || type === 'emojiComplete') && emojis.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="emoji in emojis" :key="emoji.emoji" :class="$style.item" tabindex="-1" @click="complete(type, emoji.emoji)" @keydown="onKeydown">
 			<MkCustomEmoji v-if="'isCustomEmoji' in emoji && emoji.isCustomEmoji" :name="emoji.emoji" :class="$style.emoji" :fallbackToImage="true"/>
 			<MkEmoji v-else :emoji="emoji.emoji" :class="$style.emoji"/>
 			<!-- eslint-disable-next-line vue/no-v-html -->
-			<span v-if="q != null && typeof q === 'string'" :class="$style.emojiName" v-html="sanitizeHtml(emoji.name.replace(q, `<b>${q}</b>`))"></span>
+			<span v-if="q != null && typeof q === 'string'" :class="$style.emojiName" v-html="sanitizeHtml(highlightKeywords(emoji.name, q))"></span>
 			<span v-else v-text="emoji.name"></span>
 			<span v-if="emoji.aliasOf" :class="$style.emojiAlias">({{ emoji.aliasOf }})</span>
 		</li>
+		<!-- MISTEMS: 終端付近で続きを読み込む目印。v-appear は描画時のコールバックしか使わないので、件数をキーにして作り直す -->
+		<li v-if="hasMoreEmojis" :key="`sentinel-${emojiLimit}`" v-appear="loadMoreEmojis" data-sentinel aria-hidden="true" :class="$style.sentinel"></li>
 	</ol>
 	<ol v-else-if="type === 'mfmTag' && mfmTags.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="tag in mfmTags" tabindex="-1" :class="$style.item" @click="complete(type, tag)" @keydown="onKeydown">
@@ -59,7 +62,8 @@ import { store } from '@/store.js';
 import { i18n } from '@/i18n.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { customEmojis } from '@/custom-emojis.js';
-import { searchEmoji, searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiExact } from '@/utility/search-emoji.js';
+import { searchEmojiNormalized } from '@/utility/kana-to-hira.js';
 import { prefer } from '@/preferences.js';
 
 export type CompleteInfo = {
@@ -169,6 +173,8 @@ type PropsType<T extends keyof CompleteInfo> = {
 	// なぜかわからないけど HTMLTextAreaElement | HTMLInputElement だと addEventListener/removeEventListenerがエラー
 	textarea: (HTMLTextAreaElement | HTMLInputElement) & HTMLElement;
 	close: () => void;
+	// MISTEMS: 候補を選ぶ (click) より前に IME の変換を確定させる (autocomplete.ts を参照)
+	commitComposition?: () => void;
 	x: number;
 	y: number;
 };
@@ -180,6 +186,8 @@ const props = defineProps<PropsType<'user'> | PropsType<'hashtag'> | PropsType<'
 const emit = defineEmits<{
 	<T extends keyof CompleteInfo>(event: 'done', value: { type: T; value: CompleteInfo[T]['payload'] }): void;
 	(event: 'closed'): void;
+	// MISTEMS: 絵文字の候補を検索したら、検索語と件数を知らせる (autocomplete.ts が開閉の判定に使う)
+	(event: 'emojiSearched', value: { query: string; count: number }): void;
 }>();
 
 const suggests = ref<Element>();
@@ -189,6 +197,10 @@ const fetching = ref(true);
 const users = ref<Misskey.entities.User[]>([]);
 const hashtags = ref<string[]>([]);
 const emojis = ref<EmojiDef[]>([]);
+// MISTEMS: 絵文字の候補は 1 回に EMOJI_PAGE_SIZE 件ずつ、終端付近までスクロールしたら続きを読み込む
+const EMOJI_PAGE_SIZE = 30;
+const emojiLimit = ref(EMOJI_PAGE_SIZE);
+const hasMoreEmojis = computed(() => props.type === 'emoji' && emojis.value.length >= emojiLimit.value);
 const items = ref<Element[] | HTMLCollection>([]);
 const mfmTags = ref<string[]>([]);
 const mfmParams = ref<string[]>([]);
@@ -225,6 +237,32 @@ function setPosition() {
 		rootEl.value.style.top = props.y + 'px';
 		rootEl.value.style.marginTop = 'calc(1em + 8px)';
 	}
+}
+
+// 最後に検索した検索語。検索語が変わった直後に古い目印のコールバックが走っても、新しい検索語で上限を増やさないようにする
+let lastEmojiQuery: string | null = null;
+
+function loadMoreEmojis() {
+	if (props.type !== 'emoji' || typeof props.q !== 'string' || props.q === '') return;
+	if (props.q !== lastEmojiQuery) return;
+	emojiLimit.value += EMOJI_PAGE_SIZE;
+	emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
+}
+
+// 検索語をスペースで区切った語ごとに、名前の中の最初の一致を太字にする
+function highlightKeywords(name: string, q: string): string {
+	let result = name;
+	for (const keyword of q.split(/[ \u3000]+/).filter(x => x !== '')) {
+		result = result.replace(keyword, `<b>${keyword}</b>`);
+	}
+	return result;
+}
+
+// MISTEMS: 候補の上で指を離したら、選ぶ (click) より前に IME の変換を確定させる。
+// スクロールになったときは pointerup ではなく pointercancel が届くので、確定しない (フォーカスが外れたままにならない)
+function onPointerup(event: PointerEvent) {
+	if (!(event.target instanceof Element) || event.target.closest('li') == null) return;
+	props.commitComposition?.();
 }
 
 function exec() {
@@ -288,10 +326,15 @@ function exec() {
 		if (!props.q || props.q === '') {
 			// 最近使った絵文字をサジェスト
 			emojis.value = store.s.recentlyUsedEmojis.map(emoji => emojiDb.value.find(dbEmoji => dbEmoji.emoji === emoji)).filter(x => x) as EmojiDef[];
+			emit('emojiSearched', { query: '', count: emojis.value.length });
 			return;
 		}
 
-		emojis.value = searchEmoji(props.q, emojiDb.value);
+		// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。スペース区切りなら AND 検索
+		emojis.value = searchEmojiNormalized(props.q, emojiDb.value, emojiLimit.value);
+		lastEmojiQuery = props.q;
+		// 0 件でもここでは閉じない。閉じるかどうかは、次の入力で autocomplete.ts が件数を見て決める
+		emit('emojiSearched', { query: props.q, count: emojis.value.length });
 	} else if (props.type === 'emojiComplete') {
 		emojis.value = searchEmojiExact(props.q, unicodeEmojiDB.value);
 	} else if (props.type === 'mfmTag') {
@@ -320,6 +363,18 @@ function onKeydown(event: KeyboardEvent) {
 		event.preventDefault();
 		event.stopPropagation();
 	};
+
+	// MISTEMS: IME で変換中のキー (変換の確定の Enter、候補の選択の ↑ ↓ など) は IME に任せる
+	if (event.isComposing || event.keyCode === 229) return;
+
+	// MISTEMS: 絵文字の候補が 0 件で一覧を出していない間は、Esc で閉じる以外のキーを横取りしない
+	if (props.type === 'emoji' && emojis.value.length === 0) {
+		if (event.key === 'Escape') {
+			cancel();
+			props.close();
+		}
+		return;
+	}
 
 	switch (event.key) {
 		case 'Enter':
@@ -371,6 +426,15 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 function selectNext() {
+	// MISTEMS: 絵文字の候補の最後で ↓ を押したら、先頭に戻らずに続きを読み込んで次の候補へ進む
+	if (hasMoreEmojis.value && select.value === items.value.length - 1) {
+		loadMoreEmojis();
+		nextTick(() => {
+			if (select.value + 1 < items.value.length) select.value++;
+			applySelect();
+		});
+		return;
+	}
 	if (++select.value >= items.value.length) select.value = 0;
 	if (items.value.length === 0) select.value = -1;
 	applySelect();
@@ -402,7 +466,8 @@ function chooseUser() {
 
 onUpdated(() => {
 	setPosition();
-	items.value = suggests.value?.children ?? [];
+	// 追加読み込みの目印はキーボードでの選択の対象にしない
+	items.value = Array.from(suggests.value?.children ?? []).filter(el => !el.hasAttribute('data-sentinel'));
 });
 
 onMounted(() => {
@@ -416,6 +481,7 @@ onMounted(() => {
 		exec();
 
 		watch(() => props.q, () => {
+			emojiLimit.value = EMOJI_PAGE_SIZE;
 			nextTick(() => {
 				exec();
 			});
@@ -510,6 +576,11 @@ onBeforeUnmount(() => {
 
 .emojiName {
 	flex-shrink: 1;
+}
+
+.sentinel {
+	height: 1px;
+	padding: 0;
 }
 
 .emojiAlias {

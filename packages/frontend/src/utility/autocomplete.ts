@@ -9,6 +9,7 @@ import { toASCII } from 'punycode.js';
 import type { Ref } from 'vue';
 import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
 import { popup } from '@/os.js';
+import { shouldOpenEmojiSuggestion } from '@/utility/kana-to-hira.js';
 
 export type SuggestionType = 'user' | 'hashtag' | 'emoji' | 'mfmTag' | 'mfmParam';
 
@@ -33,6 +34,10 @@ export class Autocomplete {
 	private textRef: Ref<string | number | null>;
 	private opening: boolean;
 	private onlyType: SuggestionType[];
+	// MISTEMS: IME で変換中か。変換中は、候補が 0 件の語のあとのスペースで閉じる判定をしない
+	private composing = false;
+	// MISTEMS: 開いている絵文字の候補で最後に検索した検索語と、その候補の件数 (MkAutocomplete から受け取る)
+	private lastEmojiSearch: { query: string; count: number } | null = null;
 
 	private get text(): string {
 		// Use raw .value to get the latest value
@@ -41,6 +46,8 @@ export class Autocomplete {
 	}
 
 	private set text(text: string) {
+		// MISTEMS: IME で変換中は v-model が textarea に値を書き戻さない (Vue の vModelText は el.composing の間は更新を捨てる) ので、textarea にも直接書く
+		this.textarea.value = text;
 		// Use ref value to notify other watchers
 		// (Because .value setter never fires input/change events)
 		this.textRef.value = text;
@@ -52,6 +59,10 @@ export class Autocomplete {
 	constructor(textarea: HTMLInputElement | HTMLTextAreaElement, textRef: Ref<string | number | null>, onlyType?: SuggestionType[]) {
 		//#region BIND
 		this.onInput = this.onInput.bind(this);
+		this.onCompositionStart = this.onCompositionStart.bind(this);
+		this.onCompositionEnd = this.onCompositionEnd.bind(this);
+		this.onKeyup = this.onKeyup.bind(this);
+		this.commitComposition = this.commitComposition.bind(this);
 		this.complete = this.complete.bind(this);
 		this.close = this.close.bind(this);
 		//#endregion
@@ -70,6 +81,9 @@ export class Autocomplete {
 	 */
 	public attach() {
 		this.textarea.addEventListener('input', this.onInput);
+		this.textarea.addEventListener('compositionstart', this.onCompositionStart);
+		this.textarea.addEventListener('compositionend', this.onCompositionEnd);
+		this.textarea.addEventListener('keyup', this.onKeyup);
 	}
 
 	/**
@@ -77,13 +91,38 @@ export class Autocomplete {
 	 */
 	public detach() {
 		this.textarea.removeEventListener('input', this.onInput);
+		this.textarea.removeEventListener('compositionstart', this.onCompositionStart);
+		this.textarea.removeEventListener('compositionend', this.onCompositionEnd);
+		this.textarea.removeEventListener('keyup', this.onKeyup);
 		this.close();
+	}
+
+	private onCompositionStart() {
+		this.composing = true;
+	}
+
+	/**
+	 * MISTEMS: 変換を確定したら、確定した文字列で判定し直す
+	 */
+	private onCompositionEnd() {
+		this.composing = false;
+		this.onInput(undefined, true);
+	}
+
+	/**
+	 * MISTEMS: 候補を開いている間に ← → などでキャレットを動かしたら、キャレットの位置で判定し直す (検索語の外に出たら閉じる)
+	 */
+	private onKeyup(event: Event) {
+		if (this.suggestion == null || !(event instanceof KeyboardEvent) || event.isComposing) return;
+		if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+		this.onInput();
 	}
 
 	/**
 	 * テキスト入力時
 	 */
-	private onInput() {
+	private onInput(event?: Event, committed = false) {
+		const composing = this.composing || (event instanceof InputEvent && event.isComposing);
 		const caretPos = Number(this.textarea.selectionStart);
 		const text = this.text.substring(0, caretPos).split('\n').pop()!;
 
@@ -153,7 +192,15 @@ export class Autocomplete {
 
 		if (isEmoji && !opened && this.onlyType.includes('emoji')) {
 			const emoji = text.substring(emojiIndex + 1);
-			if (!emoji.includes(' ')) {
+			// MISTEMS: スペース区切りで AND 検索できるよう、スペース 1 つでは閉じない。候補が 0 件でも閉じずに検索を続ける。
+			// 開閉の条件は shouldOpenEmojiSuggestion を参照。
+			const open = this.suggestion != null && this.currentType === 'emoji';
+			if (shouldOpenEmojiSuggestion(emoji, {
+				open,
+				lastSearch: open ? this.lastEmojiSearch : null,
+				composing,
+				committed,
+			})) {
 				this.open('emoji', emoji);
 				opened = true;
 			}
@@ -225,6 +272,7 @@ export class Autocomplete {
 			const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkAutocomplete.vue')), {
 				textarea: this.textarea,
 				close: this.close,
+				commitComposition: this.commitComposition,
 				type: type,
 				//@ts-expect-error popupは今のところジェネリック型のコンポーネントに対応していない
 				q: _q,
@@ -233,6 +281,9 @@ export class Autocomplete {
 			}, {
 				done: (res) => {
 					this.complete(res);
+				},
+				emojiSearched: (res: { query: string; count: number }) => {
+					this.lastEmojiSearch = res;
 				},
 			});
 
@@ -255,8 +306,19 @@ export class Autocomplete {
 
 		this.suggestion.close();
 		this.suggestion = null;
+		this.lastEmojiSearch = null;
 
 		this.textarea.focus();
+	}
+
+	/**
+	 * MISTEMS: IME で変換中なら、フォーカスを外して変換を確定させる。候補の上で指を離した時点 (pointerup) で MkAutocomplete から呼ぶ。
+	 * iOS では候補をタップしても変換が続く。選んだとき (click) にフォーカスを外して置き換えても、キーボード側に変換中の文字が残り、
+	 * 次に打った文字が消えたり入力できなくなったりする。確定を click より前のイベントで済ませておく。フォーカスは置き換えのときに close() で戻す
+	 */
+	private commitComposition() {
+		if (!this.composing) return;
+		this.textarea.blur();
 	}
 
 	/**
