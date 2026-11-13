@@ -104,6 +104,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkSwitch v-model="enableWebTranslatorApi">
 							<template #label>Enable in-browser translator API</template>
 						</MkSwitch>
+						<MkSwitch v-model="enableTimelineGapFill">
+							<template #label>{{ i18n.ts.enableTimelineGapFill }}</template>
+							<template #caption>{{ i18n.ts.enableTimelineGapFillDescription }}</template>
+						</MkSwitch>
 					</div>
 				</MkFolder>
 			</SearchMarker>
@@ -180,6 +184,7 @@ const stackingRouterView = prefer.model('experimental.stackingRouterView');
 const enableFolderPageView = prefer.model('experimental.enableFolderPageView');
 const enableHapticFeedback = prefer.model('experimental.enableHapticFeedback');
 const enableWebTranslatorApi = prefer.model('experimental.enableWebTranslatorApi');
+const enableTimelineGapFill = prefer.model('experimental.enableTimelineGapFill');
 
 watch(skipNoteRender, () => {
 	suggestReload();
