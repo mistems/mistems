@@ -20,14 +20,18 @@ import * as os from '@/os.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
+import type { MenuItem } from '@/types/menu.js';
 
 const props = withDefaults(defineProps<{
 	to: string;
 	activeClass?: null | string;
 	behavior?: MkABehavior;
+	/** 右クリックのメニューの末尾に足す項目。開くたびに呼ぶ */
+	extraMenuItems?: (() => MenuItem[]) | null;
 }>(), {
 	activeClass: null,
 	behavior: null,
+	extraMenuItems: null,
 });
 
 const injectedBehavior = inject<MkABehavior>('linkNavigationBehavior', null);
@@ -80,7 +84,12 @@ function onContextmenu(ev: PointerEvent) {
 		action: () => {
 			copyToClipboard(`${url}${props.to}`);
 		},
-	}], ev);
+	}, ...getExtraMenuItems()], ev);
+}
+
+function getExtraMenuItems(): MenuItem[] {
+	const items = props.extraMenuItems?.() ?? [];
+	return items.length > 0 ? [{ type: 'divider' }, ...items] : [];
 }
 
 function openWindow() {

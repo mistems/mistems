@@ -69,6 +69,8 @@ export type MfmRendererConfig = {
 		Search?: Component;
 		/** 省略時は sparkle を無視して子要素のみ描画する */
 		Sparkle?: Component;
+		/** 省略時は A で描画する。指定すると A の props に加えて `hashtag` (先頭の # を除いたタグ) を渡す */
+		Hashtag?: Component;
 	};
 	/** 描画のたびに呼ばれる (設定の変更をリアクティブに反映するため) 。省略時はすべて有効 */
 	getOptions?: () => {
@@ -93,7 +95,7 @@ export function createMfmRenderer<P extends MfmBaseProps = MfmBaseProps>(config:
 		//provide('linkNavigationBehavior', props.linkNavigationBehavior);
 
 		const props = _props as P & MfmOptionalProps;
-		const { Url, Link, Mention, A, Time, Emoji, CustomEmoji, Code, CodeInline, Search, Sparkle } = config.components();
+		const { Url, Link, Mention, A, Time, Emoji, CustomEmoji, Code, CodeInline, Search, Sparkle, Hashtag } = config.components();
 
 		const isNote = props.isNote ?? true;
 		const shouldNyaize = props.nyaize ? props.nyaize === 'respect' ? props.author?.isCat : false : false;
@@ -417,10 +419,11 @@ export function createMfmRenderer<P extends MfmBaseProps = MfmBaseProps>(config:
 				}
 
 				case 'hashtag': {
-					return [h(A, {
+					return [h(Hashtag ?? A, {
 						to: isNote ? `/tags/${encodeURIComponent(token.props.hashtag)}` : `/user-tags/${encodeURIComponent(token.props.hashtag)}`,
 						style: 'color:var(--MI_THEME-hashtag);',
 						...hashtagProps,
+						...(Hashtag != null ? { hashtag: token.props.hashtag } : {}),
 					}, { default: () => `#${token.props.hashtag}` })];
 				}
 
