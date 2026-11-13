@@ -24,6 +24,7 @@ export class HybridTimelineChannel extends Channel {
 	private withRenotes: boolean;
 	private withReplies: boolean;
 	private withFiles: boolean;
+	private withCollectedChannelNotes: boolean;
 
 	constructor(
 		@Inject(REQUEST)
@@ -46,6 +47,7 @@ export class HybridTimelineChannel extends Channel {
 		this.withRenotes = !!(params.withRenotes ?? true);
 		this.withReplies = !!(params.withReplies ?? false);
 		this.withFiles = !!(params.withFiles ?? false);
+		this.withCollectedChannelNotes = !!(params.withCollectedChannelNotes ?? true);
 
 		// Subscribe events
 		this.subscriber.on('notesStream', this.onNote);
@@ -72,7 +74,11 @@ export class HybridTimelineChannel extends Channel {
 		} else {
 			// 以下の条件に該当するノートのみ後続処理に通す（ので、以下のif文は該当しないノートをすべて弾くようにする）
 			// - フォローしているチャンネルの投稿
-			if (!this.followingChannels.has(note.channelId)) {
+			// - チャンネルに収蔵されたリモートの投稿で、そのユーザーをフォローしている (withCollectedChannelNotes のとき)
+			if (!(
+				this.followingChannels.has(note.channelId) ||
+				(this.withCollectedChannelNotes && note.user.host != null && Object.hasOwn(this.following, note.userId))
+			)) {
 				return;
 			}
 		}

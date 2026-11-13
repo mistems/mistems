@@ -30567,6 +30567,8 @@ export interface operations {
                     withRenotes?: boolean;
                     /** @default false */
                     withReplies?: boolean;
+                    /** @default true */
+                    withCollectedChannelNotes?: boolean;
                 };
             };
         };
@@ -31819,6 +31821,8 @@ export interface operations {
                     withFiles?: boolean;
                     /** @default true */
                     withRenotes?: boolean;
+                    /** @default true */
+                    withCollectedChannelNotes?: boolean;
                 };
             };
         };

@@ -1175,10 +1175,44 @@ export class NoteCreateService implements OnApplicationShutdown {
 				select: { followerId: true },
 			});
 
+			const pushedFollowerIds = new Set<string>();
+
 			for (const channelFollowing of channelFollowings) {
+				pushedFollowerIds.add(channelFollowing.followerId);
 				this.fanoutTimelineService.push(`homeTimeline:${channelFollowing.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax, r);
 				if (note.fileIds.length > 0) {
 					this.fanoutTimelineService.push(`homeTimelineWithFiles:${channelFollowing.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
+				}
+			}
+
+			// チャンネルに収蔵されたリモートのノートは、投稿者をフォローしているローカルの人のホームにも入れる。
+			// チャンネルをフォローしていない人に見せるかどうかは、読む側の withCollectedChannelNotes で決める
+			if (note.userHost != null) {
+				const followings = await this.followingsRepository.find({
+					where: {
+						followeeId: user.id,
+						followerHost: IsNull(),
+						isFollowerHibernated: false,
+					},
+					select: {
+						followerId: true,
+						withReplies: true,
+					},
+				});
+
+				for (const following of followings) {
+					if (pushedFollowerIds.has(following.followerId)) continue;
+					if (note.visibility === 'specified' && !note.visibleUserIds.some(v => v === following.followerId)) continue;
+
+					// 「自分自身への返信 or そのフォロワーへの返信」のどちらでもない場合
+					if (isReply(note, following.followerId)) {
+						if (!following.withReplies) continue;
+					}
+
+					this.fanoutTimelineService.push(`homeTimeline:${following.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax, r);
+					if (note.fileIds.length > 0) {
+						this.fanoutTimelineService.push(`homeTimelineWithFiles:${following.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
+					}
 				}
 			}
 		} else {
