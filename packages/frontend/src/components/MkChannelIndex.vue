@@ -5,10 +5,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div style="position: relative;">
-	<ul style="display:flex">
-		<div>★：お気に入り済み　</div>
-		<div>↑：フォロー済み　</div>
+	<ul style="display: flex; gap: 1em;">
+		<div>★：お気に入り済み</div>
+		<div>↑：フォロー済み</div>
 		<div>▲：センシティブ</div>
+		<div><i class="ti ti-whirl"></i>：連合チャンネル</div>
 	</ul>
 
 	<div style="display:flex">
@@ -20,11 +21,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<MkSwitch v-model="showSensitive"> センシティブチャンネルも表示する</MkSwitch>
+	<MkSwitch v-model="onlyFederated"><i class="ti ti-whirl"></i> 連合チャンネルだけ表示する</MkSwitch>
 	
-	<div  :style="{display: viewMode === 'legacy' ? 'flex': 'block', flexWrap: viewMode === 'legacy' ? 'wrap' : 'nowrap'}">
+	<div :style="{display: viewMode === 'legacy' ? 'flex': 'block', flexWrap: viewMode === 'legacy' ? 'wrap' : 'nowrap'}">
 		<div v-for="channel in viewChannels" :key="channel.id" style="margin-right: 8px">
 			<MkA v-if="viewMode !== 'modern'" :to="`/channels/${channel.id}`">
-				<span v-if="channel.isSensitive">▲</span><span v-if="channel.isFavorited">★</span><span v-if="channel.isFollowing">↑</span>
+				<span v-if="channel.isSensitive">▲</span><span v-if="channel.isFavorited">★</span><span v-if="channel.isFollowing">↑</span><i v-if="isFederated(channel)" v-tooltip="'連合チャンネル'" class="ti ti-whirl" role="img" aria-label="連合チャンネル"></i>
 				{{ channel.name }}({{ channel.notesCount }})
 			</MkA>
 			<MkChannelPreview v-else class="_margin" :channel="channel"/>
@@ -41,13 +43,22 @@ import MkChannelPreview from '@/components/MkChannelPreview.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 const viewMode = ref<'legacy' | 'listed' | 'modern'>('legacy');
 const showSensitive = ref(false);
+const onlyFederated = ref(false);
 
+/**
+ * 連合するチャンネル (チャンネル連合で federationPolicy が public のもの) か。
+ * federationPolicy はチャンネル連合 (mkPostFormExtend) を統合したときだけ返ってくるので、型にない値として読む。
+ */
+function isFederated(channel: Channel): boolean {
+	return (channel as Channel & { federationPolicy?: string }).federationPolicy === 'public';
+}
 
 const allChannels = ref<Channel[]>([]);
 const hashTags = ref<Record<string, number>>({});
 
 const viewChannels = computed(() => {
 	return allChannels.value.filter((channel) => {
+		if (onlyFederated.value && !isFederated(channel)) return false;
 		if (showSensitive.value) return true;
 		return !channel.isSensitive;
 	}).toSorted((a: Channel, b: Channel) => {
@@ -57,7 +68,6 @@ const viewChannels = computed(() => {
 		return new Date(b.lastNotedAt).getTime() - new Date(a.lastNotedAt).getTime();
 	});
 });
-
 
 onMounted(async () => {
 	// SessionStorageからキャッシュをチェック
