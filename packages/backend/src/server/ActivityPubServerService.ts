@@ -97,11 +97,14 @@ export class ActivityPubServerService {
 	/**
 	 * Pack Create<Note> or Announce Activity
 	 * @param note Note
+	 * @returns Renote の元のノートが削除されていて Announce を作れないときは null
 	 */
 	@bindThis
-	private async packActivity(note: MiNote): Promise<any> {
+	private async packActivity(note: MiNote): Promise<any | null> {
 		if (isRenote(note) && !isQuote(note)) {
-			const renote = await this.notesRepository.findOneByOrFail({ id: note.renoteId });
+			// ノートの削除は Renote を連鎖して消さないので、元のノートがないことがある
+			const renote = await this.notesRepository.findOneBy({ id: note.renoteId });
+			if (renote == null) return null;
 			return this.apRendererService.renderAnnounce(renote.uri ? renote.uri : `${this.config.url}/notes/${renote.id}`, note);
 		}
 
@@ -533,7 +536,8 @@ export class ActivityPubServerService {
 
 			if (sinceId) notes.reverse();
 
-			const activities = await Promise.all(notes.map(note => this.packActivity(note)));
+			const activities = (await Promise.all(notes.map(note => this.packActivity(note))))
+				.filter(activity => activity != null);
 			const rendered = this.apRendererService.renderOrderedCollectionPage(
 				`${partOf}?${url.query({
 					page: 'true',
@@ -742,9 +746,15 @@ export class ActivityPubServerService {
 				return;
 			}
 
+			const activity = await this.packActivity(note);
+			if (activity == null) {
+				reply.code(404);
+				return;
+			}
+
 			reply.header('Cache-Control', 'public, max-age=180');
 			this.setResponseType(request, reply);
-			return (this.apRendererService.addContext(await this.packActivity(note)));
+			return (this.apRendererService.addContext(activity));
 		});
 
 		// outbox
