@@ -4757,7 +4757,7 @@ export interface Locale extends ILocale {
      */
     "enableDbServerStats": string;
     /**
-     * DBサーバーで収集スクリプトが書き込んだ統計を、モデレーター向けの「DBサーバーメトリクス」ウィジェットに表示します。収集スクリプトの設置方法はリポジトリの ops-sub/db-server-stats/README.md を参照してください。
+     * DBサーバーで収集スクリプトが書き込んだ統計を「DBサーバーメトリクス」ウィジェットに表示します。ウィジェットは誰でも使えます。収集スクリプトの設置方法はリポジトリの ops-sub/db-server-stats/README.md を参照してください。
      */
     "enableDbServerStatsDescription": string;
     /**

@@ -56,7 +56,6 @@ import { widgets as widgetDefs, federationWidgets, dbServerStatsWidgets } from '
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
-import { iAmModerator } from '@/i.js';
 import { useMkSelect } from '@/composables/use-mkselect.js';
 
 const props = defineProps<{
@@ -67,8 +66,8 @@ const props = defineProps<{
 const _widgetDefs = computed(() => {
 	return widgetDefs.filter(x => {
 		if (instance.federation === 'none' && federationWidgets.includes(x as any)) return false;
-		// DB サーバー統計は、管理画面で有効化するまで一覧に出さない。統計のチャンネルはモデレーター以上しか購読できないので、それ以外のユーザーにも出さない
-		if (dbServerStatsWidgets.includes(x as any) && !(instance.enableDbServerStats && iAmModerator)) return false;
+		// DB サーバー統計は、管理画面で有効化するまで一覧に出さない
+		if (dbServerStatsWidgets.includes(x as any) && !instance.enableDbServerStats) return false;
 		return true;
 	});
 });

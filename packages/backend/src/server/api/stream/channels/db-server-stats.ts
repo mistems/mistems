@@ -8,7 +8,6 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { bindThis } from '@/decorators.js';
 import { isJsonObject } from '@/misc/json-value.js';
 import type { JsonObject, JsonValue } from '@/misc/json-value.js';
-import { RoleService } from '@/core/RoleService.js';
 import Channel, { type ChannelRequest } from '../channel.js';
 import { REQUEST } from '@nestjs/core';
 
@@ -24,25 +23,19 @@ const watchingHeartbeatInterval = 60 * 1000;
 export class DbServerStatsChannel extends Channel {
 	public readonly chName = 'dbServerStats';
 	public static shouldShare = true;
-	public static requireCredential = true as const;
-	public static kind = null;
+	// サーバーの統計 (serverStats) と同じく、誰でも購読できる。統計を出すかは管理画面の enableDbServerStats で決める
+	public static requireCredential = false as const;
 	private heartbeatId: NodeJS.Timeout | null = null;
 
 	constructor(
 		@Inject(REQUEST)
 		request: ChannelRequest,
-
-		private roleService: RoleService,
 	) {
 		super(request);
 	}
 
 	@bindThis
 	public async init(params: JsonObject): Promise<boolean> {
-		if (!this.user) return false;
-		// DB 内部状態は攻撃の手がかりになり得るのでモデレーター以上に限定
-		if (!await this.roleService.isModerator(this.user)) return false;
-
 		ev.addListener('dbServerStats', this.onStats);
 		this.sendWatching();
 		this.heartbeatId = setInterval(this.sendWatching, watchingHeartbeatInterval);
