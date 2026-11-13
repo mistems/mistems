@@ -13,7 +13,7 @@ import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { bindThis } from '@/decorators.js';
 import { DI } from '@/di-symbols.js';
-import { MemoryKVCache, RedisSingleCache } from '@/misc/cache.js';
+import { MemoryKVCache, MemorySingleCache, RedisSingleCache } from '@/misc/cache.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 import type { EmojisRepository, MiRole, MiUser } from '@/models/_.js';
 import type { MiEmoji } from '@/models/Emoji.js';
@@ -57,9 +57,22 @@ export const fetchEmojisSortKeys = [
 ] as const;
 export type FetchEmojisSortKeys = typeof fetchEmojisSortKeys[number];
 
+export type LocalEmojisStats = {
+	count: number;
+	lastUpdatedAt: Date | null;
+};
+
 @Injectable()
 export class CustomEmojiService implements OnApplicationShutdown {
 	private emojisCache: MemoryKVCache<MiEmoji | null>;
+	private localEmojisStatsCache: MemorySingleCache<LocalEmojisStats>;
+	/**
+	 * `/api/emojis` が返すローカル絵文字の一覧 (category, name 順)。
+	 * `getLocalEmojisStats()` の件数と最終更新日時を鍵にして持ち、鍵が変わったら読み直す。
+	 * クライアントは `emojis/stats` が変わったときだけ一覧を取り直すので、同じ鍵を使えば stats より古い一覧を返すことはない。
+	 */
+	private localEmojisSorted: { key: string; emojis: MiEmoji[] } | null = null;
+	private localEmojisSortedFetching: { key: string; promise: Promise<MiEmoji[]> } | null = null;
 	public localEmojisCache: RedisSingleCache<Map<string, MiEmoji>>;
 
 	constructor(
@@ -74,7 +87,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 		private globalEventService: GlobalEventService,
 	) {
 		this.emojisCache = new MemoryKVCache<MiEmoji | null>(1000 * 60 * 60 * 12); // 12h
-
+		this.localEmojisStatsCache = new MemorySingleCache<LocalEmojisStats>(1000 * 60 * 3); // 3m
 		this.localEmojisCache = new RedisSingleCache<Map<string, MiEmoji>>(this.redisClient, 'localEmojis', {
 			lifetime: 1000 * 60 * 30, // 30m
 			memoryCacheLifetime: 1000 * 60 * 3, // 3m
@@ -87,6 +100,13 @@ export class CustomEmojiService implements OnApplicationShutdown {
 				}]));
 			},
 		});
+	}
+
+	@bindThis
+	private refreshLocalEmojiCaches(): void {
+		this.localEmojisCache.refresh();
+		this.localEmojisStatsCache.delete();
+		this.localEmojisSorted = null;
 	}
 
 	@bindThis
@@ -120,7 +140,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 		});
 
 		if (data.host == null) {
-			this.localEmojisCache.refresh();
+			this.refreshLocalEmojiCaches();
 
 			this.globalEventService.publishBroadcastStream('emojiAdded', {
 				emoji: await this.emojiEntityService.packDetailed(emoji.id),
@@ -182,7 +202,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			roleIdsThatCanBeUsedThisEmojiAsReaction: data.roleIdsThatCanBeUsedThisEmojiAsReaction ?? undefined,
 		});
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		const packed = await this.emojiEntityService.packDetailed(emoji.id);
 
@@ -224,7 +244,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			});
 		}
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiUpdated', {
 			emojis: await this.emojiEntityService.packDetailedMany(ids),
@@ -240,7 +260,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			aliases: aliases,
 		});
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiUpdated', {
 			emojis: await this.emojiEntityService.packDetailedMany(ids),
@@ -260,7 +280,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			});
 		}
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiUpdated', {
 			emojis: await this.emojiEntityService.packDetailedMany(ids),
@@ -276,7 +296,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			category: category,
 		});
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiUpdated', {
 			emojis: await this.emojiEntityService.packDetailedMany(ids),
@@ -292,7 +312,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			license: license,
 		});
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiUpdated', {
 			emojis: await this.emojiEntityService.packDetailedMany(ids),
@@ -305,7 +325,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 
 		await this.emojisRepository.delete(emoji.id);
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiDeleted', {
 			emojis: [await this.emojiEntityService.packDetailed(emoji)],
@@ -336,7 +356,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			}
 		}
 
-		this.localEmojisCache.refresh();
+		this.refreshLocalEmojiCaches();
 
 		this.globalEventService.publishBroadcastStream('emojiDeleted', {
 			emojis: await this.emojiEntityService.packDetailedMany(emojis),
@@ -599,6 +619,59 @@ export class CustomEmojiService implements OnApplicationShutdown {
 			allCount: count,
 			allPages: Math.ceil(count / limit),
 		};
+	}
+
+	@bindThis
+	public async getLocalEmojisStats(): Promise<LocalEmojisStats> {
+		return this.localEmojisStatsCache.fetch(async () => {
+			const raw = await this.emojisRepository.createQueryBuilder('emoji')
+				.select('COUNT(*)', 'count')
+				.addSelect('MAX(emoji.updatedAt)', 'lastUpdatedAt')
+				.where('emoji.host IS NULL')
+				.getRawOne<{ count: string; lastUpdatedAt: Date | null }>();
+
+			return {
+				count: raw ? Number(raw.count) : 0,
+				lastUpdatedAt: raw?.lastUpdatedAt ?? null,
+			};
+		});
+	}
+
+	/**
+	 * ローカル絵文字の一覧を category, name の順で返す。
+	 * DB から全件を読むのは、件数か最終更新日時 (`getLocalEmojisStats()`) が変わったときだけにする。
+	 * 返す配列と要素は共有しているので、呼び出し側で書き換えないこと。
+	 */
+	@bindThis
+	public async getLocalEmojisSorted(): Promise<MiEmoji[]> {
+		const stats = await this.getLocalEmojisStats();
+		const key = `${stats.count}:${stats.lastUpdatedAt?.getTime() ?? 'null'}`;
+
+		if (this.localEmojisSorted?.key === key) return this.localEmojisSorted.emojis;
+
+		// 同じ鍵で読み込み中なら、それを待つ (同時に来た要求で DB を何度も読まない)
+		if (this.localEmojisSortedFetching?.key === key) return this.localEmojisSortedFetching.promise;
+
+		const promise = this.emojisRepository.find({
+			where: {
+				host: IsNull(),
+			},
+			order: {
+				category: 'ASC',
+				name: 'ASC',
+			},
+		});
+		this.localEmojisSortedFetching = { key, promise };
+
+		try {
+			const emojis = await promise;
+			// 読み込みの間に一覧が破棄されたり別の鍵で読み直されたりしていても、
+			// 鍵ごと持つので、次の呼び出しで鍵が合わなければ読み直される
+			this.localEmojisSorted = { key, emojis };
+			return emojis;
+		} finally {
+			if (this.localEmojisSortedFetching?.promise === promise) this.localEmojisSortedFetching = null;
+		}
 	}
 
 	@bindThis
