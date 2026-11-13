@@ -111,6 +111,8 @@ export const moderationLogTypes = [
 	'updateUserAnnouncement',
 	'deleteGlobalAnnouncement',
 	'deleteUserAnnouncement',
+	'resetReadsForGlobalAnnouncement',
+	'resetReadsForUserAnnouncement',
 	'resetPassword',
 	'suspendRemoteInstance',
 	'unsuspendRemoteInstance',
@@ -253,6 +255,17 @@ export type ModerationLogPayloads = {
 		announcement: any;
 	};
 	deleteUserAnnouncement: {
+		announcementId: string;
+		announcement: any;
+		userId: string;
+		userUsername: string;
+		userHost: string | null;
+	};
+	resetReadsForGlobalAnnouncement: {
+		announcementId: string;
+		announcement: any;
+	};
+	resetReadsForUserAnnouncement: {
 		announcementId: string;
 		announcement: any;
 		userId: string;
