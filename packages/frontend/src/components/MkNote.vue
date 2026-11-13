@@ -23,7 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA v-user-preview="note.userId" :class="$style.renoteUserName" :to="userPage(note.user)">
 						<div style="display:inline-flex; flex-wrap:nowrap; align-items: center;">
 							<MkUserName :user="note.user"/>
-							<MkInstanceTicker v-if="showTickerRenote " :host="note.user.host" :instance="note.user.instance"/>
+							<MkInstanceTicker v-if="showTickerRenote" :host="note.user.host" :instance="note.user.instance"/>
 						</div>
 						<!-- <span v-if="note.user.instance" :style="{backgroundColor: note.user.instance?.themeColor}">
 							<img v-if="note.user.instance.faviconUrl" style="height: 1em;" :src="note.user.instance.faviconUrl"/>
@@ -35,7 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div class="renoted-from-channel" style="line-height: normal;margin-top:-4px;">
 				<MkA v-if="note.channel" style="text-decoration: underline; margin-left: 16px; font-size: 12px; line-height: 12px;" :to="`/channels/${note.channelId}`">
-					<i class="ti ti-device-tv"/>{{ note.channel.name }}
+					<i class="ti ti-device-tv"></i>{{ note.channel.name }}
 				</MkA>
 			</div>
 		</div>
@@ -333,7 +333,7 @@ provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
 
 // MkNote固有
 const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);
-const showTickerRenote = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
+const showTickerRenote = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && note.user.instance);
 
 function handleToggleReact() {
 	toggleReact((reaction) => {
