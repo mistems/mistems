@@ -3606,3 +3606,7 @@ _qr:
   scanFile: "端末の画像をスキャン"
   raw: "テキスト"
   mfm: "MFM"
+_emojiPreview:
+  title: "絵文字として確認"
+  currentTheme: "今のテーマ"
+  defaultTheme: "既定のテーマ"
