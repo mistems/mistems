@@ -4504,6 +4504,8 @@ export type components = {
                 color: string;
                 isSensitive: boolean;
                 allowRenoteToExternal: boolean;
+                /** @enum {string} */
+                federationPolicy: 'none' | 'public';
                 userId: string | null;
             } | null;
             localOnly?: boolean;
@@ -4565,6 +4567,8 @@ export type components = {
                 color: string;
                 isSensitive: boolean;
                 allowRenoteToExternal: boolean;
+                /** @enum {string} */
+                federationPolicy: 'none' | 'public';
                 userId: string | null;
             } | null;
             localOnly: boolean;
@@ -5040,6 +5044,9 @@ export type components = {
             notesCount: number;
             isSensitive: boolean;
             allowRenoteToExternal: boolean;
+            /** @enum {string} */
+            federationPolicy: 'none' | 'public';
+            federationHashtag: string | null;
             isFollowing?: boolean;
             isFavorited?: boolean;
             isMuting?: boolean;
@@ -5589,6 +5596,7 @@ export type components = {
             requireSetup: boolean;
             cacheRemoteFiles: boolean;
             cacheRemoteSensitiveFiles: boolean;
+            sensitiveWords: string[];
         };
         MetaDetailed: components['schemas']['MetaLite'] & components['schemas']['MetaDetailedOnly'];
         MetaClientOptions: {
@@ -14862,6 +14870,8 @@ export interface operations {
                     color?: string;
                     isSensitive?: boolean | null;
                     allowRenoteToExternal?: boolean | null;
+                    /** @enum {string|null} */
+                    federationPolicy?: 'none' | 'public' | null;
                 };
             };
         };
@@ -15864,6 +15874,9 @@ export interface operations {
                     color?: string;
                     isSensitive?: boolean | null;
                     allowRenoteToExternal?: boolean | null;
+                    /** @enum {string|null} */
+                    federationPolicy?: 'none' | 'public' | null;
+                    federationHashtag?: string | null;
                 };
             };
         };
@@ -30495,6 +30508,8 @@ export interface operations {
                     withRenotes?: boolean;
                     /** @default false */
                     withReplies?: boolean;
+                    /** @default true */
+                    withCollectedChannelNotes?: boolean;
                 };
             };
         };
@@ -31751,6 +31766,8 @@ export interface operations {
                     withFiles?: boolean;
                     /** @default true */
                     withRenotes?: boolean;
+                    /** @default true */
+                    withCollectedChannelNotes?: boolean;
                 };
             };
         };

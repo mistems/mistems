@@ -128,7 +128,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<div v-if="appearNote.renoteId" :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
 				</div>
-				<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> {{ appearNote.channel.name }}</MkA>
+				<MkA v-if="appearNote.channel && !inChannel" :class="$style.channel" :to="`/channels/${appearNote.channel.id}`"><i class="ti ti-device-tv"></i> <MkChannelName :channel="appearNote.channel"/></MkA>
 			</div>
 			<footer>
 				<div :class="$style.noteFooterInfo">
@@ -255,6 +255,7 @@ import type { Keymap } from '@/utility/hotkey.js';
 
 // コンポーネント外部の依存関係
 import MkNoteSub from '@/components/MkNoteSub.vue';
+import MkChannelName from '@/components/MkChannelName.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
 import MkMediaList from '@/components/MkMediaList.vue';

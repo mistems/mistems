@@ -10,6 +10,9 @@ import type { ChannelsRepository, DriveFilesRepository } from '@/models/_.js';
 import type { MiChannel } from '@/models/Channel.js';
 import { IdService } from '@/core/IdService.js';
 import { ChannelEntityService } from '@/core/entities/ChannelEntityService.js';
+import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
+import { isDuplicateKeyValueError } from '@/misc/is-duplicate-key-value-error.js';
 import { DI } from '@/di-symbols.js';
 import { ApiError } from '../../error.js';
 
@@ -41,6 +44,12 @@ export const meta = {
 			code: 'NO_SUCH_FILE',
 			id: 'cd1e9f3e-5a12-4ab4-96f6-5d0a2cc32050',
 		},
+
+		federationIncompatibleWithRenoteRestriction: {
+			message: 'Federation cannot be enabled for a channel that disallows renote to external.',
+			code: 'FEDERATION_INCOMPATIBLE_WITH_RENOTE_RESTRICTION',
+			id: 'facd3448-c850-4473-ae3f-07770cc88305',
+		},
 	},
 } as const;
 
@@ -53,6 +62,7 @@ export const paramDef = {
 		color: { type: 'string', minLength: 1, maxLength: 16 },
 		isSensitive: { type: 'boolean', nullable: true },
 		allowRenoteToExternal: { type: 'boolean', nullable: true },
+		federationPolicy: { type: 'string', nullable: true, enum: ['none', 'public', null] },
 	},
 	required: ['name'],
 } as const;
@@ -68,8 +78,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		private idService: IdService,
 		private channelEntityService: ChannelEntityService,
+		private channelFederationHashtagService: ChannelFederationHashtagService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
+			// チャンネル外リノート禁止と連合は両立しない (連合先ではリノート制約を強制できないため)
+			if ((ps.federationPolicy ?? 'none') !== 'none' && ps.allowRenoteToExternal === false) {
+				throw new ApiError(meta.errors.federationIncompatibleWithRenoteRestriction);
+			}
+
 			let banner = null;
 			if (ps.bannerId != null) {
 				banner = await this.driveFilesRepository.findOneBy({
@@ -82,18 +98,38 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				}
 			}
 
-			const channel = await this.channelsRepository.insertOne({
-				id: this.idService.gen(),
-				userId: me.id,
-				name: ps.name,
-				description: ps.description ?? null,
-				bannerId: banner ? banner.id : null,
-				isSensitive: ps.isSensitive ?? false,
-				...(ps.color !== undefined ? { color: ps.color } : {}),
-				allowRenoteToExternal: ps.allowRenoteToExternal ?? true,
-			} as MiChannel);
+			const id = this.idService.gen();
+			const federationPolicy = ps.federationPolicy ?? 'none';
 
-			return await this.channelEntityService.pack(channel, me);
+			// 連合するチャンネルは、作るときにハッシュタグを決めて保存する。
+			// 生成と保存の間にほかのチャンネルが同じハッシュタグを取ったときは、一意のインデックスで弾かれるので作り直す。
+			for (let attempt = 0; ; attempt++) {
+				const federationHashtag = federationPolicy === 'public'
+					? await this.channelFederationHashtagService.generate({ id, name: ps.name })
+					: null;
+
+				let channel: MiChannel;
+				try {
+					channel = await this.channelsRepository.insertOne({
+						id,
+						userId: me.id,
+						name: ps.name,
+						description: ps.description ?? null,
+						bannerId: banner ? banner.id : null,
+						isSensitive: ps.isSensitive ?? false,
+						...(ps.color !== undefined ? { color: ps.color } : {}),
+						allowRenoteToExternal: ps.allowRenoteToExternal ?? true,
+						federationPolicy,
+						federationHashtag,
+						federationHashtagNormalized: federationHashtag != null ? normalizeTag(federationHashtag) : null,
+					} as MiChannel);
+				} catch (err) {
+					if (federationHashtag != null && attempt < 3 && isDuplicateKeyValueError(err)) continue;
+					throw err;
+				}
+
+				return await this.channelEntityService.pack(channel, me);
+			}
 		});
 	}
 }

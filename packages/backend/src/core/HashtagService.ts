@@ -9,6 +9,7 @@ import { DataSource } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { MiUser } from '@/models/User.js';
 import { normalizeTag } from '@/misc/normalize-tag.js';
+import { isChannelFederationHashtag } from '@/misc/channel-federation-hashtag.js';
 import { IdService } from '@/core/IdService.js';
 import { MiHashtag } from '@/models/Hashtag.js';
 import type { HashtagsRepository, MiMeta } from '@/models/_.js';
@@ -170,6 +171,9 @@ export class HashtagService {
 	public async updateHashtagsRanking(hashtag: string, userId: MiUser['id']): Promise<void> {
 		const hiddenTags = this.meta.hiddenTags.map(t => normalizeTag(t));
 		if (hiddenTags.includes(hashtag)) return;
+		// 連合するチャンネルのハッシュタグ (「連合チャンネル_」を含むもの) は、トレンドに数えない。
+		// 外から届いたノートでも、ほかのサーバーが同じ形を真似したものでも外す。
+		if (isChannelFederationHashtag(hashtag)) return;
 		if (this.utilityService.isKeyWordIncluded(hashtag, this.meta.sensitiveWords)) return;
 
 		// YYYYMMDDHHmm (10分間隔)

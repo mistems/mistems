@@ -127,6 +127,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		this.queryService.generateBaseNoteFilteringQuery(query, me);
 		if (me == null) this.queryService.generateUgcVisibilityQueryForVisitor(query);
+		// 多層防御: 「チャンネルノートは常に public/home」という前提に頼らず、可視性でも絞る
+		// (リモート由来ノート等が万一 restricted 可視性でチャンネルに紛れても権限外の閲覧者に返さない)
+		this.queryService.generateVisibilityQuery(query, me);
 
 		if (me) {
 			const mutingChannelIds = await this.channelMutingService
