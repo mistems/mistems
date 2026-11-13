@@ -64,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<button class="_textButton" @click="showTour">{{ i18n.ts._postForm.showHowToUse }}</button>
 	</MkInfo>
 	<MkInfo v-if="isTimemachinePostRestricted" warn :class="$style.timemachineWarning">
-		タイムマシン中に投稿するにはタイムフュージョンを有効にしてください
+		{{ i18n.ts._timemachine.postRestricted }}
 	</MkInfo>
 	<MkInfo v-if="scheduledAt != null" :class="$style.scheduledAt">
 		<I18n :src="i18n.ts.scheduleToPostOnX" tag="span">

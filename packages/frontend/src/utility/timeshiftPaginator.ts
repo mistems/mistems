@@ -32,6 +32,14 @@ export function isFusionNote(note: Misskey.entities.Note | FusionNote): note is 
  * タイムマシン機能専用のPaginator
  * Misskey.entities.Note型に特化したシンプルな実装
  */
+// 再生できる新しいノートがもうないときに投げる。再生を終える合図に使う
+export class TimeshiftNoMoreItemsError extends Error {
+	constructor() {
+		super('No more items to prefetch');
+		this.name = 'TimeshiftNoMoreItemsError';
+	}
+}
+
 export class TimeshiftPaginator extends Paginator<TimelineEndpoint> {
 	// タイムシフト状態
 	public isTimeshiftMode: Ref<boolean>;
@@ -203,6 +211,15 @@ export class TimeshiftPaginator extends Paginator<TimelineEndpoint> {
 	// 最後のfetchNewerで追加された新しいアイテムの数を記録（checkAndPrefetchで使用）
 	private lastFetchedNewItemsCount = 0;
 
+	// ノートの取得そのもの。使い方ツアーのダミーデータは、ここを差し替えて API を呼ばずにノートを作る
+	protected fetchNewerBase(options: { toQueue?: boolean }): Promise<void> {
+		return super.fetchNewer(options);
+	}
+
+	protected fetchOlderBase(): Promise<void> {
+		return super.fetchOlder();
+	}
+
 	// fetchNewer のオーバーライド
 	async fetchNewer(options: { toQueue?: boolean } = {}): Promise<void> {
 		const MAX_ITEMS = 1000;
@@ -214,7 +231,7 @@ export class TimeshiftPaginator extends Paginator<TimelineEndpoint> {
 			beforeItemIds = new Set((this.items.value || []).map((item) => item.id));
 		}
 
-		await super.fetchNewer(options);
+		await this.fetchNewerBase(options);
 
 		// タイムシフトモード時は、トリミング前に新しいアイテムを抽出して allFetchedItems とキューに追加
 		if (this.isTimeshiftMode.value && !options.toQueue && beforeItemIds) {
@@ -281,7 +298,7 @@ export class TimeshiftPaginator extends Paginator<TimelineEndpoint> {
 		}
 
 		// 通常の fetchOlder を実行
-		await super.fetchOlder();
+		await this.fetchOlderBase();
 	}
 
 	// プリフェッチチェック
@@ -296,9 +313,16 @@ export class TimeshiftPaginator extends Paginator<TimelineEndpoint> {
 			// 新しいアイテムがない場合は例外をスロー（呼び出し側で stopTimeshift() を実行）
 			// トリミング処理を考慮し、実際に追加された新しいアイテムの数で判定
 			if (this.lastFetchedNewItemsCount === 0) {
-				throw new Error('No more items to prefetch');
+				throw new TimeshiftNoMoreItemsError();
 			}
 		}
+	}
+
+	// 再生を始めた日時より後のノートを、1 件でも読み込んだか
+	hasNotesAfterStart(): boolean {
+		const startTime = this.timeshiftStartTime.value;
+		if (startTime == null) return false;
+		return this.allFetchedItems.value.some((item) => new Date(item.createdAt).getTime() > startTime);
 	}
 
 	// タイムシフト終了時刻を取得

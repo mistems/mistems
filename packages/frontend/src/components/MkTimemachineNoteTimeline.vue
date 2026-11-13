@@ -16,7 +16,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template #empty><MkResult type="empty" :text="i18n.ts.noNotes"/></template>
 
 	<template #default="{ items: notes }">
-		<div :class="[$style.root, { [$style.noGap]: noGap, '_gaps': !noGap }]">
+		<TransitionGroup
+			tag="div"
+			:class="[$style.root, { [$style.noGap]: noGap, '_gaps': !noGap }]"
+			:css="isAnimating"
+			:enterActiveClass="$style.transition_x_enterActive"
+			:leaveActiveClass="$style.transition_x_leaveActive"
+			:enterFromClass="$style.transition_x_enterFrom"
+			:leaveToClass="$style.transition_x_leaveTo"
+			:moveClass="isAnimating ? $style.transition_x_move : ''"
+		>
 			<template v-for="(note, i) in notes as unknown as FusionNote[]" :key="generateUniqueKey(note)">
 				<div
 					v-if="i > 0 && isSeparatorNeeded(notes[i - 1].createdAt, note.createdAt)"
@@ -31,14 +40,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 				<MkNote v-else :class="[$style.note, { [$style.realtimeNote]: isRealtimeItem(note), [$style.realtimeNoteAnimating]: shouldAnimate(note) }]" :note="note" :withHardMute="true" :disableSkipRender="true" :data-scroll-anchor="note.id"/>
 			</template>
-		</div>
+		</TransitionGroup>
 	</template>
 </MkPagination>
 </template>
 
 <script lang="ts" setup>
 import * as Misskey from 'misskey-js';
-import { computed } from 'vue';
+import { computed, ref, watch, TransitionGroup } from 'vue';
 import type { ComputedRef } from 'vue';
 import type { MkPaginationOptions } from '@/components/MkPagination.vue';
 import { isFusionNote } from '@/utility/timeshiftPaginator.js';
@@ -46,6 +55,7 @@ import type { TimeshiftPaginator, FusionNote } from '@/utility/timeshiftPaginato
 import MkNote from '@/components/MkNote.vue';
 import MkPagination from '@/components/MkPagination.vue';
 import { i18n } from '@/i18n.js';
+import { prefer } from '@/preferences.js';
 import { useGlobalEvent } from '@/events.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
 
@@ -71,6 +81,18 @@ const customItems: ComputedRef<FusionNote[]> = computed(() => {
 	}
 	return props.paginator.items.value || [];
 });
+
+// タイムシフト再生中に到着したノートへ、通常のタイムラインと同じ追加・移動のアニメーションを付ける。
+// タイムシフトの開始時には表示中のノートが丸ごと入れ替わるので、入れ替えの描画が終わってから有効にする。
+// 通常表示では「新しいノートを読み込む」がスクロール位置を復元するため、移動のアニメーションと干渉しないよう無効にする。
+// 無効のときは css を false にして、追加・削除を即座に反映する (入れ替えで消える数百件に leave の処理を実行させない)。
+// move は css に関係なく moveClass の transition の有無で決まるので、moveClass も外す。
+const animationArmed = ref(false);
+watch(() => props.paginator.isTimeshiftMode.value, (timeshift) => {
+	animationArmed.value = timeshift;
+}, { immediate: true, flush: 'post' });
+
+const isAnimating = computed(() => prefer.s.animation && props.paginator.isTimeshiftMode.value && animationArmed.value);
 
 // リアルタイムアイテムかどうかを判定する関数（型安全）
 function isRealtimeItem(note: Misskey.entities.Note | FusionNote): note is FusionNote & { _isRealtime: true } {
@@ -171,7 +193,7 @@ defineExpose({
 }
 
 .realtimeNoteAnimating {
-	animation: realtimePulse 2s ease-in-out, realtimeSlideIn 0.5s ease-out;
+	animation: realtimePulse 2s ease-in-out;
 }
 
 @keyframes realtimePulse {
@@ -186,14 +208,31 @@ defineExpose({
 	}
 }
 
-@keyframes realtimeSlideIn {
-	0% {
-		transform: translateX(100%);
-		opacity: 0;
+.transition_x_move {
+	transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.transition_x_enterActive {
+	transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.transition_x_leaveActive {
+	transition: height 0.2s cubic-bezier(0,.5,.5,1), opacity 0.2s cubic-bezier(0,.5,.5,1);
+}
+
+.transition_x_enterFrom {
+	opacity: 0;
+	transform: translateY(max(-64px, -100%));
+}
+
+@supports (interpolate-size: allow-keywords) {
+	.transition_x_leaveTo {
+		interpolate-size: allow-keywords; // heightのtransitionを動作させるために必要
+		height: 0;
 	}
-	100% {
-		transform: translateX(0);
-		opacity: 1;
-	}
+}
+
+.transition_x_leaveTo {
+	opacity: 0;
 }
 </style>

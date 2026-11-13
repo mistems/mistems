@@ -24,8 +24,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				v-model:timelineSource="timelineSource"
 				v-model:dateInput="dateInput"
 				v-model:timeInput="timeInput"
+				:showModeButtons="!isTimeshiftMode"
 				@goToDateTime="goToDateTime"
-				@goToDateTimeWithFusion="goToDateTimeWithFusion"
+				@startTimeshift="startFromControls(false)"
+				@startTimefusion="startFromControls(true)"
 			/>
 
 			<!-- タイムシフトプレイヤー -->
@@ -52,18 +54,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="targetDate !== null && canLoadNewer && !isTimeshiftMode" :class="$style.loadMore">
 				<div :class="$style.loadMoreRow">
 					<MkButton :disabled="isLoadingNewer" style="flex: 1;" @click="loadNewer">
-						<i class="ti ti-arrow-up"></i> Load newer notes
+						<i class="ti ti-arrow-up"></i> {{ i18n.ts._timemachine.loadNewer }}
 					</MkButton>
-					<MkButton @click="toggleControls">
+					<MkButton :title="showControls ? i18n.ts._timemachine.hideControls : i18n.ts._timemachine.showControls" :aria-label="showControls ? i18n.ts._timemachine.hideControls : i18n.ts._timemachine.showControls" @click="toggleControls">
 						<i class="ti ti-clock-bolt"></i>
-					</MkButton>
-				</div>
-				<div :class="$style.loadMoreRow">
-					<MkButton primary style="flex: 1;" @click="startTimeshift">
-						<i class="ti ti-player-play"></i> Timeshift
-					</MkButton>
-					<MkButton primary style="flex: 1;" @click="startTimefusion">
-						<i class="ti ti-bolt"></i> Timefusion
 					</MkButton>
 				</div>
 			</div>
@@ -81,7 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 			<div v-else :class="$style.placeholder">
 				<i class="ti ti-clock-bolt"></i>
-				<p>Select a date and time to view the timeline</p>
+				<p>{{ i18n.ts._timemachine.selectDateTimeDescription }}</p>
 			</div>
 		</div>
 	</div>
@@ -100,7 +94,7 @@ import MkButton from '@/components/MkButton.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
-import { TimeshiftPaginator } from '@/utility/timeshiftPaginator.js';
+import { TimeshiftPaginator, TimeshiftNoMoreItemsError } from '@/utility/timeshiftPaginator.js';
 import { store } from '@/store.js';
 import * as os from '@/os.js';
 import { useTimeshiftPlayback, useTimeshiftSeek, useTimeshiftComputed, useTimefusionStream, getEndpointForSource } from '@/composables/use-timemachine.js';
@@ -163,7 +157,11 @@ const {
 	stop: stopTimeshiftPlayback,
 	cleanup: cleanupPlayback,
 } = useTimeshiftPlayback(paginator, {
-	onError: () => {
+	onError: (error) => {
+		// 新しいノートがもうないときは、黙って終わらずに理由を伝える
+		if (error instanceof TimeshiftNoMoreItemsError) {
+			os.toast(paginator.value?.hasNotesAfterStart() ? i18n.ts._timemachine.reachedLatestNote : i18n.ts._timemachine.noNotesToPlay);
+		}
 		stopTimeshift();
 	},
 });
@@ -266,71 +264,6 @@ function goToDateTime() {
 	});
 }
 
-function goToDateTimeWithFusion() {
-	if (!isValidDateTime.value) return;
-
-	let datetime = new Date(`${dateInput.value}T${timeInput.value}`);
-	let targetTimestamp = datetime.getTime();
-
-	// ロールポリシーによる時刻制限をチェック
-	if ($i) {
-		// 最も新しい（最近の）制限時刻を計算
-		let earliestAllowedTime = 0;
-
-		// timemachineReachableFrom: 絶対時刻による制限
-		if ($i.policies.timemachineReachableFrom > 0) {
-			earliestAllowedTime = Math.max(earliestAllowedTime, $i.policies.timemachineReachableFrom);
-		}
-
-		// timemachineTravelableMaxDays: 相対的な日数による制限
-		if ($i.policies.timemachineTravelableMaxDays > 0) {
-			const maxDaysAgo = Date.now() - ($i.policies.timemachineTravelableMaxDays * 24 * 60 * 60 * 1000);
-			earliestAllowedTime = Math.max(earliestAllowedTime, maxDaysAgo);
-		}
-
-		// 制限より古い時刻にアクセスしようとした場合、制限時刻に丸める
-		if (earliestAllowedTime > 0 && targetTimestamp < earliestAllowedTime) {
-			targetTimestamp = earliestAllowedTime;
-			datetime = new Date(targetTimestamp);
-
-			// 入力値を制限時刻に更新
-			const year = datetime.getFullYear();
-			const month = String(datetime.getMonth() + 1).padStart(2, '0');
-			const day = String(datetime.getDate()).padStart(2, '0');
-			const hours = String(datetime.getHours()).padStart(2, '0');
-			const minutes = String(datetime.getMinutes()).padStart(2, '0');
-
-			dateInput.value = `${year}-${month}-${day}`;
-			timeInput.value = `${hours}:${minutes}`;
-
-			// 通知を表示
-			os.toast(String(i18n.ts.timemachineReachedLimit));
-		}
-	}
-
-	paginator.value = createPaginator(targetTimestamp);
-	timelineKey.value++;
-	showControls.value = false;
-
-	// カラム設定を保存
-	updateColumn(props.column.id, {
-		timemachineDate: dateInput.value,
-		timemachineTime: timeInput.value,
-	});
-
-	nextTick(() => {
-		if (!paginator.value) return;
-		paginator.value.startTimeshift(targetTimestamp);
-		playTimeshift();
-
-		nextTick(() => {
-			if (!paginator.value) return;
-			paginator.value.startTimefusion();
-			setupRealtimeStream();
-		});
-	});
-}
-
 // toggleControls と loadNewer は composable から使用
 
 // タイムシフトモードの準備（共通処理）
@@ -359,6 +292,30 @@ function startTimefusion() {
 		paginator.value.startTimefusion();
 		setupRealtimeStream();
 	});
+}
+
+// 日時の指定から直接再生を始める。指定した日時のタイムラインを読み込み終えてから開始する
+async function startFromControls(fusion: boolean) {
+	if (!isValidDateTime.value) return;
+	goToDateTime();
+	const p = paginator.value;
+	if (p == null) return;
+	if (p.fetching.value) {
+		await new Promise<void>((resolve) => {
+			const stop = watch(p.fetching, (fetching) => {
+				if (fetching) return;
+				stop();
+				resolve();
+			});
+		});
+	}
+	// 読み込み中に別の日時へ移動していたら何もしない。ノートがなければ再生するものがない
+	if (paginator.value !== p || p.items.value.length === 0) return;
+	if (fusion) {
+		startTimefusion();
+	} else {
+		startTimeshift();
+	}
 }
 
 function stopTimeshift() {
@@ -411,11 +368,11 @@ async function setTimelineSource() {
 // カラムメニュー
 const menu = computed(() => [{
 	icon: 'ti ti-settings',
-	text: 'Timeline Source',
+	text: i18n.ts._timemachine.timelineSource,
 	action: setTimelineSource,
 }, {
 	icon: 'ti ti-clock',
-	text: showControls.value ? 'Hide Controls' : 'Show Controls',
+	text: showControls.value ? i18n.ts._timemachine.hideControls : i18n.ts._timemachine.showControls,
 	action: () => {
 		showControls.value = !showControls.value;
 	},

@@ -9,18 +9,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<i class="ti ti-clock-play"></i>
 	</template>
 	<template #label>
-		再生中の時間
+		{{ i18n.ts._timemachine.nowPlaying }}
 	</template>
 	<template #suffix>
 		<span :class="$style.currentTime">{{ formatTimeSec(playbackTime) }}</span>
 	</template>
 
 	<!-- シークバー -->
-	<div :class="$style.seekBarSection">
+	<div ref="seekBarEl" :class="$style.seekBarSection">
 		<div :class="$style.seekBarWrapper">
 			<input
 				ref="seekBarInput"
 				type="range"
+				:aria-label="i18n.ts._timemachine.seekBar"
 				:class="$style.seekBarInput"
 				:min="timeshiftStartTime || 0"
 				:max="timeshiftEndTime"
@@ -41,28 +42,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<!-- コントロール -->
 	<div :class="$style.controlsCard">
-		<div :class="$style.controlsRow">
-			<MkButton v-if="!isTimeshiftPlaying" :class="$style.playBtn" @click="$emit('play')">
+		<div ref="playbackEl" :class="$style.controlsRow">
+			<MkButton v-if="!isTimeshiftPlaying" :class="$style.playBtn" :title="i18n.ts._timemachine.play" :aria-label="i18n.ts._timemachine.play" @click="$emit('play')">
 				<i class="ti ti-player-play"></i>
 			</MkButton>
-			<MkButton v-else :class="$style.playBtn" @click="$emit('pause')">
+			<MkButton v-else :class="$style.playBtn" :title="i18n.ts._timemachine.pause" :aria-label="i18n.ts._timemachine.pause" @click="$emit('pause')">
 				<i class="ti ti-player-pause"></i>
 			</MkButton>
-			<MkButton :class="$style.playBtn" @click="$emit('stop')">
+			<MkButton :class="$style.playBtn" :title="i18n.ts._timemachine.stop" :aria-label="i18n.ts._timemachine.stop" @click="$emit('stop')">
 				<i class="ti ti-player-stop"></i>
 			</MkButton>
 		</div>
 		<div :class="$style.controlsRow">
 			<!-- タイムフュージョン切り替えボタン -->
 			<MkButton
+				ref="fusionButton"
 				:class="[$style.fusionButton, { [$style.active]: isTimefusionMode }]"
-				:title="isTimefusionMode ? 'タイムフュージョンモードを無効化' : 'タイムフュージョンモードを有効化'"
+				:title="isTimefusionMode ? i18n.ts._timemachine.disableTimefusion : i18n.ts._timemachine.enableTimefusion"
 				@click="$emit('toggleTimefusion')"
 			>
 				<i class="ti ti-bolt"></i>
-				{{ isTimefusionMode ? 'フュージョン中' : 'フュージョン' }}
+				{{ isTimefusionMode ? i18n.ts._timemachine.fusionActive : i18n.ts._timemachine.fusion }}
 			</MkButton>
-			<div :class="$style.speedControl">
+			<div ref="speedEl" :class="$style.speedControl">
 				<MkSelect v-model="localPlaybackSpeed" :items="playbackSpeedItems" small/>
 			</div>
 		</div>
@@ -76,6 +78,7 @@ import MkButton from '@/components/MkButton.vue';
 import MkSelect from '@/components/MkSelect.vue';
 import MkFolder from '@/components/MkFolder.vue';
 import { formatTimestamp } from '@/utility/timemachine-format.js';
+import { i18n } from '@/i18n.js';
 
 const props = defineProps<{
 	isTimeshiftPlaying: boolean;
@@ -100,6 +103,16 @@ const emit = defineEmits<{
 }>();
 
 const seekBarInput = useTemplateRef<HTMLInputElement>('seekBarInput');
+
+// 使い方ツアーで指し示すための要素
+const seekBarEl = useTemplateRef<HTMLElement>('seekBarEl');
+const playbackEl = useTemplateRef<HTMLElement>('playbackEl');
+const speedEl = useTemplateRef<HTMLElement>('speedEl');
+
+const fusionButton = useTemplateRef<InstanceType<typeof MkButton>>('fusionButton');
+const fusionButtonEl = computed(() => fusionButton.value?.$el as HTMLElement | undefined);
+
+defineExpose({ seekBarEl, playbackEl, speedEl, fusionButtonEl });
 
 const playbackSpeedItems = [
 	{ value: 0.5, label: '0.5x' },

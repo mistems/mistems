@@ -159,6 +159,7 @@ export function useTimemachinePage(options: {
 			const scrollContainerRect = scrollContainer.getBoundingClientRect();
 			const firstNoteRect = firstNoteElement?.getBoundingClientRect();
 			const firstNoteOffsetFromTop = firstNoteRect && scrollContainerRect ? firstNoteRect.y - scrollContainerRect.y : null;
+			const firstNoteId = firstNoteElement?.getAttribute('data-scroll-anchor') ?? null;
 
 			// 新しいノートを取得
 			await paginator.value.fetchNewer();
@@ -168,9 +169,14 @@ export function useTimemachinePage(options: {
 			await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
 			// スクロール位置を復元
-			if (firstNoteElement && firstNoteOffsetFromTop !== null && scrollContainerRect) {
+			// 上にノートが足されると、日付の見出しがつくなどして同じノートの要素が作り直されることがある (とくに最初の読み込み)。
+			// 古い要素は画面から外れて位置が測れないので、ID で探し直す
+			const currentNoteElement = firstNoteId != null
+				? scrollContainer.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(firstNoteId)}"]`)
+				: null;
+			if (currentNoteElement && firstNoteOffsetFromTop !== null && scrollContainerRect) {
 				const currentScrollContainerRect = scrollContainer.getBoundingClientRect();
-				const currentNoteRect = firstNoteElement.getBoundingClientRect();
+				const currentNoteRect = currentNoteElement.getBoundingClientRect();
 				const currentOffsetFromTop = currentNoteRect.y - currentScrollContainerRect.y;
 				const positionDiff = currentOffsetFromTop - firstNoteOffsetFromTop;
 

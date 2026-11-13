@@ -137,26 +137,6 @@ export interface Locale extends ILocale {
      */
     "timeMachine": string;
     /**
-     * 日時を選択
-     */
-    "timeMachineSelectDateTime": string;
-    /**
-     * タイムマシンで移動
-     */
-    "timeMachineGo": string;
-    /**
-     * 現在に戻る
-     */
-    "timeMachineBackToNow": string;
-    /**
-     * 現在位置: {datetime}
-     */
-    "timeMachineCurrentPosition": ParameterizedString<"datetime">;
-    /**
-     * 日時を選択して、その時点のソーシャルタイムラインを表示します。
-     */
-    "timeMachineDescription": string;
-    /**
      * この時刻にタイムマシンで移動
      */
     "jumpToTimemachine": string;
@@ -11262,6 +11242,283 @@ export interface Locale extends ILocale {
              * リノート
              */
             "renote": string;
+        };
+    };
+    "_timemachine": {
+        /**
+         * タイムラインの種類
+         */
+        "timelineSource": string;
+        /**
+         * {date}に移動
+         */
+        "goTo": ParameterizedString<"date">;
+        /**
+         * 新しいノートを読み込む
+         */
+        "loadNewer": string;
+        /**
+         * タイムシフト開始
+         */
+        "startTimeshift": string;
+        /**
+         * タイムフュージョン開始
+         */
+        "startTimefusion": string;
+        /**
+         * タイムシフト
+         */
+        "timeshift": string;
+        /**
+         * タイムフュージョン
+         */
+        "timefusion": string;
+        /**
+         * フュージョン
+         */
+        "fusion": string;
+        /**
+         * フュージョン中
+         */
+        "fusionActive": string;
+        /**
+         * タイムフュージョンモードを有効化
+         */
+        "enableTimefusion": string;
+        /**
+         * タイムフュージョンモードを無効化
+         */
+        "disableTimefusion": string;
+        /**
+         * 再生位置
+         */
+        "nowPlaying": string;
+        /**
+         * 再生
+         */
+        "play": string;
+        /**
+         * 一時停止
+         */
+        "pause": string;
+        /**
+         * 停止
+         */
+        "stop": string;
+        /**
+         * 再生位置を移動
+         */
+        "seekBar": string;
+        /**
+         * コントロールを表示
+         */
+        "showControls": string;
+        /**
+         * コントロールを隠す
+         */
+        "hideControls": string;
+        /**
+         * 日時を選択すると、その時点からのタイムラインを表示します。
+         */
+        "selectDateTimeDescription": string;
+        /**
+         * タイムマシン中に投稿するにはタイムフュージョンを有効にしてください
+         */
+        "postRestricted": string;
+        /**
+         * この日時より後のノートがないので、タイムシフトを始められません
+         */
+        "noNotesToPlay": string;
+        /**
+         * 最新のノートまで再生したので、タイムシフトを終えました
+         */
+        "reachedLatestNote": string;
+        /**
+         * タイムマシンの使い方を見る
+         */
+        "showHowToUse": string;
+        "_howToUse": {
+            /**
+             * タイムマシンへようこそ
+             */
+            "intro_title": string;
+            /**
+             * タイムマシンは、過去の日時を指定して、その時点のタイムラインを見ることができる機能です。
+             *
+             * 「通常モード」「タイムシフト」「タイムフュージョン」の3つのモードがあります。
+             * 通常モード：自分でスクロールすることで過去と未来のノートを取得します。
+             * タイムシフト：リアルタイムで流れてくるタイムラインを再現します。
+             * タイムフュージョン：タイムシフトのタイムラインに加えて、今現在のノートも併せて見ることができます。
+             *
+             * このツアーでは、サンプルのノートを使ってこれらの機能の使い方を解説します。
+             */
+            "intro_description": string;
+            /**
+             * 日時の指定
+             */
+            "controls_title": string;
+            /**
+             * タイムラインの種類と、見たい日時を指定します。ノートのメニューから「この時刻にタイムマシンで移動」を選ぶと、この日時設定を代わりに埋めることができます。
+             */
+            "controls_description": string;
+            /**
+             * 移動
+             */
+            "go_title": string;
+            /**
+             * 指定した日時のタイムラインを通常モードで読み込みます。ボタンを押して、1時間前に移動してみましょう。
+             */
+            "go_description": string;
+            /**
+             * タイムシフトを始める
+             */
+            "modeButtons_title": string;
+            /**
+             * 当時のリアルタイムの様子の再現もできます。「タイムシフト開始」を押して、当時のタイムラインを再生してみましょう。
+             */
+            "modeButtons_description": string;
+            /**
+             * 通常モード
+             */
+            "normalMode_title": string;
+            /**
+             * 指定した日時より前のノートが、新しい順に並びます。下の端までスクロールして「もっと見る」を押すと過去へ、上の端で新しいノートを読み込むと未来へ進みます。
+             */
+            "normalMode_description": string;
+            /**
+             * 新しいノートを読み込む
+             */
+            "loadNewer_title": string;
+            /**
+             * 表示中のノートより新しいノートを読み込み、未来へ進みます。タッチ操作では、画面を下に引っ張っても読み込めます。ボタンを押して、新しいノートを読み込んでみましょう。
+             */
+            "loadNewer_description": string;
+            /**
+             * 未来へ進んだ
+             */
+            "loadedNewer_title": string;
+            /**
+             * 新しいノートが{n}件、上に読み込まれます。
+             */
+            "loadedNewer_description": ParameterizedString<"n">;
+            /**
+             * これが通常モードです
+             */
+            "normalModeSummary_title": string;
+            /**
+             * 当時のタイムラインを自分のペースで追体験することができます。
+             */
+            "normalModeSummary_description": string;
+            /**
+             * タイムシフト
+             */
+            "timeshift_title": string;
+            /**
+             * 当時のタイムラインを再生できます。
+             */
+            "timeshift_description": string;
+            /**
+             * 当時のノートが流れてくる
+             */
+            "timeshiftFlow_title": string;
+            /**
+             * 再生が進むと、当時のノートが投稿された時刻に合わせて、上に1件ずつ流れてきます。少し待って、ノートが増えていくところを見てみましょう。
+             */
+            "timeshiftFlow_description": string;
+            /**
+             * タイムフュージョン
+             */
+            "timefusion_title": string;
+            /**
+             * タイムシフトの再生に、いま投稿されたノートも混ぜて流します。タイムシフトとの違いは2つです。いまのノートも流れてくることと、投稿できることです。「フュージョン」のボタンでは、再生を止めずに切り替えられます。押して、タイムフュージョンに切り替えてみましょう。
+             */
+            "timefusion_description": string;
+            /**
+             * シークバー
+             */
+            "seek_title": string;
+            /**
+             * ドラッグして再生位置を移動できます。つまみをドラッグして、再生位置を動かしてみましょう。
+             */
+            "seek_description": string;
+            /**
+             * 再生コントロール
+             */
+            "playback_title": string;
+            /**
+             * 再生・一時停止・停止を切り替えます。停止すると、停止した時点からの通常モードに戻ります。
+             */
+            "playback_description": string;
+            /**
+             * いまのノートが混ざる
+             */
+            "fusionLive_title": string;
+            /**
+             * 点線で囲まれたノートが、いま投稿されたノートです。ツアーでは、サンプルが数秒ごとに流れてきます。過去のタイムラインを眺めながら、いまの会話にも加われます。もう一度「フュージョン中」を押すと、タイムシフトに戻ります。
+             */
+            "fusionLive_description": string;
+            /**
+             * 再生速度
+             */
+            "speed_title": string;
+            /**
+             * 再生速度を0.5倍から100倍まで変えられます。1xなら当時と同じ速さで流れます。速度を変えてみましょう。
+             */
+            "speed_description": string;
+            /**
+             * 使い方をもう一度見る
+             */
+            "reopen_title": string;
+            /**
+             * 使い方がわからなくなったら、ここからいつでもこのツアーを見られます。
+             */
+            "reopen_description": string;
+        };
+        "_tourSample": {
+            /**
+             * おはようございます。今日もいい天気
+             */
+            "note1": string;
+            /**
+             * コーヒーを淹れた
+             */
+            "note2": string;
+            /**
+             * お昼ごはん、なににしよう
+             */
+            "note3": string;
+            /**
+             * 電車が少し遅れているみたい
+             */
+            "note4": string;
+            /**
+             * 新しい本を読みはじめた
+             */
+            "note5": string;
+            /**
+             * 夕焼けがきれい
+             */
+            "note6": string;
+            /**
+             * 今日はここまで。おつかれさまでした
+             */
+            "note7": string;
+            /**
+             * 週末はどこかへ出かけたいな
+             */
+            "note8": string;
+            /**
+             * （いま投稿されたノートのサンプル）こんにちは
+             */
+            "live1": string;
+            /**
+             * （いま投稿されたノートのサンプル）タイムマシンで昔のタイムラインを見ています
+             */
+            "live2": string;
+            /**
+             * （いま投稿されたノートのサンプル）フュージョン中は投稿もできます
+             */
+            "live3": string;
         };
     };
     "_deck": {
