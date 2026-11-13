@@ -5,8 +5,8 @@
 
 import type { ComputedRef, InjectionKey, Ref } from 'vue';
 import type * as Misskey from 'misskey-js';
-import { i18n } from '@/i18n.js';
 import type { MkSelectItem } from '@/components/MkSelect.vue';
+import { i18n } from '@/i18n.js';
 
 export const pageEditorInjectionKey = Symbol() as InjectionKey<{
 	readonly: Ref<boolean>;

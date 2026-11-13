@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <!-- eslint-disable vue/no-mutating-props -->
-<XContainer :draggable="true" :dragStartCallback="dragStartCallback" @remove="() => emit('remove')">
+<XContainer :draggable="true" :pointerStartCallback="pointerStartCallback" @remove="() => emit('remove')">
 	<template #header><i class="ti ti-align-left"></i> {{ i18n.ts._pages.blocks.text }} - {{ i18n.ts._pages.otherMfm }}</template>
 
 	<section>
@@ -32,7 +32,7 @@ import { emojiPicker } from '@/utility/emoji-picker.js';
 import * as os from '@/os.js';
 
 const props = defineProps<{
-	dragStartCallback?: (ev: DragEvent) => void;
+	pointerStartCallback?: (ev: PointerEvent) => void;
 	modelValue: Misskey.entities.PageBlock & { type: 'text' }
 }>();
 
