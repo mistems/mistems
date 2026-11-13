@@ -11,7 +11,7 @@ import { customRef, ref, watch, onScopeDispose } from 'vue';
 import type { Ref } from 'vue';
 import { $i } from '@/i.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
-import { get, set } from '@/utility/idb-proxy.js';
+import { get, set, delMany } from '@/utility/idb-proxy.js';
 import { store } from '@/store.js';
 import { TypedBroadcastChannel as BroadcastChannel } from '@/utility/typed-broadcast-channel.js';
 import { deepClone } from '@/utility/clone.js';
@@ -227,6 +227,18 @@ export class Pizzax<T extends StateDef> {
 		const defaultValue = deepClone(this.def[key].default);
 		this.set(key, defaultValue);
 		return defaultValue;
+	}
+
+	/** 現在のアカウントに紐づくデータをデバイスから削除します */
+	public async clearAccountDataFromDevice(id = $i?.id) {
+		if (id == null) return;
+
+		const deviceAccountStateKey = `pizzax::${this.key}::${id}` satisfies typeof this.deviceAccountStateKeyName;
+		const registryCacheKey = `pizzax::${this.key}::cache::${id}` satisfies typeof this.registryCacheKeyName;
+
+		await this.addIdbSetJob(async () => {
+			await delMany([deviceAccountStateKey, registryCacheKey]);
+		});
 	}
 
 	/**
