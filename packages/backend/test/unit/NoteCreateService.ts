@@ -279,6 +279,45 @@ describe('NoteCreateService', () => {
 			expect(calls.length).toBe(0);
 		});
 
+		describe('stripChannelFederationHashtagFromText (本文の末尾の付記を取り除く)', () => {
+			const strip = (data: Record<string, unknown>, user: { id: string; host: string | null } = remoteUser) => {
+				noteCreateService['stripChannelFederationHashtagFromText'](data as any, user);
+				return data;
+			};
+
+			test('収蔵したリモートのノートの本文の末尾にあるチャンネルのハッシュタグを取り除く', async () => {
+				const { data } = await collect({
+					channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'],
+					text: 'hello\n\n#連合チャンネル_雑談',
+				});
+				expect(data.channel).toBe(federatedChannel);
+				strip(data);
+				expect(data.text).toBe('hello');
+				// ノートのハッシュタグからは外さない
+				expect(data.apHashtags).toEqual(['連合チャンネル_雑談']);
+			});
+
+			test('本文の途中にあるチャンネルのハッシュタグは残す', () => {
+				const data = strip({ channel: federatedChannel, text: '#連合チャンネル_雑談 で話す' });
+				expect(data.text).toBe('#連合チャンネル_雑談 で話す');
+			});
+
+			test('ほかのチャンネルのハッシュタグは残す', () => {
+				const data = strip({ channel: federatedChannel, text: 'hello\n\n#連合チャンネル_告知' });
+				expect(data.text).toBe('hello\n\n#連合チャンネル_告知');
+			});
+
+			test('ローカルのユーザーのノートは変えない', () => {
+				const data = strip({ channel: federatedChannel, text: 'hello\n\n#連合チャンネル_雑談' }, localUser);
+				expect(data.text).toBe('hello\n\n#連合チャンネル_雑談');
+			});
+
+			test('チャンネルに入らないノートは変えない', () => {
+				const data = strip({ channel: null, text: 'hello\n\n#連合チャンネル_雑談' });
+				expect(data.text).toBe('hello\n\n#連合チャンネル_雑談');
+			});
+		});
+
 		test('中身のないリノートは入れない', async () => {
 			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'], renote: { id: 'x' } });
 			expect(data.channel).toBe(null);

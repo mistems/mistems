@@ -76,3 +76,22 @@ export function extractChannelFederationHashtagsFromText(text: string | null | u
 	if (text == null || !text.includes(CHANNEL_FEDERATION_HASHTAG_MARKER)) return [];
 	return extractHashtags(mfm.parse(text)).filter(tag => isChannelFederationHashtag(tag));
 }
+
+/**
+ * 本文の末尾に、チャンネルのハッシュタグ (`#連合チャンネル_…`) があれば取り除く。
+ * 送り出す側の MISTEMS は、連合するチャンネルのノートの本文の末尾に、付記としてこのハッシュタグを書き足す。
+ * チャンネルの中で読むときには付記はいらないので、収蔵するときに取り除く。
+ *
+ * - 取り除くのは、末尾 (後ろの空白は無視する) にあって、正規化するとチャンネルのハッシュタグと一致するものだけ。
+ *   本文の途中にあるもの、ほかのハッシュタグは残す
+ * - 取り除いたあとの本文の末尾の空白も取り除く
+ * - 取り除くと本文が空になるとき (ハッシュタグだけのノート) は、何もしない
+ */
+export function stripTrailingChannelFederationHashtag(text: string, hashtag: string): string {
+	const match = /(^|\s)#([\p{L}\p{N}_]+)\s*$/u.exec(text);
+	if (match == null) return text;
+	if (normalizeTag(match[2]) !== normalizeTag(hashtag.replace(/^#/, ''))) return text;
+
+	const stripped = text.slice(0, match.index + match[1].length).trimEnd();
+	return stripped === '' ? text : stripped;
+}

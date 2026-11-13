@@ -11,7 +11,11 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
-import { extractChannelFederationHashtagsFromText, isValidChannelFederationHashtag } from '@/misc/channel-federation-hashtag.js';
+import {
+	extractChannelFederationHashtagsFromText,
+	isValidChannelFederationHashtag,
+	stripTrailingChannelFederationHashtag,
+} from '@/misc/channel-federation-hashtag.js';
 import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
@@ -423,6 +427,16 @@ export class NoteCreateService implements OnApplicationShutdown {
 			}
 		}
 
+		// 連合するチャンネルへの投稿は、クライアントが送った公開範囲 (home) とローカル限定の指定にかかわらず、
+		// public で連合させる。チャンネルの連合の設定を、ノートごとの指定より優先する。
+		// - followers / specified は notes/create で弾いている (宛先を絞ったつもりの投稿を広げないため)
+		// - このあとの create() で決まる絞り込み (localOnly のノートへのリプライ・リノート、サイレンスなどでの home への降格) は、
+		//   applyChannelFederationPolicy でそのまま効く
+		const visibility = this.doesChannelFederate(channel) && data.visibility !== 'followers' && data.visibility !== 'specified'
+			? 'public'
+			: data.visibility;
+		const localOnly = this.doesChannelFederate(channel) ? false : data.localOnly;
+
 		return this.create(user, {
 			createdAt: data.createdAt,
 			files: files,
@@ -431,9 +445,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 			reply,
 			renote,
 			cw: data.cw,
-			localOnly: data.localOnly,
+			localOnly,
 			reactionAcceptance: data.reactionAcceptance,
-			visibility: data.visibility,
+			visibility,
 			visibleUsers,
 			channel,
 			apMentions: data.apMentions,
@@ -595,6 +609,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 		// リモートのユーザーの公開のノートに、連合するチャンネルのハッシュタグが (AP の tag で) 付いていたら、
 		// そのチャンネルに収蔵する。リプライでチャンネルが決まったときは、そちらを優先する。
 		await this.collectIntoFederatedChannelByHashtag(data, user);
+
+		// リモートのノートをチャンネルに入れるときは、本文の末尾の付記 (そのチャンネルのハッシュタグ) を取り除く
+		this.stripChannelFederationHashtagFromText(data, user);
 
 		if (data.text) {
 			if (data.text.length > DB_MAX_NOTE_TEXT_LENGTH) {
@@ -1051,6 +1068,20 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (channel == null) return;
 
 		data.channel = channel;
+	}
+
+	/**
+	 * リモートのユーザーのノートがチャンネルに入るとき、本文の末尾にあるそのチャンネルのハッシュタグを取り除く。
+	 * 送り出す側の MISTEMS が付記として書き足したもので、チャンネルの中で読むときにはいらない。
+	 * 末尾以外にあるものは、投稿者が自分で書いたものとして残す。ノートのハッシュタグ (tags) からは外さない
+	 * (ハッシュタグのページからは引き続き辿れる)。
+	 */
+	@bindThis
+	private stripChannelFederationHashtagFromText(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): void {
+		if (this.userEntityService.isLocalUser(user)) return;
+		const hashtag = data.channel?.federationHashtag;
+		if (hashtag == null || data.text == null) return;
+		data.text = stripTrailingChannelFederationHashtag(data.text, hashtag);
 	}
 
 	/**

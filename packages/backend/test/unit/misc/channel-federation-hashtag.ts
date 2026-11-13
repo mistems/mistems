@@ -11,6 +11,7 @@ import {
 	isChannelFederationHashtag,
 	isValidChannelFederationHashtag,
 	sanitizeChannelFederationHashtagPart,
+	stripTrailingChannelFederationHashtag,
 } from '@/misc/channel-federation-hashtag.js';
 import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import { normalizeTag } from '@/misc/normalize-tag.js';
@@ -19,6 +20,47 @@ import type { ChannelsRepository } from '@/models/_.js';
 const length = (s: string) => Array.from(s).length;
 
 describe('channel-federation-hashtag', () => {
+	describe('stripTrailingChannelFederationHashtag', () => {
+		const tag = '連合チャンネル_雑談';
+
+		test('末尾にあるチャンネルのハッシュタグ (付記) を取り除く', () => {
+			expect(stripTrailingChannelFederationHashtag('hello\n\n#連合チャンネル_雑談', tag)).toBe('hello');
+		});
+
+		test('末尾の空白・改行は無視して取り除く', () => {
+			expect(stripTrailingChannelFederationHashtag('hello #連合チャンネル_雑談 \n', tag)).toBe('hello');
+		});
+
+		test('大文字・小文字や全角・半角の違いは正規化して比べる', () => {
+			expect(stripTrailingChannelFederationHashtag('hello\n\n#連合チャンネル_ＡＢＣ', '連合チャンネル_abc')).toBe('hello');
+		});
+
+		test('本文の途中にあるものは残す', () => {
+			expect(stripTrailingChannelFederationHashtag('#連合チャンネル_雑談 の話をする', tag)).toBe('#連合チャンネル_雑談 の話をする');
+		});
+
+		test('途中と末尾の両方にあれば、末尾のものだけを取り除く', () => {
+			expect(stripTrailingChannelFederationHashtag('#連合チャンネル_雑談 の話\n\n#連合チャンネル_雑談', tag)).toBe('#連合チャンネル_雑談 の話');
+		});
+
+		test('末尾にあっても、ほかのハッシュタグは残す', () => {
+			expect(stripTrailingChannelFederationHashtag('hello #連合チャンネル_告知', tag)).toBe('hello #連合チャンネル_告知');
+			expect(stripTrailingChannelFederationHashtag('hello #雑談', tag)).toBe('hello #雑談');
+		});
+
+		test('前方一致だけのハッシュタグは残す', () => {
+			expect(stripTrailingChannelFederationHashtag('hello #連合チャンネル_雑談部', tag)).toBe('hello #連合チャンネル_雑談部');
+		});
+
+		test('ハッシュタグの前に空白がない (語の途中) ものは残す', () => {
+			expect(stripTrailingChannelFederationHashtag('hello#連合チャンネル_雑談', tag)).toBe('hello#連合チャンネル_雑談');
+		});
+
+		test('ハッシュタグだけのノートは、空にしないでそのまま残す', () => {
+			expect(stripTrailingChannelFederationHashtag('#連合チャンネル_雑談', tag)).toBe('#連合チャンネル_雑談');
+		});
+	});
+
 	describe('sanitizeChannelFederationHashtagPart', () => {
 		test('文字・数字・下線以外を取り除く', () => {
 			expect(sanitizeChannelFederationHashtagPart('「雑談」・告知 A.B-C_1!')).toBe('雑談告知ABC_1');
