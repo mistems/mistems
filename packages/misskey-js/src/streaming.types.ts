@@ -21,6 +21,8 @@ import {
 	QueueStatsLog,
 	ServerStats,
 	ServerStatsLog,
+	DbServerStats,
+	DbServerStatsLog,
 	ReversiGameDetailed,
 } from './entities.js';
 import {
@@ -185,6 +187,19 @@ export type Channels = {
 		events: {
 			stats: (payload: ServerStats) => void;
 			statsLog: (payload: ServerStatsLog) => void;
+		};
+		receives: {
+			requestLog: {
+				id: string | number;
+				length: number;
+			};
+		};
+	};
+	dbServerStats: {
+		params: null;
+		events: {
+			stats: (payload: DbServerStats) => void;
+			statsLog: (payload: DbServerStatsLog) => void;
 		};
 		receives: {
 			requestLog: {

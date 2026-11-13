@@ -4861,6 +4861,18 @@ export interface Locale extends ILocale {
      */
     "enableIdenticonGeneration": string;
     /**
+     * DBサーバーの統計を表示する
+     */
+    "enableDbServerStats": string;
+    /**
+     * DBサーバーで収集スクリプトが書き込んだ統計を、モデレーター向けの「DBサーバーメトリクス」ウィジェットに表示します。収集スクリプトの設置方法はリポジトリの ops-sub/db-server-stats/README.md を参照してください。
+     */
+    "enableDbServerStatsDescription": string;
+    /**
+     * 統計がありません。管理画面のパフォーマンスで有効にし、DBサーバーで収集スクリプトを動かしてください。
+     */
+    "dbServerStatsNoData": string;
+    /**
      * リモートユーザーに付与したロールバッジを表示する
      */
     "showRoleBadgesOfRemoteUsers": string;
@@ -10335,6 +10347,10 @@ export interface Locale extends ILocale {
          * サーバーメトリクス
          */
         "serverMetric": string;
+        /**
+         * DBサーバーメトリクス
+         */
+        "dbServerMetric": string;
         /**
          * AiScriptコンソール
          */

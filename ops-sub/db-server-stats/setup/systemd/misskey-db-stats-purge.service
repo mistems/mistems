@@ -1,0 +1,9 @@
+[Unit]
+Description=Misskey DB server stats purge (delete old rows)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+EnvironmentFile=/etc/misskey-db-stats.env
+ExecStart=/usr/local/bin/purge-stats.sh

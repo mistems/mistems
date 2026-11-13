@@ -80,6 +80,24 @@ export type ServerStats = {
 
 export type ServerStatsLog = ServerStats[];
 
+export type DbServerStats = {
+	ts: string;
+	hostId: string;
+	cpu: number | null;
+	memUsed: number | null;
+	memTotal: number | null;
+	diskUsed: number | null;
+	diskTotal: number | null;
+	diskRSec: number | null;
+	diskWSec: number | null;
+	dbSize: number | null;
+	connActive: number | null;
+	connMax: number | null;
+	cacheHitRatio: number | null;
+};
+
+export type DbServerStatsLog = DbServerStats[];
+
 export type QueueStats = {
 	deliver: {
 		activeSincePrevTick: number;
