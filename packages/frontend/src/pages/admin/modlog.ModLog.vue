@@ -18,6 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					'createAvatarDecoration',
 					'createSystemWebhook',
 					'createAbuseReportNotificationRecipient',
+					'createAnnouncementGroup',
 				].includes(log.type),
 				[$style.logYellow]: [
 					'markSensitiveDriveFile',
@@ -37,6 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					'deleteAvatarDecoration',
 					'deleteSystemWebhook',
 					'deleteAbuseReportNotificationRecipient',
+					'deleteAnnouncementGroup',
 					'deleteAccount',
 					'deletePage',
 					'deleteFlash',
@@ -64,6 +66,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<span v-else-if="log.type === 'createGlobalAnnouncement'">: {{ log.info.announcement.title }}</span>
 		<span v-else-if="log.type === 'updateGlobalAnnouncement'">: {{ log.info.before.title }}</span>
 		<span v-else-if="log.type === 'deleteGlobalAnnouncement'">: {{ log.info.announcement.title }}</span>
+		<span v-else-if="log.type === 'createAnnouncementGroup'">: {{ log.info.group.name }}</span>
+		<span v-else-if="log.type === 'updateAnnouncementGroup'">: {{ log.info.before.name }}</span>
+		<span v-else-if="log.type === 'deleteAnnouncementGroup'">: {{ log.info.group.name }}</span>
 		<span v-else-if="log.type === 'createUserAnnouncement'">: @{{ log.info.userUsername }}{{ log.info.userHost ? '@' + log.info.userHost : '' }}</span>
 		<span v-else-if="log.type === 'updateUserAnnouncement'">: @{{ log.info.userUsername }}{{ log.info.userHost ? '@' + log.info.userHost : '' }}</span>
 		<span v-else-if="log.type === 'deleteUserAnnouncement'">: @{{ log.info.userUsername }}{{ log.info.userHost ? '@' + log.info.userHost : '' }}</span>
@@ -106,6 +111,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<i v-else-if="log.type === 'createGlobalAnnouncement'" class="ti ti-plus"></i>
 		<i v-else-if="log.type === 'updateGlobalAnnouncement'" class="ti ti-pencil"></i>
 		<i v-else-if="log.type === 'deleteGlobalAnnouncement'" class="ti ti-trash"></i>
+		<i v-else-if="log.type === 'createAnnouncementGroup'" class="ti ti-plus"></i>
+		<i v-else-if="log.type === 'updateAnnouncementGroup'" class="ti ti-pencil"></i>
+		<i v-else-if="log.type === 'deleteAnnouncementGroup'" class="ti ti-trash"></i>
+		<i v-else-if="log.type === 'reorderAnnouncements'" class="ti ti-arrows-sort"></i>
 		<i v-else-if="log.type === 'createUserAnnouncement'" class="ti ti-plus"></i>
 		<i v-else-if="log.type === 'updateUserAnnouncement'" class="ti ti-pencil"></i>
 		<i v-else-if="log.type === 'deleteUserAnnouncement'" class="ti ti-trash"></i>
@@ -182,6 +191,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</template>
 		<template v-else-if="log.type === 'updateGlobalAnnouncement'">
+			<div :class="$style.diff">
+				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
+			</div>
+		</template>
+		<template v-else-if="log.type === 'updateAnnouncementGroup'">
 			<div :class="$style.diff">
 				<CodeDiff :context="5" :hideHeader="true" :oldString="JSON5.stringify(log.info.before, null, '\t')" :newString="JSON5.stringify(log.info.after, null, '\t')" language="javascript" maxHeight="300px"/>
 			</div>

@@ -89,6 +89,14 @@ export const meta = {
 					type: 'string',
 					optional: false, nullable: true,
 				},
+				groupId: {
+					type: 'string',
+					optional: false, nullable: true,
+				},
+				displayOrder: {
+					type: 'integer',
+					optional: false, nullable: false,
+				},
 				reads: {
 					type: 'number',
 					optional: false, nullable: false,
@@ -108,6 +116,9 @@ export const paramDef = {
 		untilDate: { type: 'integer' },
 		userId: { type: 'string', format: 'misskey:id', nullable: true },
 		status: { type: 'string', enum: ['all', 'active', 'archived'], default: 'active' },
+		// 省略するとすべて、null はグループに入っていないもの
+		groupId: { type: 'string', format: 'misskey:id', nullable: true },
+		offset: { type: 'integer', minimum: 0 },
 	},
 	required: [],
 } as const;
@@ -147,6 +158,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				query.andWhere('announcement.userId IS NULL');
 			}
 
+			if (ps.groupId === null) {
+				query.andWhere('announcement.groupId IS NULL');
+			} else if (ps.groupId !== undefined) {
+				query.andWhere('announcement.groupId = :groupId', { groupId: ps.groupId });
+			}
+
+			// 公開中の一覧と、グループ (またはグループなし) で絞り込んだ一覧は、お知らせ全体の表示順で並べる (offset でページを送る)
+			if (ps.status === 'active' || ps.groupId !== undefined) {
+				query.orderBy('announcement.displayOrder', 'ASC').addOrderBy('announcement.id', 'DESC');
+			}
+
+			if (ps.offset != null) query.offset(ps.offset);
+
 			const announcements = await query.limit(ps.limit).getMany();
 
 			const reads = new Map<MiAnnouncement, number>();
@@ -172,6 +196,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				silence: announcement.silence,
 				needConfirmationToRead: announcement.needConfirmationToRead,
 				userId: announcement.userId,
+				groupId: announcement.groupId,
+				displayOrder: announcement.displayOrder,
 				reads: reads.get(announcement)!,
 			}));
 		});

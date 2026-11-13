@@ -29,6 +29,7 @@ import { prefer } from '@/preferences.js';
 import { updateCurrentAccount } from '@/accounts.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 import { isBirthday } from '@/utility/is-birthday.js';
+import { isAnnouncementMutedForMe } from '@/utility/announcement-group.js';
 
 export async function mainBoot() {
 	const { isClientUpdated, lastVersion } = await common(async () => {
@@ -116,6 +117,12 @@ export async function mainBoot() {
 
 		function onAnnouncementCreated(ev: { announcement: Misskey.entities.Announcement }) {
 			const announcement = ev.announcement;
+
+			// 非通知にしたグループのお知らせは知らせない
+			if (isAnnouncementMutedForMe(announcement)) return;
+
+			if (!announcement.silence) updateCurrentAccount({ hasUnreadAnnouncement: true });
+
 			if (announcement.display === 'dialog') {
 				const { dispose } = popup(defineAsyncComponent(() => import('@/components/MkAnnouncementDialog.vue')), {
 					announcement,

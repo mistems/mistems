@@ -135,6 +135,10 @@ export const moderationLogTypes = [
 	'deleteGalleryPost',
 	'deleteChatRoom',
 	'updateProxyAccountDescription',
+	'createAnnouncementGroup',
+	'updateAnnouncementGroup',
+	'deleteAnnouncementGroup',
+	'reorderAnnouncements',
 ] as const;
 
 export type ModerationLogPayloads = {
@@ -401,6 +405,24 @@ export type ModerationLogPayloads = {
 	updateProxyAccountDescription: {
 		before: string | null;
 		after: string | null;
+	};
+	createAnnouncementGroup: {
+		groupId: string;
+		group: any;
+	};
+	updateAnnouncementGroup: {
+		groupId: string;
+		before: any;
+		after: any;
+	};
+	deleteAnnouncementGroup: {
+		groupId: string;
+		group: any;
+	};
+	reorderAnnouncements: {
+		// 表示順がグループごとだったころのログにだけある
+		groupId?: string | null;
+		announcementIds: string[];
 	};
 };
 

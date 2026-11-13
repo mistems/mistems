@@ -20,6 +20,7 @@ import { AccountMoveService } from './AccountMoveService.js';
 import { AccountUpdateService } from './AccountUpdateService.js';
 import { SensitiveMediaDetectionService } from './SensitiveMediaDetectionService.js';
 import { AnnouncementService } from './AnnouncementService.js';
+import { AnnouncementGroupService } from './AnnouncementGroupService.js';
 import { AntennaService } from './AntennaService.js';
 import { AchievementService } from './AchievementService.js';
 import { AvatarDecorationService } from './AvatarDecorationService.js';
@@ -166,6 +167,7 @@ const $AccountMoveService: Provider = { provide: 'AccountMoveService', useExisti
 const $AccountUpdateService: Provider = { provide: 'AccountUpdateService', useExisting: AccountUpdateService };
 const $SensitiveMediaDetectionService: Provider = { provide: 'SensitiveMediaDetectionService', useExisting: SensitiveMediaDetectionService };
 const $AnnouncementService: Provider = { provide: 'AnnouncementService', useExisting: AnnouncementService };
+const $AnnouncementGroupService: Provider = { provide: 'AnnouncementGroupService', useExisting: AnnouncementGroupService };
 const $AntennaService: Provider = { provide: 'AntennaService', useExisting: AntennaService };
 const $AchievementService: Provider = { provide: 'AchievementService', useExisting: AchievementService };
 const $AvatarDecorationService: Provider = { provide: 'AvatarDecorationService', useExisting: AvatarDecorationService };
@@ -319,6 +321,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		AccountUpdateService,
 		SensitiveMediaDetectionService,
 		AnnouncementService,
+		AnnouncementGroupService,
 		AntennaService,
 		AchievementService,
 		AvatarDecorationService,
@@ -470,6 +473,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$AccountUpdateService,
 		$SensitiveMediaDetectionService,
 		$AnnouncementService,
+		$AnnouncementGroupService,
 		$AntennaService,
 		$AchievementService,
 		$AvatarDecorationService,
@@ -621,6 +625,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		AccountUpdateService,
 		SensitiveMediaDetectionService,
 		AnnouncementService,
+		AnnouncementGroupService,
 		AntennaService,
 		AchievementService,
 		AvatarDecorationService,
@@ -771,6 +776,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$AccountUpdateService,
 		$SensitiveMediaDetectionService,
 		$AnnouncementService,
+		$AnnouncementGroupService,
 		$AntennaService,
 		$AchievementService,
 		$AvatarDecorationService,

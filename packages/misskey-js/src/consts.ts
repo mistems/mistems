@@ -3,6 +3,7 @@ import type {
 	AbuseReportNotificationRecipient,
 	Ad,
 	Announcement,
+	AnnouncementGroup,
 	EmojiDetailed,
 	Flash,
 	GalleryPost,
@@ -190,6 +191,10 @@ export const moderationLogTypes = [
 	'deleteGalleryPost',
 	'deleteChatRoom',
 	'updateProxyAccountDescription',
+	'createAnnouncementGroup',
+	'updateAnnouncementGroup',
+	'deleteAnnouncementGroup',
+	'reorderAnnouncements',
 ] as const;
 
 export const rolePolicies = [
@@ -538,4 +543,21 @@ export type ModerationLogPayloads = {
 		before: string | null;
 		after: string | null;
 	}
+	createAnnouncementGroup: {
+		groupId: string;
+		group: AnnouncementGroup;
+	};
+	updateAnnouncementGroup: {
+		groupId: string;
+		before: AnnouncementGroup;
+		after: AnnouncementGroup;
+	};
+	deleteAnnouncementGroup: {
+		groupId: string;
+		group: AnnouncementGroup;
+	};
+	reorderAnnouncements: {
+		groupId?: string | null;
+		announcementIds: string[];
+	};
 };
