@@ -9011,14 +9011,6 @@ export interface Locale extends ILocale {
          * ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？
          */
         "federationHashtagChangeConfirm": string;
-        /**
-         * チャンネルから外す
-         */
-        "removeNoteFromChannel": string;
-        /**
-         * このノートをチャンネルから外しますか？ノートそのものは削除されません。
-         */
-        "removeNoteFromChannelConfirm": string;
     };
     "_menuDisplay": {
         /**

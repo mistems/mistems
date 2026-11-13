@@ -1221,15 +1221,6 @@ export type paths = {
          */
         post: operations['channels___owned'];
     };
-    '/channels/remove-note': {
-        /**
-         * channels/remove-note
-         * @description Remove a remote note that was collected into the channel by its hashtag. The note itself is not deleted.
-         *
-         *     **Credential required**: *Yes* / **Permission**: *write:channels*
-         */
-        post: operations['channels___remove-note'];
-    };
     '/channels/search': {
         /**
          * channels/search
@@ -15460,69 +15451,6 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['Channel'][];
-                };
-            };
-            /** @description Client error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    'application/json': components['schemas']['Error'];
-                };
-            };
-            /** @description Authentication error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    'application/json': components['schemas']['Error'];
-                };
-            };
-            /** @description Forbidden error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    'application/json': components['schemas']['Error'];
-                };
-            };
-            /** @description I'm Ai */
-            418: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    'application/json': components['schemas']['Error'];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    'application/json': components['schemas']['Error'];
-                };
-            };
-        };
-    };
-    'channels___remove-note': {
-        requestBody: {
-            content: {
-                'application/json': {
-                    /** Format: misskey:id */
-                    noteId: string;
-                };
-            };
-        };
-        responses: {
-            /** @description OK (without any results) */
-            204: {
-                headers: {
-                    [name: string]: unknown;
                 };
             };
             /** @description Client error */

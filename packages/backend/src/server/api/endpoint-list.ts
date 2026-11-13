@@ -141,7 +141,6 @@ export * as 'channels/follow' from './endpoints/channels/follow.js';
 export * as 'channels/followed' from './endpoints/channels/followed.js';
 export * as 'channels/my-favorites' from './endpoints/channels/my-favorites.js';
 export * as 'channels/owned' from './endpoints/channels/owned.js';
-export * as 'channels/remove-note' from './endpoints/channels/remove-note.js';
 export * as 'channels/search' from './endpoints/channels/search.js';
 export * as 'channels/show' from './endpoints/channels/show.js';
 export * as 'channels/timeline' from './endpoints/channels/timeline.js';

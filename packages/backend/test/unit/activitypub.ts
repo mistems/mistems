@@ -368,8 +368,8 @@ describe('ActivityPub', () => {
 				assert.strictEqual(rendered._misskey_content, '**hello**\n\n#連合チャンネル_雑談');
 				assert.strictEqual(rendered.source?.content, rendered._misskey_content);
 				assert.ok(rendered.content?.includes('連合チャンネル_雑談'));
-				assert.ok(!rendered.content?.includes('From: '), rendered.content);
-				assert.ok(!rendered.content?.includes(`/channels/${channel.id}`), rendered.content);
+				assert.ok(!rendered.content?.includes('From: '), rendered.content ?? '');
+				assert.ok(!rendered.content?.includes(`/channels/${channel.id}`), rendered.content ?? '');
 				const tags = (rendered.tag ?? []) as { type: string; name?: string }[];
 				assert.deepStrictEqual(tags.filter(t => t.type === 'Hashtag').map(t => t.name), ['#連合チャンネル_雑談']);
 			});

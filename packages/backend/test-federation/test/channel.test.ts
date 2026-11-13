@@ -282,7 +282,7 @@ describe('Channel federation', () => {
 			assert(searched.some(n => n.uri === noteInB.uri));
 		});
 
-		test('H3: 相手のユーザーがハッシュタグを付けて公開で投稿すると、チャンネルに入る。外せばチャンネルのタイムラインから消える', async () => {
+		test('H3: 相手のユーザーがハッシュタグを付けて公開で投稿すると、チャンネルに入る', async () => {
 			const posted = (await bob.client.request('notes/create', { text: `${crypto.randomUUID()} #${hashtag}` })).createdNote;
 			const uri = `https://b.test/notes/${posted.id}`;
 
@@ -293,12 +293,6 @@ describe('Channel federation', () => {
 				return found;
 			}, WAIT_FOR_FEDERATION);
 			strictEqual(inA.channelId, channel.id);
-
-			// 持ち主が外すと、チャンネルのタイムライン (Redis と DB) から消え、ノートは残る
-			await alice.client.request('channels/remove-note', { noteId: inA.id });
-			strictEqual(await channelTimelineHas(channel.id, uri), false);
-			const shown = await alice.client.request('notes/show', { noteId: inA.id });
-			strictEqual(shown.channelId ?? null, null);
 		});
 
 		test('H4: ホーム・フォロワー限定のノートは、ハッシュタグがあってもチャンネルに入らない', async () => {

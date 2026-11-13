@@ -510,26 +510,6 @@ export function getNoteMenu(props: {
 						});
 					}
 
-					// ハッシュタグで収蔵したリモートのノートは、チャンネルから外せる (ノートは消さない)
-					if (appearNote.user.host != null) {
-						channelChildMenu.push({ type: 'divider' });
-						channelChildMenu.push({
-							icon: 'ti ti-x',
-							text: i18n.ts._channel.removeNoteFromChannel,
-							danger: true,
-							action: async () => {
-								const { canceled } = await os.confirm({
-									type: 'warning',
-									text: i18n.ts._channel.removeNoteFromChannelConfirm,
-								});
-								if (canceled) return;
-								os.apiWithDialog('channels/remove-note', {
-									noteId: appearNote.id,
-								});
-							},
-						});
-					}
-
 					return channelChildMenu;
 				},
 			});

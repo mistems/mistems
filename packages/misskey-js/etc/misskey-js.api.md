@@ -990,9 +990,6 @@ type ChannelsOwnedRequest = operations['channels___owned']['requestBody']['conte
 type ChannelsOwnedResponse = operations['channels___owned']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
-type ChannelsRemoveNoteRequest = operations['channels___remove-note']['requestBody']['content']['application/json'];
-
-// @public (undocumented)
 type ChannelsSearchRequest = operations['channels___search']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -1743,7 +1740,6 @@ declare namespace entities {
         ChannelsMyFavoritesResponse,
         ChannelsOwnedRequest,
         ChannelsOwnedResponse,
-        ChannelsRemoveNoteRequest,
         ChannelsSearchRequest,
         ChannelsSearchResponse,
         ChannelsShowRequest,
