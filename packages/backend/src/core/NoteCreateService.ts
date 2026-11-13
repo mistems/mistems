@@ -11,6 +11,12 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
+import {
+	extractChannelFederationHashtagsFromText,
+	isValidChannelFederationHashtag,
+	stripTrailingChannelFederationHashtag,
+} from '@/misc/channel-federation-hashtag.js';
+import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
 import type { BlockingsRepository, ChannelFollowingsRepository, ChannelsRepository, DriveFilesRepository, FollowingsRepository, InstancesRepository, MiFollowing, MiMeta, MutingsRepository, NotesRepository, NoteThreadMutingsRepository, UserListMembershipsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
@@ -255,6 +261,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		private relayService: RelayService,
 		private federatedInstanceService: FederatedInstanceService,
 		private hashtagService: HashtagService,
+		private channelFederationHashtagService: ChannelFederationHashtagService,
 		private antennaService: AntennaService,
 		private webhookService: UserWebhookService,
 		private featuredService: FeaturedService,
@@ -420,6 +427,16 @@ export class NoteCreateService implements OnApplicationShutdown {
 			}
 		}
 
+		// 連合するチャンネルへの投稿は、クライアントが送った公開範囲 (home) とローカル限定の指定にかかわらず、
+		// public で連合させる。チャンネルの連合の設定を、ノートごとの指定より優先する。
+		// - followers / specified は notes/create で弾いている (宛先を絞ったつもりの投稿を広げないため)
+		// - このあとの create() で決まる絞り込み (localOnly のノートへのリプライ・リノート、サイレンスなどでの home への降格) は、
+		//   applyChannelFederationPolicy でそのまま効く
+		const visibility = this.doesChannelFederate(channel) && data.visibility !== 'followers' && data.visibility !== 'specified'
+			? 'public'
+			: data.visibility;
+		const localOnly = this.doesChannelFederate(channel) ? false : data.localOnly;
+
 		return this.create(user, {
 			createdAt: data.createdAt,
 			files: files,
@@ -428,9 +445,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 			reply,
 			renote,
 			cw: data.cw,
-			localOnly: data.localOnly,
+			localOnly,
 			reactionAcceptance: data.reactionAcceptance,
-			visibility: data.visibility,
+			visibility,
 			visibleUsers,
 			channel,
 			apMentions: data.apMentions,
@@ -449,6 +466,10 @@ export class NoteCreateService implements OnApplicationShutdown {
 	}, data: Option, silent = false): Promise<MiNote> {
 		// チャンネル外にリプライしたら対象のスコープに合わせる
 		// (クライアントサイドでやっても良い処理だと思うけどとりあえずサーバーサイドで)
+		// NOTE: リプライは元ノートと同じチャンネルに入れる (スコープ整合を優先、Plan §2.5-4)。
+		// チャンネルに入れず data.channel=null にすると applyChannelFederationPolicy が効かず、
+		// リプライが公開・連合の通常ノートとして LTL/GTL に漏れるため、ここでチャンネルを外さない。
+		// 連合の停止は federationPolicy='none' で行う (アーカイブは連合の緊急停止ではない)。
 		if (data.reply && data.channel && data.reply.channelId !== data.channel.id) {
 			if (data.reply.channelId) {
 				data.channel = await this.channelsRepository.findOneBy({ id: data.reply.channelId });
@@ -466,11 +487,18 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.createdAt == null) data.createdAt = new Date();
 		if (data.visibility == null) data.visibility = 'public';
 		if (data.localOnly == null) data.localOnly = false;
-		if (data.channel != null) data.visibility = 'public';
-		if (data.channel != null) data.visibleUsers = [];
-		if (data.channel != null) data.localOnly = true;
 
-		if (data.visibility === 'public' && data.channel == null) {
+		// リモート由来ノートがリプライでチャンネルに入る場合、チャンネルの一覧性が壊れる
+		// 可視性 (followers/specified) ならチャンネルには入れない (parseAudience の結果は保持する)
+		if (data.channel != null && !this.userEntityService.isLocalUser(user)) {
+			if (data.visibility === 'followers' || data.visibility === 'specified') {
+				data.channel = null;
+			}
+		}
+
+		// チャンネルノートも、連合するチャンネル (localOnly でなくなる) ではサイレンス/センシティブ
+		// ワードによる home 降格の対象に含める。連合しないチャンネルは localOnly なので従来どおり対象外。
+		if (data.visibility === 'public' && (data.channel == null || this.doesChannelFederate(data.channel))) {
 			const sensitiveWords = this.meta.sensitiveWords;
 			const sensitiveWordsTarget = data.cw ?? data.text ?? '';
 			if (sensitiveWords.length > 0 && this.utilityService.isKeyWordIncluded([sensitiveWordsTarget, ...extractUrlsForKeyWordCheck(sensitiveWordsTarget)].join('\n'), sensitiveWords)) {
@@ -523,8 +551,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 					throw new Error('Renote target is not public or home');
 			}
 
-			// ローカルのみをRenoteしたらローカルのみにする
-			if (data.renote.localOnly && data.channel == null) {
+			// ローカルのみをRenoteしたらローカルのみにする (ローカルユーザーの投稿のみ。
+			// リモート由来ノートは parseAudience の結果を保持し localOnly を付けない)
+			if (data.renote.localOnly && this.userEntityService.isLocalUser(user)) {
 				data.localOnly = true;
 			}
 		}
@@ -566,11 +595,23 @@ export class NoteCreateService implements OnApplicationShutdown {
 					break;
 			}
 
-			// ローカルのみにリプライしたらローカルのみにする
-			if (data.reply.localOnly && data.channel == null) {
+			// ローカルのみにリプライしたらローカルのみにする (ローカルユーザーの投稿のみ)
+			if (data.reply.localOnly && this.userEntityService.isLocalUser(user)) {
 				data.localOnly = true;
 			}
 		}
+
+		// チャンネル投稿の連合方針を最終決定する (ローカルユーザーのみ)。
+		// ここまでの可視性/localOnly の決定 (サイレンス降格・親からの localOnly 伝播など) を
+		// 踏まえた上で、チャンネル側の federationPolicy を最終権限として適用する。
+		this.applyChannelFederationPolicy(data, user);
+
+		// リモートのユーザーの公開のノートに、連合するチャンネルのハッシュタグが (AP の tag で) 付いていたら、
+		// そのチャンネルに収蔵する。リプライでチャンネルが決まったときは、そちらを優先する。
+		await this.collectIntoFederatedChannelByHashtag(data, user);
+
+		// リモートのノートをチャンネルに入れるときは、本文の末尾の付記 (そのチャンネルのハッシュタグ) を取り除く
+		this.stripChannelFederationHashtagFromText(data, user);
 
 		if (data.text) {
 			if (data.text.length > DB_MAX_NOTE_TEXT_LENGTH) {
@@ -607,6 +648,14 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		// if the host is media-silenced, custom emojis are not allowed
 		if (this.utilityService.isMediaSilencedHost(this.meta.mediaSilencedHosts, user.host)) emojis = [];
+
+		// 連合するチャンネルへのローカルの投稿には、チャンネルのハッシュタグを付ける。
+		// AP の tag にも載るので、ほかのサーバーでもハッシュタグのページから辿れる。
+		// 上限の 32 個で落ちないよう、先頭に置く。
+		const channelHashtag = this.getOwnChannelFederationHashtag(data, user);
+		if (channelHashtag != null && !tags.some(tag => normalizeTag(tag) === normalizeTag(channelHashtag))) {
+			tags = [channelHashtag, ...tags];
+		}
 
 		tags = tags.filter(tag => Array.from(tag).length <= 128).splice(0, 32);
 
@@ -954,6 +1003,100 @@ export class NoteCreateService implements OnApplicationShutdown {
 		this.index(note);
 	}
 
+	/**
+	 * チャンネルが連合するか。未知の federationPolicy 値は「連合しない」側に倒す (fail-closed)。
+	 */
+	@bindThis
+	private doesChannelFederate(channel: MiChannel | null | undefined): boolean {
+		return channel != null && channel.federationPolicy === 'public';
+	}
+
+	/**
+	 * チャンネル投稿の可視性・localOnly を、チャンネル側の federationPolicy を最終権限として確定する。
+	 * ローカルユーザーの投稿にのみ適用する (リモートからの返信がチャンネルに戻る場合は parseAudience の結果を保持)。
+	 * - none: 必ず localOnly + public (連合しない・従来のチャンネルノート)
+	 * - public: 可視性 public で連合 (ただし直前までにサイレンス等で home に降格済みなら home を維持。
+	 *   ノート単位/親からの localOnly 指定は尊重して public + localOnly に落ちる)
+	 */
+	@bindThis
+	private applyChannelFederationPolicy(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): void {
+		if (data.channel == null || !this.userEntityService.isLocalUser(user)) return;
+
+		data.visibleUsers = [];
+
+		// fail-closed: 連合できない条件は widening せず public + localOnly (従来のチャンネルノートと同形) に落とす。
+		// - 連合しないチャンネル
+		// - ノート単位/親からの localOnly 指定
+		// - followers/specified 可視性 (エンドポイントガードを迂回するリプライ・リノートナローイング経由で
+		//   ここに到達しうる。public に広げると DM/フォロワー限定ノートが連合公開化するため、必ずローカル止まりにする)
+		if (!this.doesChannelFederate(data.channel) || data.localOnly || data.visibility === 'followers' || data.visibility === 'specified') {
+			data.localOnly = true;
+			data.visibility = 'public';
+		} else if (data.visibility !== 'home') {
+			// サイレンス等で home に降格済みなら維持、それ以外は public
+			data.visibility = 'public';
+		}
+	}
+
+	/**
+	 * リモートのユーザーの公開のノートを、ハッシュタグが一致する連合するチャンネルに入れる。
+	 * ほかのサーバーの同じ名前の連合するチャンネルのノートも、本文の付記のハッシュタグで入る。
+	 * - ローカルのユーザーのノート、公開以外 (サイレンスなどで home に降格したものを含む) のノートは入れない
+	 * - すでにチャンネルが決まっている (リプライでチャンネルに入る) ノートはそのまま
+	 * - 連合しないチャンネルとアーカイブされたチャンネルには入れない
+	 * - 中身のないリノートは入れない
+	 */
+	@bindThis
+	private async collectIntoFederatedChannelByHashtag(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): Promise<void> {
+		if (this.userEntityService.isLocalUser(user)) return;
+		if (data.channel != null) return;
+		if (data.visibility !== 'public' || data.localOnly) return;
+		if (this.isRenote(data) && !this.isQuote(data)) return;
+
+		// AP の tag のハッシュタグに加えて、本文に書かれたチャンネルのハッシュタグも見る。
+		// 古い MISTEMS は、チャンネルのハッシュタグを tag に入れず本文の付記にだけ書いていた。
+		// 本文にだけあるものは、ノートのハッシュタグにも足して、ハッシュタグのページに出るようにする。
+		const textTags = extractChannelFederationHashtagsFromText(data.text);
+		if (data.apHashtags != null && textTags.length > 0) {
+			const known = new Set(data.apHashtags.map(tag => normalizeTag(tag)));
+			data.apHashtags = [...data.apHashtags, ...textTags.filter(tag => !known.has(normalizeTag(tag)))];
+		}
+		const tags = [...(data.apHashtags ?? []), ...textTags];
+		if (tags.length === 0) return;
+
+		const channel = await this.channelFederationHashtagService.findCollectingChannel(tags);
+		if (channel == null) return;
+
+		data.channel = channel;
+	}
+
+	/**
+	 * リモートのユーザーのノートがチャンネルに入るとき、本文の末尾にあるそのチャンネルのハッシュタグを取り除く。
+	 * 送り出す側の MISTEMS が付記として書き足したもので、チャンネルの中で読むときにはいらない。
+	 * 末尾以外にあるものは、投稿者が自分で書いたものとして残す。ノートのハッシュタグ (tags) からは外さない
+	 * (ハッシュタグのページからは引き続き辿れる)。
+	 */
+	@bindThis
+	private stripChannelFederationHashtagFromText(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): void {
+		if (this.userEntityService.isLocalUser(user)) return;
+		const hashtag = data.channel?.federationHashtag;
+		if (hashtag == null || data.text == null) return;
+		data.text = stripTrailingChannelFederationHashtag(data.text, hashtag);
+	}
+
+	/**
+	 * ローカルのユーザーが連合するチャンネルへ公開で投稿するときの、そのチャンネルのハッシュタグ。
+	 * ローカル限定になったノートと、連合しないチャンネルへの投稿には付けない。
+	 */
+	@bindThis
+	private getOwnChannelFederationHashtag(data: Option, user: { id: MiUser['id']; host: MiUser['host']; }): string | null {
+		if (!this.userEntityService.isLocalUser(user)) return null;
+		if (data.localOnly || !this.doesChannelFederate(data.channel)) return null;
+		const hashtag = data.channel?.federationHashtag;
+		if (hashtag == null || !isValidChannelFederationHashtag(hashtag)) return null;
+		return hashtag;
+	}
+
 	@bindThis
 	private isRenote(note: Option): note is Option & { renote: MiNote } {
 		return note.renote != null;
@@ -1090,10 +1233,44 @@ export class NoteCreateService implements OnApplicationShutdown {
 				select: { followerId: true },
 			});
 
+			const pushedFollowerIds = new Set<string>();
+
 			for (const channelFollowing of channelFollowings) {
+				pushedFollowerIds.add(channelFollowing.followerId);
 				this.fanoutTimelineService.push(`homeTimeline:${channelFollowing.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax, r);
 				if (note.fileIds.length > 0) {
 					this.fanoutTimelineService.push(`homeTimelineWithFiles:${channelFollowing.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
+				}
+			}
+
+			// チャンネルに収蔵されたリモートのノートは、投稿者をフォローしているローカルの人のホームにも入れる。
+			// チャンネルをフォローしていない人に見せるかどうかは、読む側の withCollectedChannelNotes で決める
+			if (note.userHost != null) {
+				const followings = await this.followingsRepository.find({
+					where: {
+						followeeId: user.id,
+						followerHost: IsNull(),
+						isFollowerHibernated: false,
+					},
+					select: {
+						followerId: true,
+						withReplies: true,
+					},
+				});
+
+				for (const following of followings) {
+					if (pushedFollowerIds.has(following.followerId)) continue;
+					if (note.visibility === 'specified' && !note.visibleUserIds.some(v => v === following.followerId)) continue;
+
+					// 「自分自身への返信 or そのフォロワーへの返信」のどちらでもない場合
+					if (isReply(note, following.followerId)) {
+						if (!following.withReplies) continue;
+					}
+
+					this.fanoutTimelineService.push(`homeTimeline:${following.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax, r);
+					if (note.fileIds.length > 0) {
+						this.fanoutTimelineService.push(`homeTimelineWithFiles:${following.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
+					}
 				}
 			}
 		} else {

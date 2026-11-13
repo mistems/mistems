@@ -123,6 +123,12 @@ export const meta = {
 			code: 'CONTAINS_TOO_MANY_MENTIONS',
 			id: '4de0363a-3046-481b-9b0f-feff3e211025',
 		},
+
+		cannotSpecifyVisibilityForChannelNote: {
+			message: 'You cannot specify followers/specified visibility for a channel note.',
+			code: 'CANNOT_SPECIFY_VISIBILITY_FOR_CHANNEL_NOTE',
+			id: '7604697f-1883-44b3-bbe1-15174130b1ed',
+		},
 	},
 } as const;
 
@@ -220,6 +226,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private noteCreateService: NoteCreateService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
+			// チャンネルノートは公開範囲を指定できない (サーバー側で黙って public/home に広げると
+			// specified のつもりの投稿が連合 public 化する恐れがあるため、明示的に拒否する)
+			if (ps.channelId != null && (ps.visibility === 'specified' || ps.visibility === 'followers')) {
+				throw new ApiError(meta.errors.cannotSpecifyVisibilityForChannelNote);
+			}
+
 			try {
 				const note = await this.noteCreateService.fetchAndCreate(me, {
 					createdAt: new Date(),

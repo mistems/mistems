@@ -18,6 +18,7 @@ import { store } from '@/store.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { getUserMenu } from '@/utility/get-user-menu.js';
 import { clipsCache, favoritedChannelsCache } from '@/cache.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
 import { isSupportShare } from '@/utility/navigator.js';
 import { getAppearNote } from '@/utility/get-appear-note.js';
@@ -508,6 +509,7 @@ export function getNoteMenu(props: {
 							}),
 						});
 					}
+
 					return channelChildMenu;
 				},
 			});
@@ -715,7 +717,8 @@ export function getRenoteMenu(props: {
 			action: () => {
 				os.post({
 					renote: appearNote,
-				});
+				},
+				{ forceTimeline: true });
 			},
 		}])]);
 
@@ -729,6 +732,7 @@ export function getRenoteMenu(props: {
 					if (!appearNote.channelId) return true;
 					return channel.id !== appearNote.channelId;
 				}).map((channel) => ({
+					icon: isFederatedChannel(channel) ? 'ti ti-whirl' : undefined,
 					text: channel.name,
 					action: () => {
 						const el = props.renoteButton.value;

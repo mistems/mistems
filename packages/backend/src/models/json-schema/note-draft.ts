@@ -147,6 +147,11 @@ export const packedNoteDraftSchema = {
 					type: 'boolean',
 					optional: false, nullable: false,
 				},
+				federationPolicy: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['none', 'public'],
+				},
 				userId: {
 					type: 'string',
 					optional: false, nullable: true,
