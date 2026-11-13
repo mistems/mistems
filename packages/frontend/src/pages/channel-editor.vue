@@ -23,11 +23,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #label>{{ i18n.ts.sensitive }}</template>
 			</MkSwitch>
 
-			<MkSwitch v-model="allowRenoteToExternal">
+			<MkSwitch v-model="allowRenoteToExternal" :disabled="federationPolicy === 'public'">
 				<template #label>{{ i18n.ts._channel.allowRenoteToExternal }}</template>
+				<template v-if="federationPolicy === 'public'" #caption>{{ i18n.ts._channel.allowRenoteToExternalLockedByFederation }}</template>
 			</MkSwitch>
 
-			<MkSelect v-model="federationPolicy" :items="federationPolicyDef" :disabled="!allowRenoteToExternal">
+			<MkSelect v-model="federationPolicy" :items="federationPolicyDef">
 				<template #label><i class="ti ti-whirl"></i> {{ i18n.ts._channel.federationPolicy }}</template>
 				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
 			</MkSelect>
@@ -125,10 +126,11 @@ const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
 // 連合するチャンネルのハッシュタグ (先頭の「#」は含めない)。まだ決まっていないときは空で、保存時にサーバーが決める
 const federationHashtag = ref('');
 
-watch(allowRenoteToExternal, () => {
-	// チャンネル外リノート禁止と連合は両立しない
-	if (!allowRenoteToExternal.value) {
-		federationPolicy.value = 'none';
+watch(federationPolicy, () => {
+	// 連合するチャンネルのノートは外のサーバーでリノートできるので、チャンネル外へのリノートの禁止とは両立しない。
+	// 連合するあいだは、チャンネル外へのリノートの許可を ON に固定する (スイッチは操作できなくなる)
+	if (federationPolicy.value === 'public') {
+		allowRenoteToExternal.value = true;
 	}
 });
 

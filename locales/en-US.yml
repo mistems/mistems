@@ -2276,6 +2276,7 @@ _channel:
   nameAndDescription: "Name and description"
   nameOnly: "Name only"
   allowRenoteToExternal: "Allow renote and quote outside the channel"
+  allowRenoteToExternalLockedByFederation: "Federated channels cannot forbid renotes outside the channel. Stop federating to forbid them."
 _menuDisplay:
   sideFull: "Side"
   sideIcon: "Side (Icons)"
