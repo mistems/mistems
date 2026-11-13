@@ -4,7 +4,8 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { InstancesRepository, NoteReactionsRepository } from '@/models/_.js';
+import { DataSource } from 'typeorm';
+import type { InstancesRepository } from '@/models/_.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import NotesChart from '@/core/chart/charts/notes.js';
@@ -68,11 +69,11 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.db)
+		private db: DataSource,
+
 		@Inject(DI.instancesRepository)
 		private instancesRepository: InstancesRepository,
-
-		@Inject(DI.noteReactionsRepository)
-		private noteReactionsRepository: NoteReactionsRepository,
 
 		private notesChart: NotesChart,
 		private usersChart: UsersChart,
@@ -91,7 +92,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				//originalReactionsCount,
 				instances,
 			] = await Promise.all([
-				this.noteReactionsRepository.count({ cache: 3600000 }), // 1 hour
+				// note_reaction は数千万行規模になり得るため、全件 COUNT ではなく
+				// pg_class.reltuples (ANALYZE 時の推定行数) による概算値を返す
+				this.estimateRowCount('note_reaction'),
 				//this.noteReactionsRepository.count({ where: { userHost: IsNull() }, cache: 3600000 }),
 				this.instancesRepository.count({ cache: 3600000 }),
 			]);
@@ -108,5 +111,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				driveUsageRemote: 0,
 			};
 		});
+	}
+
+	private async estimateRowCount(tableName: string): Promise<number> {
+		const rows = await this.db.query(
+			'SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = $1',
+			[tableName],
+		) as { estimate: string | number }[];
+		// ANALYZE 未実行のテーブルは reltuples = -1 (PostgreSQL 13+) のため 0 に丸める
+		return Math.max(0, Number(rows[0]?.estimate ?? 0));
 	}
 }
