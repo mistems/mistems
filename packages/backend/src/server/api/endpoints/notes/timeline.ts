@@ -201,7 +201,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	}
 
 	private buildQuery(
-		ps: { untilId: string | null; sinceId: string | null; includeMyRenotes: boolean; includeRenotedMyNotes: boolean; includeLocalRenotes: boolean; withFiles: boolean; withRenotes: boolean; },
+		// withCollectedChannelNotes は MISTEMS のチャンネル連合 (mkPostFormExtend) の getFromDb が渡す。このブランチ単体では渡されない
+		ps: { untilId: string | null; sinceId: string | null; includeMyRenotes: boolean; includeRenotedMyNotes: boolean; includeLocalRenotes: boolean; withFiles: boolean; withRenotes: boolean; withCollectedChannelNotes?: boolean; },
 		me: MiLocalUser,
 		followees: { followeeId: string }[],
 		mutingChannelIds: string[],
