@@ -9011,6 +9011,14 @@ export interface Locale extends ILocale {
          * ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？
          */
         "federationHashtagChangeConfirm": string;
+        /**
+         * このハッシュタグのチャンネルを作る
+         */
+        "createFromFederationHashtag": string;
+        /**
+         * ほかのサーバーの連合チャンネルのハッシュタグです。同じハッシュタグで連合するチャンネルを作ると、このハッシュタグのノートがそのチャンネルに入ります。
+         */
+        "createFromFederationHashtagDescription": string;
     };
     "_menuDisplay": {
         /**

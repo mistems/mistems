@@ -83,16 +83,30 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(note.localOnly, false);
 		});
 
-		test('連合チャンネルでもノート単位の localOnly は尊重される', async () => {
+		test('連合チャンネルでは、ノート単位の localOnly と home の指定にかかわらず public で連合する', async () => {
 			const channel = (await api('channels/create', { name: 'public-localonly', federationPolicy: 'public' }, alice)).body;
-			const note = await post(alice, { text: 'a', channelId: channel.id, localOnly: true });
+			const localOnly = await post(alice, { text: 'a', channelId: channel.id, localOnly: true });
+			assert.strictEqual(localOnly.visibility, 'public');
+			assert.strictEqual(localOnly.localOnly, false);
+
+			const home = await post(alice, { text: 'b', channelId: channel.id, visibility: 'home', localOnly: true });
+			assert.strictEqual(home.visibility, 'public');
+			assert.strictEqual(home.localOnly, false);
+		});
+
+		test('連合しないチャンネルでは、従来どおり public + localOnly', async () => {
+			const channel = (await api('channels/create', { name: 'none-home', federationPolicy: 'none' }, alice)).body;
+			const note = await post(alice, { text: 'a', channelId: channel.id, visibility: 'home', localOnly: false });
 			assert.strictEqual(note.visibility, 'public');
 			assert.strictEqual(note.localOnly, true);
 		});
 
 		test('連合チャンネルで localOnly ノートにリプライすると public + localOnly に落ちる', async () => {
-			const channel = (await api('channels/create', { name: 'public-reply-lo', federationPolicy: 'public' }, alice)).body;
-			const parent = await post(alice, { text: 'parent', channelId: channel.id, localOnly: true });
+			// 連合しないときに書いた localOnly のノートが、あとで連合に変えたチャンネルに残っている場合
+			const channel = (await api('channels/create', { name: 'public-reply-lo', federationPolicy: 'none' }, alice)).body;
+			const parent = await post(alice, { text: 'parent', channelId: channel.id });
+			assert.strictEqual(parent.localOnly, true);
+			await api('channels/update', { channelId: channel.id, federationPolicy: 'public' }, alice);
 			const reply = (await api('notes/create', { text: 'reply', channelId: channel.id, replyId: parent.id }, alice)).body.createdNote;
 			assert.strictEqual(reply.visibility, 'public');
 			assert.strictEqual(reply.localOnly, true);
@@ -232,6 +246,36 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(castAsError(taken.body as any).error.code, 'FEDERATION_HASHTAG_ALREADY_USED');
 		});
 
+		test('作るときにハッシュタグを指定できる (ほかのサーバーのハッシュタグに合わせる)', async () => {
+			const created = (await api('channels/create', { name: '指定して作る', federationPolicy: 'public', federationHashtag: '#連合チャンネル_外から来た' }, alice)).body;
+			assert.strictEqual(created.federationHashtag, '連合チャンネル_外から来た');
+
+			// 連合しないときは無視する
+			const none = (await api('channels/create', { name: '連合しない', federationPolicy: 'none', federationHashtag: '連合チャンネル_無視' }, alice)).body;
+			assert.strictEqual(none.federationHashtag, null);
+		});
+
+		test('作るときのハッシュタグの誤りは、エラーコードを分けて返す', async () => {
+			const create = (federationHashtag: string) => api('channels/create', { name: 'create-hashtag-error', federationPolicy: 'public', federationHashtag }, alice);
+
+			const invalid = await create('連合チャンネル_a-b');
+			assert.strictEqual(invalid.status, 400);
+			assert.strictEqual(castAsError(invalid.body as any).error.code, 'INVALID_FEDERATION_HASHTAG');
+
+			const noMarker = await create('ふつうのタグ');
+			assert.strictEqual(noMarker.status, 400);
+			assert.strictEqual(castAsError(noMarker.body as any).error.code, 'FEDERATION_HASHTAG_MUST_CONTAIN_MARKER');
+
+			const tooLong = await create('連合チャンネル_' + 'a'.repeat(130));
+			assert.strictEqual(tooLong.status, 400);
+			assert.strictEqual(castAsError(tooLong.body as any).error.code, 'FEDERATION_HASHTAG_TOO_LONG');
+
+			await api('channels/create', { name: 'taken', federationPolicy: 'public', federationHashtag: '連合チャンネル_使用済み' }, alice);
+			const taken = await create('連合チャンネル_使用済み');
+			assert.strictEqual(taken.status, 400);
+			assert.strictEqual(castAsError(taken.body as any).error.code, 'FEDERATION_HASHTAG_ALREADY_USED');
+		});
+
 		test('ほかの人はハッシュタグを変えられない', async () => {
 			const bob = await signup({ username: 'hashtag_bob' });
 			const channel = (await api('channels/create', { name: 'hashtag-owner', federationPolicy: 'public' }, alice)).body;
@@ -260,11 +304,7 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.ok((searched.body as { id: string }[]).some(n => n.id === note.id));
 		});
 
-		test('連合しないチャンネルとローカル限定の投稿には、ハッシュタグを付けない', async () => {
-			const channel = (await api('channels/create', { name: 'hashtag-none', federationPolicy: 'public' }, alice)).body;
-			const localOnly = await post(alice, { text: 'local', channelId: channel.id, localOnly: true });
-			assert.deepStrictEqual(localOnly.tags ?? [], []);
-
+		test('連合しないチャンネルの投稿には、ハッシュタグを付けない', async () => {
 			const closed = (await api('channels/create', { name: 'hashtag-closed', federationPolicy: 'none' }, alice)).body;
 			const note = await post(alice, { text: 'closed', channelId: closed.id });
 			assert.deepStrictEqual(note.tags ?? [], []);

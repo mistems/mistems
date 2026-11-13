@@ -2277,6 +2277,8 @@ _channel:
   nameOnly: "Name only"
   allowRenoteToExternal: "Allow renote and quote outside the channel"
   allowRenoteToExternalLockedByFederation: "Federated channels cannot forbid renotes outside the channel. Stop federating to forbid them."
+  createFromFederationHashtag: "Create a channel for this hashtag"
+  createFromFederationHashtagDescription: "This is a hashtag of a federated channel on another server. If you create a federated channel with the same hashtag, notes with this hashtag will be collected into it."
 _menuDisplay:
   sideFull: "Side"
   sideIcon: "Side (Icons)"

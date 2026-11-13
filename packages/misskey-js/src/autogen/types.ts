@@ -14859,6 +14859,7 @@ export interface operations {
                     allowRenoteToExternal?: boolean | null;
                     /** @enum {string|null} */
                     federationPolicy?: 'none' | 'public' | null;
+                    federationHashtag?: string | null;
                 };
             };
         };

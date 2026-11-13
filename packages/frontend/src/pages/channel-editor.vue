@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template #caption>{{ i18n.ts._channel.federationPolicyDescription }}</template>
 			</MkSelect>
 
-			<MkInput v-if="federationPolicy === 'public'" v-model="federationHashtag" :placeholder="channel?.federationHashtag == null ? i18n.ts._channel.federationHashtagAutoAssigned : undefined" :disabled="channel?.federationHashtag == null">
+			<MkInput v-if="federationPolicy === 'public'" v-model="federationHashtag" :placeholder="channel?.federationHashtag == null ? i18n.ts._channel.federationHashtagAutoAssigned : undefined" :disabled="channelId != null && channel?.federationHashtag == null">
 				<template #label><i class="ti ti-hash"></i> {{ i18n.ts._channel.federationHashtag }}</template>
 				<template #prefix>#</template>
 				<template #caption>{{ i18n.ts._channel.federationHashtagDescription }}</template>
@@ -102,6 +102,9 @@ const router = useRouter();
 
 const props = defineProps<{
 	channelId?: string;
+	// 新しく作るときの初期値 (ほかのサーバーの連合チャンネルのハッシュタグから作るとき)
+	initialName?: string;
+	initialFederationHashtag?: string;
 }>();
 
 const channel = ref<Misskey.entities.Channel | null>(null);
@@ -125,6 +128,15 @@ const {
 const pinnedNoteIds = ref<Misskey.entities.Note['id'][]>([]);
 // 連合するチャンネルのハッシュタグ (先頭の「#」は含めない)。まだ決まっていないときは空で、保存時にサーバーが決める
 const federationHashtag = ref('');
+
+// ハッシュタグを指定して作るときは、連合する設定で始める (連合しないとハッシュタグを使わないため)
+if (props.channelId == null) {
+	if (props.initialName != null) name.value = props.initialName;
+	if (props.initialFederationHashtag != null && props.initialFederationHashtag !== '') {
+		federationPolicy.value = 'public';
+		federationHashtag.value = props.initialFederationHashtag.replace(/^#/, '');
+	}
+}
 
 watch(federationPolicy, () => {
 	// 連合するチャンネルのノートは外のサーバーでリノートできるので、チャンネル外へのリノートの禁止とは両立しない。
@@ -241,7 +253,11 @@ async function save() {
 			federationHashtag.value = updated.federationHashtag ?? '';
 		});
 	} else {
-		os.apiWithDialog('channels/create', params).then(created => {
+		os.apiWithDialog('channels/create', {
+			...params,
+			// 空のときはサーバーがチャンネル名から決める
+			...(federationPolicy.value === 'public' && nextHashtag !== '' ? { federationHashtag: nextHashtag } : {}),
+		}).then(created => {
 			router.push('/channels/:channelId', {
 				params: {
 					channelId: created.id,
