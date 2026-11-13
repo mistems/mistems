@@ -7,8 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { In, Not } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { Config } from '@/config.js';
-import type { ChannelsRepository, MiMeta } from '@/models/_.js';
+import type { ChannelsRepository } from '@/models/_.js';
 import { MiChannel } from '@/models/Channel.js';
 import { bindThis } from '@/decorators.js';
 import { normalizeTag } from '@/misc/normalize-tag.js';
@@ -20,12 +19,6 @@ const MAX_SUFFIX = 1000;
 @Injectable()
 export class ChannelFederationHashtagService {
 	constructor(
-		@Inject(DI.config)
-		private config: Config,
-
-		@Inject(DI.meta)
-		private meta: MiMeta,
-
 		@Inject(DI.channelsRepository)
 		private channelsRepository: ChannelsRepository,
 	) {
@@ -46,14 +39,12 @@ export class ChannelFederationHashtagService {
 	}
 
 	/**
-	 * チャンネルの名前から、ほかのチャンネルと重ならないハッシュタグを作る (保存はしない)。
+	 * チャンネルの名前から、このサーバーのほかのチャンネルと重ならないハッシュタグを作る (保存はしない)。
 	 */
 	@bindThis
 	public async generate(channel: Pick<MiChannel, 'id' | 'name'>, em?: EntityManager): Promise<string> {
 		for (let suffix = 1; suffix <= MAX_SUFFIX; suffix++) {
 			const candidate = buildChannelFederationHashtag({
-				serverName: this.meta.name,
-				host: this.config.host,
 				channelName: channel.name,
 				channelId: channel.id,
 				suffix,
@@ -63,8 +54,6 @@ export class ChannelFederationHashtagService {
 
 		// ここまで重なることはまずないが、念のためチャンネルの ID で区別する
 		return buildChannelFederationHashtag({
-			serverName: this.meta.name,
-			host: this.config.host,
 			channelName: channel.id,
 			channelId: channel.id,
 		});

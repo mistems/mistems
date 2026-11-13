@@ -179,7 +179,7 @@ describe('チャンネル連合 (federationPolicy)', () => {
 		test('連合するチャンネルを作ると、ハッシュタグを付ける (使えない文字は取り除く)', async () => {
 			const res = await api('channels/create', { name: 'タグ・作成 a.b', federationPolicy: 'public' }, alice);
 			assert.strictEqual(res.status, 200);
-			assert.ok(res.body.federationHashtag?.endsWith(`${MARKER}タグ作成ab`), res.body.federationHashtag ?? 'null');
+			assert.strictEqual(res.body.federationHashtag, `${MARKER}タグ作成ab`);
 			assert.match(res.body.federationHashtag!, /^[\p{L}\p{N}_]+$/u);
 		});
 

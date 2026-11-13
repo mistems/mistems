@@ -248,16 +248,26 @@ describe('Channel federation', () => {
 			hashtag = channel.federationHashtag;
 		});
 
-		test('H1: サーバーの表示名が空なら、ドメインからハッシュタグを作る', async () => {
-			const admin = await fetchAdmin('a.test');
-			const { name } = await admin.client.request('admin/meta', {});
-			await admin.client.request('admin/update-meta', { name: null });
-			try {
-				const ch = await createChannel(alice, 'public');
-				strictEqual(ch.federationHashtag, `atest連合チャンネル_${ch.name.replace(/[^\p{L}\p{N}_]/gu, '')}`);
-			} finally {
-				await admin.client.request('admin/update-meta', { name });
-			}
+		test('H1: ハッシュタグにサーバー名は入らず、相手のサーバーの同じ名前の連合するチャンネルと、互いのノートを収蔵しあう', async () => {
+			const channelInA = await createChannel(alice, 'public');
+			const channelInB = await bob.client.request('channels/create', { name: channelInA.name, federationPolicy: 'public' });
+			strictEqual(channelInA.federationHashtag, `連合チャンネル_${channelInA.name.replace(/[^\p{L}\p{N}_]/gu, '')}`);
+			strictEqual(channelInB.federationHashtag, channelInA.federationHashtag);
+
+			// a.test のチャンネルのノートは、b.test の同じ名前のチャンネルに入る (AP の tag ではなく本文の付記から読む)
+			const fromA = await postToChannel(alice, channelInA.id);
+			await vi.waitFor(async () => {
+				const notes = await bob.client.request('channels/timeline', { channelId: channelInB.id, limit: 100 });
+				const found = notes.find(n => n.uri === `https://a.test/notes/${fromA.id}`);
+				assert(found != null);
+				strictEqual((found.tags ?? []).length, 0);
+			}, WAIT_FOR_FEDERATION);
+
+			// b.test のチャンネルのノートは、a.test の同じ名前のチャンネルに入る
+			const fromB = await postToChannel(bob, channelInB.id);
+			await vi.waitFor(async () => {
+				assert(await channelTimelineHas(channelInA.id, `https://b.test/notes/${fromB.id}`));
+			}, WAIT_FOR_FEDERATION);
 		});
 
 		test('H2: 相手には本文の付記にハッシュタグが届くが、相手のノートの tags には入らず、ハッシュタグの検索にも出ない', async () => {

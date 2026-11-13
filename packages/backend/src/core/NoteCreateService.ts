@@ -11,6 +11,7 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
+import { extractChannelFederationHashtagsFromText } from '@/misc/channel-federation-hashtag.js';
 import { ChannelFederationHashtagService } from '@/core/ChannelFederationHashtagService.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
@@ -1014,6 +1015,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 	/**
 	 * リモートのユーザーの公開のノートを、ハッシュタグが一致する連合するチャンネルに入れる。
+	 * ほかのサーバーの同じ名前の連合するチャンネルのノートも、本文の付記のハッシュタグで入る。
 	 * - ローカルのユーザーのノート、公開以外 (サイレンスなどで home に降格したものを含む) のノートは入れない
 	 * - すでにチャンネルが決まっている (リプライでチャンネルに入る) ノートはそのまま
 	 * - 連合しないチャンネルとアーカイブされたチャンネルには入れない
@@ -1024,10 +1026,14 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (this.userEntityService.isLocalUser(user)) return;
 		if (data.channel != null) return;
 		if (data.visibility !== 'public' || data.localOnly) return;
-		if (data.apHashtags == null || data.apHashtags.length === 0) return;
 		if (this.isRenote(data) && !this.isQuote(data)) return;
 
-		const channel = await this.channelFederationHashtagService.findCollectingChannel(data.apHashtags);
+		// AP の tag のハッシュタグに加えて、本文の付記に書かれたハッシュタグも見る
+		// (MISTEMS どうしでは、チャンネルのハッシュタグを tag に入れず本文にだけ書くため)
+		const tags = [...(data.apHashtags ?? []), ...extractChannelFederationHashtagsFromText(data.text)];
+		if (tags.length === 0) return;
+
+		const channel = await this.channelFederationHashtagService.findCollectingChannel(tags);
 		if (channel == null) return;
 
 		data.channel = channel;

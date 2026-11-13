@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import * as mfm from 'mfm-js';
 import { normalizeTag } from '@/misc/normalize-tag.js';
+import { extractHashtags } from '@/misc/extract-hashtags.js';
 
 /**
  * 連合するチャンネルのハッシュタグに必ず入る目印。
@@ -43,38 +45,34 @@ function truncate(s: string, length: number): string {
 
 /**
  * 連合するチャンネルのハッシュタグの候補を作る (先頭の「#」は含めない)。
- * 形は `{サーバー名}連合チャンネル_{チャンネル名}{suffix}` で、全体を 128 文字以内に収める。
+ * 形は `連合チャンネル_{チャンネル名}{suffix}` で、全体を 128 文字以内に収める。
+ * サーバー名を入れないので、ほかのサーバーの同じ名前の連合するチャンネルと同じハッシュタグになり、
+ * 互いのノートを収蔵しあえる。
  *
- * - サーバー名: サーバーの表示名から使えない文字を取り除いたもの。空ならドメインから取り除いたもの
  * - チャンネル名: チャンネル名から使えない文字を取り除いたもの。空ならチャンネルの ID の末尾 6 文字
- * - suffix: ほかのチャンネルと重なったときに付ける `_2`、`_3` など
- *
- * 長すぎるときは、まずチャンネル名を切り詰める。それでも収まらないとき (サーバー名がとても長いとき) は、
- * サーバー名も切り詰める。
+ * - suffix: このサーバーのほかのチャンネルと重なったときに付ける `_2`、`_3` など
  */
 export function buildChannelFederationHashtag(params: {
-	serverName: string | null;
-	host: string;
 	channelName: string;
 	channelId: string;
 	suffix?: number;
 }): string {
-	let server = sanitizeChannelFederationHashtagPart(params.serverName ?? '');
-	if (server === '') server = sanitizeChannelFederationHashtagPart(params.host);
-
 	let channel = sanitizeChannelFederationHashtagPart(params.channelName);
 	if (channel === '') channel = sanitizeChannelFederationHashtagPart(params.channelId).slice(-CHANNEL_ID_FALLBACK_LENGTH);
 
 	const suffix = params.suffix != null && params.suffix > 1 ? `_${params.suffix}` : '';
 	const fixedLength = Array.from(CHANNEL_FEDERATION_HASHTAG_MARKER).length + Array.from(suffix).length;
+	channel = truncate(channel, CHANNEL_FEDERATION_HASHTAG_MAX_LENGTH - fixedLength);
 
-	// チャンネル名に最低限残す長さ (チャンネルどうしを見分けられるように)
-	const minChannelLength = Math.min(Array.from(channel).length, CHANNEL_ID_FALLBACK_LENGTH);
-	const serverMax = CHANNEL_FEDERATION_HASHTAG_MAX_LENGTH - fixedLength - minChannelLength;
-	server = truncate(server, serverMax);
+	return `${CHANNEL_FEDERATION_HASHTAG_MARKER}${channel}${suffix}`;
+}
 
-	const channelMax = CHANNEL_FEDERATION_HASHTAG_MAX_LENGTH - fixedLength - Array.from(server).length;
-	channel = truncate(channel, channelMax);
-
-	return `${server}${CHANNEL_FEDERATION_HASHTAG_MARKER}${channel}${suffix}`;
+/**
+ * ノートの本文 (MFM) から、連合するチャンネルの形をしたハッシュタグを取り出す。
+ * MISTEMS どうしでは、チャンネルのハッシュタグを AP の tag に入れず本文の付記にだけ書くので、
+ * 受け取る側は本文から読む。
+ */
+export function extractChannelFederationHashtagsFromText(text: string | null | undefined): string[] {
+	if (text == null || !text.includes(CHANNEL_FEDERATION_HASHTAG_MARKER)) return [];
+	return extractHashtags(mfm.parse(text)).filter(tag => isChannelFederationHashtag(tag));
 }
