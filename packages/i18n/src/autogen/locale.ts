@@ -5189,6 +5189,10 @@ export interface Locale extends ILocale {
      */
     "withSensitive": string;
     /**
+     * チャンネルに収蔵されたノートを表示
+     */
+    "withCollectedChannelNotes": string;
+    /**
      * {name}のセンシティブなファイルを含む投稿
      */
     "userSaysSomethingSensitive": ParameterizedString<"name">;

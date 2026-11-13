@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkPostForm v-if="prefer.r.showFixedPostForm.value" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
 		<MkStreamingNotesTimeline
 			ref="tlComponent"
-			:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
+			:key="src + withRenotes + withReplies + onlyFiles + withSensitive + withCollectedChannelNotes"
 			:class="$style.tl"
 			:src="(src.split(':')[0] as (BasicTimelineType | 'list'))"
 			:list="src.split(':')[1]"
@@ -20,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:withReplies="withReplies"
 			:withSensitive="withSensitive"
 			:onlyFiles="onlyFiles"
+			:withCollectedChannelNotes="withCollectedChannelNotes"
 			:sound="true"
 		/>
 	</div>
@@ -103,6 +104,12 @@ watch([withReplies, onlyFiles], ([withRepliesTo, onlyFilesTo]) => {
 const withSensitive = computed<boolean>({
 	get: () => store.r.tl.value.filter.withSensitive,
 	set: (x) => saveTlFilter('withSensitive', x),
+});
+
+// 保存済みの設定に値がない (この項目ができる前に保存した) ときは、既定の true として扱う
+const withCollectedChannelNotes = computed<boolean>({
+	get: () => store.r.tl.value.filter.withCollectedChannelNotes ?? true,
+	set: (x) => saveTlFilter('withCollectedChannelNotes', x),
 });
 
 const showFixedPostForm = prefer.model('showFixedPostForm');
@@ -242,7 +249,18 @@ const headerActions = computed<PageHeaderItem[]>(() => {
 				text: i18n.ts.fileAttachedOnly,
 				ref: onlyFiles,
 				disabled: isBasicTimeline(src.value) && hasWithReplies(src.value) ? withReplies : false,
-			}, {
+			});
+
+			if (src.value === 'home' || src.value === 'social') {
+				menuItems.push({
+					type: 'switch',
+					icon: 'ti ti-device-tv',
+					text: i18n.ts.withCollectedChannelNotes,
+					ref: withCollectedChannelNotes,
+				});
+			}
+
+			menuItems.push({
 				type: 'divider',
 			}, {
 				type: 'switch',
