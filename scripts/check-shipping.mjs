@@ -10,17 +10,21 @@
  * 変更ファイル lint、SPDX 自動修正と再検査、locale safety を独立して実行し、
  * 最後に終了コードを集約する。
  *
+ * locale safety は、ja-JP.yml 以外の locale YAML で、上流にあるキー (起点の同じファイルにあるキー) を
+ * 書き換えたり消したりしていないかを見る。MISTEMS 独自のキーを足したり直したりするのはかまわない。
+ *
  * 使い方:
  *   node scripts/check-shipping.mjs
  *   node scripts/check-shipping.mjs --base <ref>
  *
  * 終了コード:
  *   0 = 全検査に合格 (lint 対象なしの SKIPPED を含む)
- *   1 = lint / SPDX / locale の違反
+ *   1 = lint / SPDX / locale の違反 (locale は、上流にあるキーの変更・削除)
  *   2 = 引数、Git ref、コマンド起動などの理由で検査不能
  */
 
-import { statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { execaSync } from 'execa';
 
@@ -185,22 +189,86 @@ function runSpdx(base, repoRoot) {
 }
 
 /**
- * ja-JP.yml 以外の locale YAML 変更がないかを検査する。
+ * locale YAML を、`a.b.c` 形式のキーから値への Map に平らにする。
+ *
+ * @param {unknown} node
+ * @param {string} prefix
+ * @param {Map<string, string>} out
+ * @returns {Map<string, string>}
+ */
+function flattenLocale(node, prefix = '', out = new Map()) {
+	if (node !== null && typeof node === 'object' && !Array.isArray(node)) {
+		for (const [key, value] of Object.entries(node)) {
+			flattenLocale(value, prefix === '' ? key : `${prefix}.${key}`, out);
+		}
+	} else if (prefix !== '') {
+		out.set(prefix, String(node));
+	}
+	return out;
+}
+
+/**
+ * ja-JP.yml 以外の locale YAML で、起点にあったキーを変えたり消したりしていないかを検査する。
+ *
+ * 他言語ファイルは、上流では Crowdin の自動配信先である。起点にあるキーの訳を変えると、
+ * 統合のたびにコンフリクトし、上流の更新とも食い違う。起点にないキー (MISTEMS 独自のキー) は自由に書いてよい。
  *
  * @param {string[]} changedFiles
- * @returns {0 | 1}
+ * @param {string} base
+ * @returns {Promise<0 | 1 | 2>}
  */
-function runLocaleSafety(changedFiles) {
-	const badLocales = changedFiles.filter((file) => (
+async function runLocaleSafety(changedFiles, base) {
+	const otherLocales = changedFiles.filter((file) => (
 		file.startsWith('locales/') &&
 		file.endsWith('.yml') &&
 		file !== 'locales/ja-JP.yml'
 	));
-	if (badLocales.length === 0) {
+	if (otherLocales.length === 0) {
 		console.log('Locale safety: PASS');
 		return 0;
 	}
-	for (const file of badLocales) console.error(`forbidden locale change: ${file}`);
+
+	/** @type {(text: string) => unknown} */
+	let parseYaml;
+	try {
+		const yaml = await import('js-yaml');
+		parseYaml = (text) => yaml.load(text);
+	} catch {
+		console.error('Locale safety: 検査不能 — js-yaml を読み込めない (node_modules が無い)');
+		return 2;
+	}
+
+	let violations = 0;
+	for (const file of otherLocales) {
+		const upstream = spawnSync('git', ['show', `${base}:${file}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+		// 起点に無いファイルは、すべて MISTEMS 独自のキーである
+		if (upstream.status !== 0) continue;
+
+		const upstreamKeys = flattenLocale(parseYaml(upstream.stdout));
+		let currentKeys = new Map();
+		try {
+			currentKeys = flattenLocale(parseYaml(readFileSync(file, 'utf8')));
+		} catch (error) {
+			if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+		}
+
+		const problems = [];
+		for (const [key, value] of upstreamKeys) {
+			if (!currentKeys.has(key)) problems.push(`removed upstream key: ${key}`);
+			else if (currentKeys.get(key) !== value) problems.push(`changed upstream key: ${key}`);
+		}
+		if (problems.length === 0) continue;
+
+		violations += problems.length;
+		console.error(`${file}: 上流にあるキーを ${problems.length} 件変えている (起点の内容に戻す)`);
+		for (const problem of problems.slice(0, 20)) console.error(`  ${problem}`);
+		if (problems.length > 20) console.error(`  ...ほか ${problems.length - 20} 件`);
+	}
+
+	if (violations === 0) {
+		console.log(`Locale safety: PASS (MISTEMS 独自のキーだけを変更: ${otherLocales.join(', ')})`);
+		return 0;
+	}
 	return 1;
 }
 
@@ -219,9 +287,9 @@ function parseBaseRef(args) {
 /**
  * lint・SPDX・locale safety を実行し、終了コードを集約する。
  *
- * @returns {number}
+ * @returns {Promise<number>}
  */
-function main() {
+async function main() {
 	const baseRef = parseBaseRef(process.argv.slice(2));
 	if (baseRef === undefined) {
 		console.error('usage: node scripts/check-shipping.mjs [--base <ref>]');
@@ -237,15 +305,15 @@ function main() {
 		const changedFiles = listChangedFiles(base);
 		const lint = runChangedFileLint(changedFiles, repoRoot);
 		const spdxStatus = runSpdx(base, repoRoot);
-		const localeStatus = runLocaleSafety(changedFiles);
+		const localeStatus = await runLocaleSafety(changedFiles, base);
 
 		console.log('');
 		console.log('Shipping checks:');
 		console.log(`Lint:          ${lint.summary}`);
 		console.log(`SPDX:          ${spdxStatus === 0 ? 'PASS' : spdxStatus === 1 ? 'FAIL' : 'ERROR'}`);
-		console.log(`Locale safety: ${localeStatus === 0 ? 'PASS' : 'FAIL'}`);
+		console.log(`Locale safety: ${localeStatus === 0 ? 'PASS' : localeStatus === 1 ? 'FAIL' : 'ERROR'}`);
 
-		if (lint.status === 2 || spdxStatus === 2) return 2;
+		if (lint.status === 2 || spdxStatus === 2 || localeStatus === 2) return 2;
 		if (lint.status === 1 || spdxStatus === 1 || localeStatus === 1) return 1;
 		return 0;
 	} catch (error) {
@@ -255,4 +323,4 @@ function main() {
 	}
 }
 
-process.exitCode = main();
+process.exitCode = await main();
