@@ -17,6 +17,15 @@ export const packedNoteSchema = {
 			optional: false, nullable: false,
 			format: 'date-time',
 		},
+		lastFetchedAt: {
+			type: 'string',
+			optional: true, nullable: true,
+			format: 'date-time',
+		},
+		refetchedCount: {
+			type: 'number',
+			optional: true, nullable: false,
+		},
 		deletedAt: {
 			type: 'string',
 			optional: true, nullable: true,

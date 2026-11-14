@@ -535,6 +535,8 @@ import type {
 	NotesReactionsResponse,
 	NotesReactionsCreateRequest,
 	NotesReactionsDeleteRequest,
+	NotesRefetchRequest,
+	NotesRefetchResponse,
 	NotesRenoteLockCreateRequest,
 	NotesRenoteLockDeleteRequest,
 	NotesRenotesRequest,
@@ -1028,6 +1030,7 @@ export type Endpoints = {
 	'notes/reactions': { req: NotesReactionsRequest; res: NotesReactionsResponse };
 	'notes/reactions/create': { req: NotesReactionsCreateRequest; res: EmptyResponse };
 	'notes/reactions/delete': { req: NotesReactionsDeleteRequest; res: EmptyResponse };
+	'notes/refetch': { req: NotesRefetchRequest; res: NotesRefetchResponse };
 	'notes/renote-lock/create': { req: NotesRenoteLockCreateRequest; res: EmptyResponse };
 	'notes/renote-lock/delete': { req: NotesRenoteLockDeleteRequest; res: EmptyResponse };
 	'notes/renotes': { req: NotesRenotesRequest; res: NotesRenotesResponse };
