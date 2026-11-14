@@ -1,0 +1,13 @@
+diff --git a/src/index.js b/src/index.js
+index 7c4aee87b68f7b3613ce7dad4a570c17ec3630b9..50893d09ded8495428519bcf0d936300a40ad11e 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -67,7 +67,7 @@ export default async function fetch(url, options_) {
+ 		let response = null;
+ 
+ 		const abort = () => {
+-			const error = new AbortError('The operation was aborted.');
++			const error = new AbortError(`The operation was aborted: ${request.url}`);
+ 			reject(error);
+ 			if (request.body && request.body instanceof Stream.Readable) {
+ 				request.body.destroy(error);
