@@ -672,7 +672,8 @@ defineExpose({
 
 .gapButtons {
 	display: flex;
-	gap: 8px;
+	flex-direction: column;
+	gap: 4px;
 }
 
 .gapLoading {
@@ -682,10 +683,9 @@ defineExpose({
 
 .gapButton {
 	display: block;
-	flex: 1;
-	min-width: 0;
+	width: 100%;
 	box-sizing: border-box;
-	padding: 10px 16px;
+	padding: 1px 16px;
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	font-size: 90%;
