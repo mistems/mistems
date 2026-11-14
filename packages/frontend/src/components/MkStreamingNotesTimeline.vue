@@ -678,14 +678,12 @@ defineExpose({
 
 .gap {
 	position: relative;
-	padding: 8px;
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
 .gapButtons {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
 }
 
 .gapButtonsHidden {
@@ -703,14 +701,15 @@ defineExpose({
 	display: block;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 0 16px;
-	border: solid 1px var(--MI_THEME-divider);
-	border-radius: var(--MI-radius);
-	background: var(--MI_THEME-panel);
+	padding: 4px 16px;
 	font-size: 90%;
 
 	&:hover {
 		background: var(--MI_THEME-buttonHoverBg);
+	}
+
+	& + & {
+		border-top: solid 0.5px var(--MI_THEME-divider);
 	}
 }
 </style>
