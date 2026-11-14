@@ -34,6 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkCustomEmoji class="emoji" :name="emoji.name" :fallbackToImage="true"/>
 				</button>
 			</div>
+			<!-- MISTEMS: 終端付近で続きを読み込む目印。v-appear は描画時のコールバックしか使わないので、件数をキーにして作り直す -->
+			<div v-if="hasMoreCustom" :key="`sentinel-custom-${customLimit}`" v-appear="loadMoreCustom" class="sentinel" aria-hidden="true"></div>
 			<div v-if="searchResultUnicode.length > 0" class="body">
 				<button
 					v-for="emoji in searchResultUnicode"
@@ -46,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkEmoji class="emoji" :emoji="emoji.char"/>
 				</button>
 			</div>
+			<div v-if="hasMoreUnicode" :key="`sentinel-unicode-${unicodeLimit}`" v-appear="loadMoreUnicode" class="sentinel" aria-hidden="true"></div>
 		</section>
 
 		<div v-if="tab === 'index'" class="group index">
@@ -137,6 +140,7 @@ import { deviceKind } from '@/utility/device-kind.js';
 import { i18n } from '@/i18n.js';
 import { store } from '@/store.js';
 import { customEmojiCategories, customEmojis, customEmojisMap } from '@/custom-emojis.js';
+import { normalizeForEmojiSearch } from '@/utility/kana-to-hira.js';
 import { $i } from '@/i.js';
 import { checkReactionPermissions } from '@/utility/check-reaction-permissions.js';
 import { prefer } from '@/preferences.js';
@@ -187,6 +191,12 @@ const height = computed(() => emojiPickerHeight.value);
 const q = ref<string>('');
 const searchResultCustom = ref<Misskey.entities.EmojiSimple[]>([]);
 const searchResultUnicode = ref<UnicodeEmojiDef[]>([]);
+// MISTEMS: 検索結果はカスタム・Unicode それぞれ SEARCH_PAGE_SIZE 件ずつ、終端付近までスクロールしたら続きを読み込む
+const SEARCH_PAGE_SIZE = 100;
+const customLimit = ref(SEARCH_PAGE_SIZE);
+const unicodeLimit = ref(SEARCH_PAGE_SIZE);
+const hasMoreCustom = computed(() => searchResultCustom.value.length >= customLimit.value);
+const hasMoreUnicode = computed(() => searchResultUnicode.value.length >= unicodeLimit.value);
 const tab = ref<'index' | 'custom' | 'unicode' | 'tags'>('index');
 
 const customEmojiFolderRoot: CustomEmojiFolderTree = { value: '', category: '', children: [] };
@@ -218,23 +228,22 @@ customEmojiCategories.value.forEach(ec => {
 
 parseAndMergeCategories('', customEmojiFolderRoot);
 
-watch(q, () => {
-	if (emojisEl.value) emojisEl.value.scrollTop = 0;
-
+function runSearch(target: 'both' | 'custom' | 'unicode' = 'both') {
 	if (q.value === '') {
 		searchResultCustom.value = [];
 		searchResultUnicode.value = [];
 		return;
 	}
 
-	const newQ = q.value.replace(/:/g, '').toLowerCase();
+	// MISTEMS: 大文字・小文字、ひらがな・カタカナ、全角・半角を区別せずに引く。比べられる側にも同じ正規化をかける
+	const newQ = normalizeForEmojiSearch(q.value).replace(/:/g, '');
 
 	const searchCustom = () => {
-		const max = 100;
+		const max = customLimit.value;
 		const emojis = customEmojis.value;
 		const matches = new Set<Misskey.entities.EmojiSimple>();
 
-		const exactMatch = emojis.find(emoji => emoji.name === newQ);
+		const exactMatch = emojis.find(emoji => normalizeForEmojiSearch(emoji.name) === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
 		if (newQ.includes(' ')) { // AND検索
@@ -242,7 +251,7 @@ watch(q, () => {
 
 			// 名前にキーワードが含まれている
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -251,7 +260,7 @@ watch(q, () => {
 
 			// 名前またはエイリアスにキーワードが含まれている
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword) || emoji.aliases.some(alias => alias.includes(keyword)))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword) || emoji.aliases.some(alias => normalizeForEmojiSearch(alias).includes(keyword)))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -263,7 +272,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias === newQ)) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias) === newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -271,7 +280,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.name.startsWith(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).startsWith(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -279,7 +288,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias.startsWith(newQ))) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias).startsWith(newQ))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -287,7 +296,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.name.includes(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).includes(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -295,7 +304,7 @@ watch(q, () => {
 			if (matches.size >= max) return matches;
 
 			for (const emoji of emojis) {
-				if (emoji.aliases.some(alias => alias.includes(newQ))) {
+				if (emoji.aliases.some(alias => normalizeForEmojiSearch(alias).includes(newQ))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -306,18 +315,18 @@ watch(q, () => {
 	};
 
 	const searchUnicode = () => {
-		const max = 100;
+		const max = unicodeLimit.value;
 		const emojis = emojilist;
 		const matches = new Set<UnicodeEmojiDef>();
 
-		const exactMatch = emojis.find(emoji => emoji.name === newQ);
+		const exactMatch = emojis.find(emoji => normalizeForEmojiSearch(emoji.name) === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
 		if (newQ.includes(' ')) { // AND検索
 			const keywords = newQ.split(' ');
 
 			for (const emoji of emojis) {
-				if (keywords.every(keyword => emoji.name.includes(keyword))) {
+				if (keywords.every(keyword => normalizeForEmojiSearch(emoji.name).includes(keyword))) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -326,7 +335,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (keywords.every(keyword => index[emoji.char]?.some(k => k.includes(keyword)))) {
+					if (keywords.every(keyword => index[emoji.char]?.some(k => normalizeForEmojiSearch(k).includes(keyword)))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
@@ -334,7 +343,7 @@ watch(q, () => {
 			}
 		} else {
 			for (const emoji of emojis) {
-				if (emoji.name.startsWith(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).startsWith(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -343,7 +352,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (index[emoji.char]?.some(k => k.startsWith(newQ))) {
+					if (index[emoji.char]?.some(k => normalizeForEmojiSearch(k).startsWith(newQ))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
@@ -351,7 +360,7 @@ watch(q, () => {
 			}
 
 			for (const emoji of emojis) {
-				if (emoji.name.includes(newQ)) {
+				if (normalizeForEmojiSearch(emoji.name).includes(newQ)) {
 					matches.add(emoji);
 					if (matches.size >= max) break;
 				}
@@ -360,7 +369,7 @@ watch(q, () => {
 
 			for (const index of Object.values(store.s.additionalUnicodeEmojiIndexes)) {
 				for (const emoji of emojis) {
-					if (index[emoji.char]?.some(k => k.includes(newQ))) {
+					if (index[emoji.char]?.some(k => normalizeForEmojiSearch(k).includes(newQ))) {
 						matches.add(emoji);
 						if (matches.size >= max) break;
 					}
@@ -371,9 +380,27 @@ watch(q, () => {
 		return matches;
 	};
 
-	searchResultCustom.value = Array.from(searchCustom());
-	searchResultUnicode.value = Array.from(searchUnicode());
+	// 追加読み込みでは、読み込んだ側だけを検索し直す
+	if (target !== 'unicode') searchResultCustom.value = Array.from(searchCustom());
+	if (target !== 'custom') searchResultUnicode.value = Array.from(searchUnicode());
+}
+
+watch(q, () => {
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+	customLimit.value = SEARCH_PAGE_SIZE;
+	unicodeLimit.value = SEARCH_PAGE_SIZE;
+	runSearch();
 });
+
+function loadMoreCustom() {
+	customLimit.value += SEARCH_PAGE_SIZE;
+	runSearch('custom');
+}
+
+function loadMoreUnicode() {
+	unicodeLimit.value += SEARCH_PAGE_SIZE;
+	runSearch('unicode');
+}
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {
 	return !props.targetNote || checkReactionPermissions($i!, props.targetNote, emoji);
@@ -795,6 +822,10 @@ defineExpose({
 
 				&:empty {
 					display: none;
+				}
+
+				> .sentinel {
+					height: 1px;
 				}
 			}
 		}
