@@ -225,6 +225,21 @@ export const PREF_DEF = definePreferences({
 	showReactionsCount: {
 		default: false,
 	},
+	enableFavstar: {
+		default: true,
+	},
+	favstarLightAo: {
+		default: '#44a4c1',
+	},
+	favstarLightAka: {
+		default: '#f7796c',
+	},
+	favstarDarkAo: {
+		default: '#44a4c1',
+	},
+	favstarDarkAka: {
+		default: '#f7796c',
+	},
 	enableQuickAddMfmFunction: {
 		default: false,
 	},
@@ -544,5 +559,9 @@ export const PREF_DEF = definePreferences({
 	},
 	'experimental.enableWebTranslatorApi': {
 		default: false,
+	},
+	// WebSocket の切断やスリープなどでタイムラインに取りこぼした区間を、歯抜けマーカーで示して取り直す
+	'experimental.enableTimelineGapFill': {
+		default: true,
 	},
 });
