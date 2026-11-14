@@ -331,6 +331,64 @@ describe('useTimelineGaps', () => {
 			expect(scrollBy).not.toHaveBeenCalled();
 			scrollBy.mockRestore();
 		});
+
+		// 移動のアニメーション (TransitionGroup の move) の transform が付いている間は、getBoundingClientRect() が
+		// 元の位置を返すので、位置を直す処理が「動いていない」と判断して止まってしまう。挿入の描画のあいだ止められるようにする
+		test('位置を保つ補給では、挿入から位置を直し終えるまで anchoring を立てる', async () => {
+			const anchor = movableElement([300, 900, 300]);
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')], {
+				getNoteElement: (id) => id === 'n002' ? anchor : null,
+			});
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+			const anchoringAtInsert: boolean[] = [];
+			const insert = paginator.insertItemsBefore;
+			paginator.insertItemsBefore = (anchorId, items) => {
+				anchoringAtInsert.push(gaps.anchoring.value);
+				return insert(anchorId, items);
+			};
+
+			expect(gaps.anchoring.value).toBe(false);
+			fetchRange.mockResolvedValueOnce(descendingNotes('n032', 30).toReversed());
+			await gaps.fill(gap, 'older');
+
+			expect(anchoringAtInsert).toEqual([true]);
+			expect(gaps.anchoring.value).toBe(false);
+			scrollBy.mockRestore();
+		});
+
+		test('位置を保たない補給 (自動補給) では anchoring を立てない', async () => {
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')]);
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			const anchoringAtInsert: boolean[] = [];
+			const insert = paginator.insertItemsBefore;
+			paginator.insertItemsBefore = (anchorId, items) => {
+				anchoringAtInsert.push(gaps.anchoring.value);
+				return insert(anchorId, items);
+			};
+
+			fetchRange.mockResolvedValueOnce(descendingNotes('n099', 30));
+			await gaps.fill(gap);
+
+			expect(anchoringAtInsert).toEqual([false]);
+			expect(gaps.anchoring.value).toBe(false);
+		});
+
+		test('取得中にアンカーが消えて途中で終わっても、anchoring を戻す', async () => {
+			const anchor = movableElement([300]);
+			const { paginator, gaps, fetchRange } = setup([note('n100'), note('n002'), note('n001')], {
+				getNoteElement: (id) => id === 'n002' ? anchor : null,
+			});
+			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n100' })!;
+			fetchRange.mockImplementationOnce(async () => {
+				paginator.removeItem('n002'); // 取得中に sinceId のノートが消えた
+				return descendingNotes('n032', 30).toReversed();
+			});
+			await gaps.fill(gap, 'older');
+
+			expect(gaps.gaps.value).toHaveLength(0);
+			expect(gaps.anchoring.value).toBe(false);
+		});
 	});
 
 	describe('onNoteRemoved', () => {

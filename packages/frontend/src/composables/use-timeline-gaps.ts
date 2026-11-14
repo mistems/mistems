@@ -62,6 +62,7 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 }): {
 	gaps: Ref<TimelineGap[]>;
 	displayItems: ComputedRef<TimelineItem[]>;
+	anchoring: Readonly<Ref<boolean>>;
 	openGap: (init?: { sinceId?: string | null; untilId?: string | null }) => TimelineGap | null;
 	onQueueOverflow: (oldestRemainingQueuedId: string) => void;
 	bindUntil: (noteId: string) => void;
@@ -77,6 +78,13 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 
 	const gaps = ref<TimelineGap[]>([]);
 	let counter = 0;
+
+	/**
+	 * 位置を保つ補給 (手動) で、挿入してから位置を直し終えるまでの間 true。呼び出し側はこの間、一覧のアニメーションを止める。
+	 * 移動のアニメーションの transform が付いている間は getBoundingClientRect() が元の位置を返して位置を直す処理が早く止まり、
+	 * 入場のアニメーションが終わると画面外のノートの高さが変わる (content-visibility) ため、直し終えたあとに位置がずれる
+	 */
+	const anchoring = ref(false);
 
 	const displayItems = computed<TimelineItem[]>(() => {
 		const items = paginator.items.value;
@@ -310,25 +318,30 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 		// 取得分は必ず両境界の間にあるので、上限確定済でも「現在まで」でも sinceId ノートの直前に入れればよい
 		// NOTE: 通常の fetch と違い _shouldInsertAd_ は立てない (補給ノートに広告を混ぜない)
 		const anchor = keep != null ? captureAnchor(gap, keep) : null;
-		const inserted = paginator.insertItemsBefore(gap.sinceId, descending);
+		if (anchor != null) anchoring.value = true;
+		try {
+			const inserted = paginator.insertItemsBefore(gap.sinceId, descending);
 
-		if (inserted === 0 && !hasItem(gap.sinceId)) {
-			// fetch 中にアンカーが trim / 削除された
-			remove(gap);
-			return;
+			if (inserted === 0 && !hasItem(gap.sinceId)) {
+				// fetch 中にアンカーが trim / 削除された
+				remove(gap);
+				return;
+			}
+
+			if (page.fromOlder) {
+				// 古い側から埋めたので、残りは取得した最新より上
+				gap.sinceId = descending[0]!.id;
+			} else {
+				// 新しい側から埋めたので、残りは取得した最古より下
+				gap.untilId = descending[descending.length - 1]!.id;
+			}
+
+			// 残りがあればマーカーを残し、次の操作 (ボタン) を待つ。自動補給も 1 回につき 1 ページだけにする
+			if (page.complete || inserted === 0) remove(gap);
+			await restoreAnchor(anchor);
+		} finally {
+			anchoring.value = false;
 		}
-
-		if (page.fromOlder) {
-			// 古い側から埋めたので、残りは取得した最新より上
-			gap.sinceId = descending[0]!.id;
-		} else {
-			// 新しい側から埋めたので、残りは取得した最古より下
-			gap.untilId = descending[descending.length - 1]!.id;
-		}
-
-		// 残りがあればマーカーを残し、次の操作 (ボタン) を待つ。自動補給も 1 回につき 1 ページだけにする
-		if (page.complete || inserted === 0) remove(gap);
-		await restoreAnchor(anchor);
 	}
 
 	function tryAutoFill(): void {
@@ -394,6 +407,7 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 	return {
 		gaps,
 		displayItems,
+		anchoring,
 		openGap,
 		onQueueOverflow,
 		bindUntil,

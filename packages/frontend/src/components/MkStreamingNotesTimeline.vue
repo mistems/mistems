@@ -22,17 +22,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<component
 			:is="prefer.s.animation ? TransitionGroup : 'div'"
 			:class="$style.notes"
-			:enterActiveClass="$style.transition_x_enterActive"
-			:leaveActiveClass="$style.transition_x_leaveActive"
-			:enterFromClass="$style.transition_x_enterFrom"
-			:leaveToClass="$style.transition_x_leaveTo"
-			:moveClass="$style.transition_x_move"
+			v-bind="listTransitionClasses"
 			tag="div"
 		>
 			<template v-for="(item, i) in displayItems" :key="item.id">
 				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id" role="group" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching">
+					<!-- 取得中もボタンを見えない状態で残し、マーカーの高さを変えない (変わると、位置を保つべき下のノートが動く) -->
 					<MkLoading v-if="item.fetching" :inline="true" :class="$style.gapLoading"/>
-					<div v-else :class="$style.gapButtons">
+					<div :class="[$style.gapButtons, { [$style.gapButtonsHidden]: item.fetching }]">
 						<!-- 上のノートを動かさずに、マーカーの下へ続きを読み込む -->
 						<button class="_button" :class="$style.gapButton" :title="i18n.ts.fetchNotesBetweenBelowDescription" @click="timelineGaps.fill(item, 'newer')">
 							<i class="ti ti-arrow-bar-to-down"></i> {{ i18n.ts.fetchNotesBetweenBelow }}
@@ -69,7 +66,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup, onMounted, shallowRef, ref, markRaw } from 'vue';
+import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup, onMounted, shallowRef, ref, markRaw, useCssModule } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
@@ -254,6 +251,22 @@ const timelineGaps = useTimelineGaps(paginator, {
 	getNoteElement: (noteId) => rootEl.value?.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(noteId)}"]`) ?? null,
 });
 const displayItems = timelineGaps.displayItems;
+
+const $cssModule = useCssModule();
+
+/**
+ * 一覧 (TransitionGroup) のアニメーションのクラス。歯抜けマーカーの位置を保つ補給の間は外して、アニメーションを止める。
+ * - 移動のアニメーションの transform が付いている間は、位置を測っても元の位置が返るので、位置を直す処理が早く止まる
+ * - 入場のアニメーションの間だけ content-visibility: visible になるので、終わったあとに画面外のノートの高さが変わる
+ * どちらも、位置を直し終えたあとに、保つべきノートが動いてしまう
+ */
+const listTransitionClasses = computed(() => timelineGaps.anchoring.value ? {} : {
+	enterActiveClass: $cssModule.transition_x_enterActive,
+	leaveActiveClass: $cssModule.transition_x_leaveActive,
+	enterFromClass: $cssModule.transition_x_enterFrom,
+	leaveToClass: $cssModule.transition_x_leaveTo,
+	moveClass: $cssModule.transition_x_move,
+});
 
 // 歯抜けマーカーは実験的機能 (設定 > その他 > 実験的機能)。オフのときはマーカーを立てず、今までの動作にする
 const isGapFillEnabled = () => prefer.s['experimental.enableTimelineGapFill'];
@@ -664,6 +677,7 @@ defineExpose({
 }
 
 .gap {
+	position: relative;
 	padding: 8px;
 	background-size: auto auto;
 	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
@@ -676,9 +690,15 @@ defineExpose({
 	gap: 4px;
 }
 
+.gapButtonsHidden {
+	visibility: hidden;
+}
+
 .gapLoading {
-	display: block;
-	padding: 6px 0;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
 }
 
 .gapButton {
