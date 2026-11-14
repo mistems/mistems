@@ -38,7 +38,7 @@ function setup(initialItems: Note[], options: { canAutoFill?: () => boolean; get
 	return { paginator, gaps, fetchRange };
 }
 
-// 画面内に見えているマーカー要素のスタブ (isGapVisible が true になる矩形を返す)
+// 画面内に見えているマーカー要素のスタブ (画面内の矩形を返す)
 function visibleElement(): HTMLElement {
 	return { getBoundingClientRect: () => ({ top: 10, bottom: 50 }) } as unknown as HTMLElement;
 }
@@ -383,54 +383,28 @@ describe('useTimelineGaps', () => {
 		});
 	});
 
-	describe('fill: 自動継続', () => {
-		test('マーカーが見えていて自動補給可なら続き、上限回数に達したら手動待ちにする', async () => {
-			let canAutoFill = true;
+	describe('fill: 1 回につき 1 ページ', () => {
+		test('残りがあってもマーカーが見えていても続けて取得せず、押すたびに 1 ページずつ進む', async () => {
 			const { gaps, fetchRange } = setup([note('n500'), note('n002'), note('n001')], {
-				canAutoFill: () => canAutoFill,
+				canAutoFill: () => true,
 				getGapElement: visibleElement,
 			});
 			// 常に limit ちょうど返す (区間が長い)
 			fetchRange.mockImplementation(async ({ untilId }) => descendingNotes('n' + String(parseInt(untilId!.slice(1), 10) - 1).padStart(3, '0'), 30));
 
-			// canAutoFill は「生成直後」の自動補給には効くので、まず tryAutoFill を抑えて手動クリックから始める
-			canAutoFill = false;
+			// 生成直後の自動補給で 1 ページ
 			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n500' })!;
-			expect(fetchRange).toHaveBeenCalledTimes(0);
-
-			canAutoFill = true;
-			await gaps.fill(gap); // 手動 1 回
-			// 自動継続は非同期 (nextTick 後) に走るので、落ち着くまで待つ
-			for (let i = 0; i < 10; i++) await nextTick();
-			await new Promise(resolve => setTimeout(resolve, 0));
-
-			// 手動 1 回 + 自動継続 3 回 (MAX_AUTO_CONTINUE) で止まる
-			expect(fetchRange).toHaveBeenCalledTimes(4);
-			expect(gaps.gaps.value).toHaveLength(1);
-			expect(gap.fetching).toBe(false);
-
-			// 手動クリックで回数がリセットされ、再び 1 + 3 回進む
-			await gaps.fill(gap);
-			for (let i = 0; i < 10; i++) await nextTick();
-			await new Promise(resolve => setTimeout(resolve, 0));
-			expect(fetchRange).toHaveBeenCalledTimes(8);
-		});
-
-		test('自動補給不可 (非アクティブ / 先頭以外) になったら、見えていても続けない', async () => {
-			let canAutoFill = true;
-			const { gaps, fetchRange } = setup([note('n500'), note('n002'), note('n001')], {
-				canAutoFill: () => canAutoFill,
-				getGapElement: visibleElement,
-			});
-			fetchRange.mockImplementation(async ({ untilId }) => {
-				canAutoFill = false; // 取得中にタブが裏に回った
-				return descendingNotes('n' + String(parseInt(untilId!.slice(1), 10) - 1).padStart(3, '0'), 30);
-			});
-			const gap = gaps.openGap({ sinceId: 'n002', untilId: 'n500' })!;
-			await gaps.fill(gap);
 			for (let i = 0; i < 10; i++) await nextTick();
 			await new Promise(resolve => setTimeout(resolve, 0));
 			expect(fetchRange).toHaveBeenCalledTimes(1);
+			expect(gaps.gaps.value).toHaveLength(1);
+			expect(gap.fetching).toBe(false);
+
+			// 手動で 1 回押すと 1 ページだけ進む
+			await gaps.fill(gap);
+			for (let i = 0; i < 10; i++) await nextTick();
+			await new Promise(resolve => setTimeout(resolve, 0));
+			expect(fetchRange).toHaveBeenCalledTimes(2);
 			expect(gaps.gaps.value).toHaveLength(1);
 		});
 	});
@@ -473,7 +447,7 @@ describe('useTimelineGaps', () => {
 	});
 
 	test('isTimelineGap はマーカーとノートを判別する', () => {
-		const gap: TimelineGap = { id: 'gap:x', createdAt: '', _type: 'gap', sinceId: 'a', untilId: null, fetching: false, autoFillPending: false, autoContinueCount: 0 };
+		const gap: TimelineGap = { id: 'gap:x', createdAt: '', _type: 'gap', sinceId: 'a', untilId: null, fetching: false, autoFillPending: false };
 		expect(isTimelineGap(gap)).toBe(true);
 		expect(isTimelineGap(note('n001'))).toBe(false);
 	});

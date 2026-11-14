@@ -29,8 +29,6 @@ export type TimelineGap = {
 	fetching: boolean;
 	/** 生成直後の自動補給がまだ実行されていない */
 	autoFillPending: boolean;
-	/** 自動補給の連続回数 (上限に達したら手動クリック待ちにする)。手動クリックでリセット */
-	autoContinueCount: number;
 };
 
 export type TimelineItem = (Misskey.entities.Note & MisskeyEntity) | TimelineGap;
@@ -49,20 +47,14 @@ export function isTimelineGap(item: TimelineItem): item is TimelineGap {
 /** 1 回の補給で取得する件数。通常の fetchOlder / fetchNewer と同じ */
 const GAP_FETCH_LIMIT = SECOND_FETCH_LIMIT;
 
-/**
- * 自動補給 (ユーザー操作なし) の連続回数の上限。
- * 大規模な切断の復旧直後に全クライアントが延々と取得し続けるのを防ぐ。上限に達したらマーカーを残して手動クリック待ちにする
- */
-const MAX_AUTO_CONTINUE = 3;
-
 /** 手動補給のあと、位置を保つ要素を直し続ける最長のフレーム数と、位置が動かなければ止めるフレーム数 */
 const ANCHOR_MAX_FRAMES = 60;
 const ANCHOR_STABLE_FRAMES = 5;
 
 export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, options: {
-	/** 自動補給 (生成直後 / 自動継続) を今すぐ実行してよいか (先頭表示中かつ非アクティブでない、など) */
+	/** 自動補給 (マーカーの生成直後) を今すぐ実行してよいか (先頭表示中かつ非アクティブでない、など) */
 	canAutoFill: () => boolean;
-	/** マーカーの DOM 要素 (補給後に見えていれば続けるための判定用) */
+	/** マーカーの DOM 要素 (上にノートが無いとき、手動補給で位置を保つ対象にする) */
 	getGapElement: (gapId: string) => HTMLElement | null;
 	getScrollContainer: () => HTMLElement | null;
 	/** ノートの DOM 要素 (手動補給のあと、位置を保つノートを探すのに使う) */
@@ -174,7 +166,6 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 			untilId,
 			fetching: false,
 			autoFillPending: true,
-			autoContinueCount: 0,
 		});
 		gaps.value.push(gap);
 		tryAutoFill();
@@ -198,17 +189,6 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 				gap.untilId = noteId;
 			}
 		}
-	}
-
-	function isGapVisible(gap: TimelineGap): boolean {
-		const el = options.getGapElement(gap.id);
-		if (el == null) return false;
-		const rect = el.getBoundingClientRect();
-		const container = options.getScrollContainer();
-		const bounds = container != null
-			? container.getBoundingClientRect()
-			: { top: 0, bottom: window.innerHeight };
-		return rect.bottom > bounds.top && rect.top < bounds.bottom;
 	}
 
 	/**
@@ -269,11 +249,10 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 	}
 
 	/**
-	 * 区間を 1 ページ分補給する。手動クリック用 (自動継続の回数をリセットする)。
+	 * 区間を 1 ページ分補給する。手動クリック用。
 	 * keep を指定すると、その側のノートが画面上で動かないようにする
 	 */
 	async function fill(gap: TimelineGap, keep?: TimelineGapKeep): Promise<void> {
-		gap.autoContinueCount = 0;
 		await fillPage(gap, keep);
 	}
 
@@ -347,21 +326,9 @@ export function useTimelineGaps(paginator: IPaginator<Misskey.entities.Note>, op
 			gap.untilId = descending[descending.length - 1]!.id;
 		}
 
-		if (page.complete || inserted === 0) {
-			remove(gap);
-			await restoreAnchor(anchor);
-			return;
-		}
+		// 残りがあればマーカーを残し、次の操作 (ボタン) を待つ。自動補給も 1 回につき 1 ページだけにする
+		if (page.complete || inserted === 0) remove(gap);
 		await restoreAnchor(anchor);
-
-		// 残りがあり、マーカーがまだ画面内に見えていて、自動補給してよい状況なら続ける
-		// (v-appear は交差の変化でしか発火しないため、自前で判定する)
-		await nextTick();
-		if (findGap(gap.id) == null) return;
-		if (!isGapVisible(gap) || !options.canAutoFill()) return;
-		if (gap.autoContinueCount >= MAX_AUTO_CONTINUE) return; // 上限に達したら手動クリック待ち
-		gap.autoContinueCount++;
-		void fillPage(gap, keep);
 	}
 
 	function tryAutoFill(): void {
