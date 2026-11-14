@@ -52,6 +52,7 @@ export class AnnouncementEntityService {
 			imageUrl: announcement.imageUrl,
 			icon: announcement.icon,
 			display: announcement.display,
+			groupId: announcement.groupId ?? null,
 			forYou: announcement.userId === me?.id,
 			needConfirmationToRead: announcement.needConfirmationToRead,
 			silence: announcement.silence,
