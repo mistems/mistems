@@ -113,7 +113,13 @@ export class FileServerService {
 
 	@bindThis
 	private async errorHandler(request: FastifyRequest<{ Params?: { [x: string]: any }; Querystring?: { [x: string]: any }; }>, reply: FastifyReply, err?: any) {
-		this.logger.error(`${err}`);
+		// /files/:key (drive) と /proxy/:url* (画像プロキシ) の両方で共有される
+		// ハンドラのため、エラー内容だけでは発生元のリクエストを特定できない。
+		// method + ルートパターンを前置してどちらのエンドポイントの失敗かを
+		// 追えるようにする。request.url (実際のパス/クエリ) は /proxy/:url*?url=...
+		// にプロキシ対象の生 URL (署名付き URL ならトークンを含みうる) がそのまま
+		// 乗るため使わない。http-access-log.ts の既存パターンに倣う。
+		this.logger.error(`${request.method} ${request.routeOptions.url ?? '?'}: ${err}`);
 
 		reply.header('Cache-Control', 'max-age=300');
 
