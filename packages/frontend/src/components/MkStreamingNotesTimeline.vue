@@ -657,15 +657,15 @@ defineExpose({
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
-.ad, .gap {
+.ad {
 	padding: 8px;
 	background-size: auto auto;
 	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
-}
 
-.ad:empty {
-	display: none;
+	&:empty {
+		display: none;
+	}
 }
 
 .more {
@@ -679,8 +679,6 @@ defineExpose({
 .gap {
 	position: relative;
 	padding: 8px;
-	background-size: auto auto;
-	background-image: repeating-linear-gradient(45deg, transparent, transparent 8px, var(--MI_THEME-bg) 8px, var(--MI_THEME-bg) 14px);
 	border-bottom: solid 0.5px var(--MI_THEME-divider);
 }
 
@@ -705,7 +703,8 @@ defineExpose({
 	display: block;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 1px 16px;
+	padding: 0 16px;
+	border: solid 1px var(--MI_THEME-divider);
 	border-radius: var(--MI-radius);
 	background: var(--MI_THEME-panel);
 	font-size: 90%;
