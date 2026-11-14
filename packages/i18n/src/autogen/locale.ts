@@ -10262,6 +10262,34 @@ export interface Locale extends ILocale {
          */
         "chat": string;
     };
+    "_rssFetchError": {
+        /**
+         * URL の形式が正しくありません
+         */
+        "invalidUrl": string;
+        /**
+         * RSS を取得できませんでした。RSS ではないページか、サイトに接続できない可能性があります
+         */
+        "failed": string;
+        /**
+         * 少し前に取得に失敗した URL です。10 分ほどたってから、もう一度試してください
+         */
+        "recentlyFailed": string;
+        /**
+         * サーバーが混み合っています。しばらくしてから、もう一度試してください
+         */
+        "unavailable": string;
+    };
+    "_rssPreview": {
+        /**
+         * {n} 件
+         */
+        "itemsCount": ParameterizedString<"n">;
+        /**
+         * 入力した URL から取れる内容を、下のプレビューで確かめてから保存できます
+         */
+        "checkBeforeSave": string;
+    };
     "_widgetOptions": {
         /**
          * ヘッダーを表示
@@ -10374,6 +10402,14 @@ export interface Locale extends ILocale {
              * 更新間隔(秒)
              */
             "refreshIntervalSec": string;
+            /**
+             * 更新間隔(分)
+             */
+            "refreshIntervalMin": string;
+            /**
+             * {min}〜{max} 分の範囲で入力してください
+             */
+            "refreshIntervalMinDescription": ParameterizedString<"min" | "max">;
             /**
              * 最大表示件数
              */
