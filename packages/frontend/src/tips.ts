@@ -13,6 +13,7 @@ export const TIPS = [
 	'userLists',
 	'postForm',
 	'deck',
+	'timemachine',
 	'tl.home',
 	'tl.local',
 	'tl.social',
