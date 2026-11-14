@@ -15,6 +15,7 @@ import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { RelationshipJobData } from '@/queue/types.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
+import type { IActivity } from '@/core/activitypub/type.js';
 
 @Injectable()
 export class UserSuspendService {
@@ -86,28 +87,7 @@ export class UserSuspendService {
 			// 知り得る全SharedInboxにDelete配信
 			const content = this.apRendererService.addContext(this.apRendererService.renderDelete(this.userEntityService.genLocalUserUri(user.id), user));
 
-			const queue: string[] = [];
-
-			const followings = await this.followingsRepository.find({
-				where: [
-					{ followerSharedInbox: Not(IsNull()) },
-					{ followeeSharedInbox: Not(IsNull()) },
-				],
-				select: {
-					followerSharedInbox: true,
-					followeeSharedInbox: true,
-				},
-			});
-
-			const inboxes = followings.map(x => x.followerSharedInbox ?? x.followeeSharedInbox);
-
-			for (const inbox of inboxes) {
-				if (inbox != null && !queue.includes(inbox)) queue.push(inbox);
-			}
-
-			for (const inbox of queue) {
-				this.queueService.deliver(user, content, inbox, true);
-			}
+			await this.deliverToAllKnownSharedInboxes(user, content);
 		}
 	}
 
@@ -119,29 +99,26 @@ export class UserSuspendService {
 			// 知り得る全SharedInboxにUndo Delete配信
 			const content = this.apRendererService.addContext(this.apRendererService.renderUndo(this.apRendererService.renderDelete(this.userEntityService.genLocalUserUri(user.id), user), user));
 
-			const queue: string[] = [];
-
-			const followings = await this.followingsRepository.find({
-				where: [
-					{ followerSharedInbox: Not(IsNull()) },
-					{ followeeSharedInbox: Not(IsNull()) },
-				],
-				select: {
-					followerSharedInbox: true,
-					followeeSharedInbox: true,
-				},
-			});
-
-			const inboxes = followings.map(x => x.followerSharedInbox ?? x.followeeSharedInbox);
-
-			for (const inbox of inboxes) {
-				if (inbox != null && !queue.includes(inbox)) queue.push(inbox);
-			}
-
-			for (const inbox of queue) {
-				this.queueService.deliver(user as any, content, inbox, true);
-			}
+			await this.deliverToAllKnownSharedInboxes(user, content);
 		}
+	}
+
+	/**
+	 * 知り得る全 SharedInbox へ配送する
+	 *
+	 * following テーブルの行をすべて読み込むと、リモートとのフォロー関係の数だけメモリを使う。
+	 * 重複の除去は DB に任せ、SharedInbox の数 (= 知っているサーバーの数) だけを読み込む。
+	 */
+	@bindThis
+	private async deliverToAllKnownSharedInboxes(user: { id: MiUser['id'] }, content: IActivity): Promise<void> {
+		const rows = await this.followingsRepository.createQueryBuilder('following')
+			.select('DISTINCT COALESCE(following.followerSharedInbox, following.followeeSharedInbox)', 'inbox')
+			.where('following.followerSharedInbox IS NOT NULL')
+			.orWhere('following.followeeSharedInbox IS NOT NULL')
+			.getRawMany<{ inbox: string }>();
+
+		const inboxes = new Map(rows.map(row => [row.inbox, true]));
+		await this.queueService.deliverMany({ id: user.id }, content, inboxes);
 	}
 
 	@bindThis
