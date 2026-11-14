@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkNote from '@/components/MkNote.vue';
 import MkNoteDetailed from '@/components/MkNoteDetailed.vue';
@@ -24,13 +24,16 @@ const props = defineProps<{
 
 const note = ref<Misskey.entities.Note | null>(null);
 
-onMounted(() => {
-	if (props.block.note == null) return;
-	misskeyApi('notes/show', { noteId: props.block.note })
+watch(() => props.block.note, (noteId) => {
+	if (noteId == null) {
+		note.value = null;
+		return;
+	}
+	misskeyApi('notes/show', { noteId })
 		.then(result => {
 			note.value = result;
 		});
-});
+}, { immediate: true, flush: 'post' });
 </script>
 
 <style lang="scss" module>
