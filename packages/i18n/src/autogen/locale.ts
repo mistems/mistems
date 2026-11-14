@@ -2377,7 +2377,7 @@ export interface Locale extends ILocale {
      */
     "fetchNotesBetween": string;
     /**
-     * 下に読み込む
+     * 上の続きからもっと
      */
     "fetchNotesBetweenBelow": string;
     /**
@@ -2385,7 +2385,7 @@ export interface Locale extends ILocale {
      */
     "fetchNotesBetweenBelowDescription": string;
     /**
-     * 上に読み込む
+     * 下の続きからもっと
      */
     "fetchNotesBetweenAbove": string;
     /**
