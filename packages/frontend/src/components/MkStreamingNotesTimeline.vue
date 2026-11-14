@@ -102,11 +102,13 @@ const props = withDefaults(defineProps<{
 	withReplies?: boolean;
 	withSensitive?: boolean;
 	onlyFiles?: boolean;
+	withCollectedChannelNotes?: boolean;
 }>(), {
 	withRenotes: true,
 	withReplies: false,
 	withSensitive: true,
 	onlyFiles: false,
+	withCollectedChannelNotes: true,
 	sound: false,
 	customSound: null,
 });
@@ -128,6 +130,7 @@ if (props.src === 'antenna') {
 	paginator = markRaw(new Paginator('notes/timeline', {
 		computedParams: computed(() => ({
 			withRenotes: props.withRenotes,
+			withCollectedChannelNotes: props.withCollectedChannelNotes,
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
@@ -146,6 +149,7 @@ if (props.src === 'antenna') {
 		computedParams: computed(() => ({
 			withRenotes: props.withRenotes,
 			withReplies: props.withReplies,
+			withCollectedChannelNotes: props.withCollectedChannelNotes,
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
@@ -431,6 +435,7 @@ function connectChannel() {
 		connections.homeTimeline = stream.useChannel('homeTimeline', {
 			withRenotes: props.withRenotes,
 			withFiles: props.onlyFiles ? true : undefined,
+			withCollectedChannelNotes: props.withCollectedChannelNotes,
 		});
 		connections.main = stream.useChannel('main');
 		connections.homeTimeline.on('note', prepend);
@@ -446,6 +451,7 @@ function connectChannel() {
 			withRenotes: props.withRenotes,
 			withReplies: props.withReplies,
 			withFiles: props.onlyFiles ? true : undefined,
+			withCollectedChannelNotes: props.withCollectedChannelNotes,
 		});
 		connections.hybridTimeline.on('note', prepend);
 	} else if (props.src === 'global') {
@@ -501,7 +507,7 @@ if (store.s.realtimeMode) {
 	connectChannel();
 }
 
-watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes], () => {
+watch(() => [props.list, props.antenna, props.channel, props.role, props.withRenotes, props.withCollectedChannelNotes], () => {
 	if (store.s.realtimeMode) {
 		disconnectChannel();
 		connectChannel();

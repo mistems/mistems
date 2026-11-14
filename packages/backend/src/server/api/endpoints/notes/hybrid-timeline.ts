@@ -68,6 +68,7 @@ export const paramDef = {
 		withFiles: { type: 'boolean', default: false },
 		withRenotes: { type: 'boolean', default: true },
 		withReplies: { type: 'boolean', default: false },
+		withCollectedChannelNotes: { type: 'boolean', default: true },
 	},
 	required: [],
 } as const;
@@ -113,6 +114,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					includeLocalRenotes: ps.includeLocalRenotes,
 					withFiles: ps.withFiles,
 					withReplies: ps.withReplies,
+					withCollectedChannelNotes: ps.withCollectedChannelNotes,
 				}, me);
 
 				process.nextTick(() => {
@@ -145,8 +147,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			const [
 				followings,
+				followingChannels,
 			] = await Promise.all([
 				this.cacheService.userFollowingsCache.fetch(me.id),
+				this.channelFollowingService.userFollowingChannelsCache.fetch(me.id),
 			]);
 
 			const redisTimeline = await this.fanoutTimelineEndpointService.timeline({
@@ -160,6 +164,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				alwaysIncludeMyNotes: true,
 				excludePureRenotes: !ps.withRenotes,
 				noteFilter: note => {
+					// チャンネルに収蔵されたリモートのノート (投稿者をフォローしているので入っている) を出さない
+					if (!ps.withCollectedChannelNotes && note.channelId != null && note.userHost != null && !followingChannels.has(note.channelId)) return false;
+
 					if (note.reply && note.reply.visibility === 'followers') {
 						if (!Object.hasOwn(followings, note.reply.userId) && note.reply.userId !== me.id) return false;
 					}
@@ -175,6 +182,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					includeLocalRenotes: ps.includeLocalRenotes,
 					withFiles: ps.withFiles,
 					withReplies: ps.withReplies,
+					withCollectedChannelNotes: ps.withCollectedChannelNotes,
 				}, me),
 			});
 
@@ -195,6 +203,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		includeLocalRenotes: boolean,
 		withFiles: boolean,
 		withReplies: boolean,
+		withCollectedChannelNotes: boolean,
 	}, me: MiLocalUser) {
 		const followees = await this.userFollowingService.getFollowees(me.id);
 		const followeeIds = followees.map(f => f.followeeId);
@@ -251,14 +260,25 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.leftJoinAndSelect('reply.user', 'replyUser')
 			.leftJoinAndSelect('renote.user', 'renoteUser');
 
-		if (followingChannelIds.length > 0) {
-			query.andWhere(new Brackets(qb => {
-				qb.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
-				qb.orWhere('note.channelId IS NULL');
-			}));
-		} else {
-			query.andWhere('note.channelId IS NULL');
-		}
+		const collectedFolloweeIds = ps.withCollectedChannelNotes ? followees.map(f => f.followeeId) : [];
+		query.andWhere(new Brackets(qb => {
+			qb.where('note.channelId IS NULL');
+			if (followingChannelIds.length > 0) {
+				qb.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
+			}
+			// チャンネルに収蔵されたリモートのノートのうち、投稿者をフォローしているもの (ミュートしているチャンネルは除く)
+			if (collectedFolloweeIds.length > 0) {
+				qb.orWhere(new Brackets(qb2 => {
+					qb2
+						.andWhere('note.channelId IS NOT NULL')
+						.andWhere('note.userHost IS NOT NULL')
+						.andWhere('note.userId IN (:...collectedFolloweeIds)', { collectedFolloweeIds });
+					if (mutingChannelIds.length > 0) {
+						qb2.andWhere('note.channelId NOT IN (:...collectedMutingChannelIds)', { collectedMutingChannelIds: mutingChannelIds });
+					}
+				}));
+			}
+		}));
 
 		if (mutingChannelIds.length > 0) {
 			query.andWhere(new Brackets(qb => {

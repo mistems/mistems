@@ -2033,6 +2033,18 @@ export interface Locale extends ILocale {
      */
     "attachAsFileQuestion": string;
     /**
+     * テキストファイルとして添付
+     */
+    "attachAsFileOk": string;
+    /**
+     * そのまま貼り付ける
+     */
+    "attachAsFileCancel": string;
+    /**
+     * CWと本文を入れ替え
+     */
+    "swapCwAndText": string;
+    /**
      * メッセージに添付できるファイルはひとつです
      */
     "onlyOneFileCanBeAttached": string;
@@ -2364,6 +2376,14 @@ export interface Locale extends ILocale {
      * タイムライン上部に投稿フォームを表示する(チャンネル)
      */
     "showFixedPostFormInChannel": string;
+    /**
+     * チャンネルページでローカルタイムラインへの投稿ボタンを表示する
+     */
+    "showLocalTimelinePostButtonInChannel": string;
+    /**
+     * オフの場合、チャンネルページではチャンネル投稿ボタンのみを表示します。
+     */
+    "showLocalTimelinePostButtonInChannelDescription": string;
     /**
      * フォローする際、デフォルトで返信をTLに含むようにする
      */
@@ -4477,6 +4497,10 @@ export interface Locale extends ILocale {
      */
     "sensitiveWordsDescription2": string;
     /**
+     * センシティブワード（{words}）が含まれているため、公開範囲がホームになります。
+     */
+    "sensitiveWordsContained": ParameterizedString<"words">;
+    /**
      * 禁止ワード
      */
     "prohibitedWords": string;
@@ -5220,6 +5244,10 @@ export interface Locale extends ILocale {
      * センシティブなファイルを含むノートを表示
      */
     "withSensitive": string;
+    /**
+     * チャンネルに収蔵されたノートを表示
+     */
+    "withCollectedChannelNotes": string;
     /**
      * {name}のセンシティブなファイルを含む投稿
      */
@@ -9025,6 +9053,60 @@ export interface Locale extends ILocale {
          * チャンネル外へのリノートと引用リノートを許可する
          */
         "allowRenoteToExternal": string;
+        /**
+         * 連合するチャンネルでは、チャンネル外へのリノートを禁止できません。禁止するには、連合をやめてください。
+         */
+        "allowRenoteToExternalLockedByFederation": string;
+        /**
+         * ノートの連合
+         */
+        "federationPolicy": string;
+        /**
+         * 「連合する」にすると、このチャンネルのノートを公開ノートとしてリモートサーバーに配信します。リモートサーバーの公開タイムラインにも表示されます。このサーバー内での見え方 (タイムラインに載らない) は変わりません。連合するあいだは、チャンネル外へのリノートが常に許可されます。
+         */
+        "federationPolicyDescription": string;
+        /**
+         * 今後このチャンネルに投稿されるノートはサーバーの外に配信され、リモートサーバーの公開タイムラインにも表示されます。過去のノートは連合されません。よろしいですか？
+         */
+        "federationPolicyEnableConfirm": string;
+        /**
+         * 今後このチャンネルに投稿されるノートは連合されなくなります。ただし、すでにリモートサーバーへ配信されたノートは取り消せません。よろしいですか？
+         */
+        "federationPolicyDisableConfirm": string;
+        "_federationPolicy": {
+            /**
+             * 連合しない
+             */
+            "none": string;
+            /**
+             * 連合する
+             */
+            "public": string;
+        };
+        /**
+         * チャンネルのハッシュタグ
+         */
+        "federationHashtag": string;
+        /**
+         * 連合するノートに付けるハッシュタグです。本文の末尾に書き添え、ハッシュタグのページからも辿れます。リモートサーバーのユーザーはこのハッシュタグでミュートできます。また、このハッシュタグを付けたリモートのユーザーの公開ノートと、ほかのサーバーの同じハッシュタグの連合チャンネルのノートは、このチャンネルに入ります (このサーバーに届いたノートに限ります)。「連合チャンネル_」を含め、文字・数字・下線だけで128文字以内にしてください。
+         */
+        "federationHashtagDescription": string;
+        /**
+         * 保存すると、チャンネル名から自動で決まります。
+         */
+        "federationHashtagAutoAssigned": string;
+        /**
+         * ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？
+         */
+        "federationHashtagChangeConfirm": string;
+        /**
+         * このハッシュタグのチャンネルを作る
+         */
+        "createFromFederationHashtag": string;
+        /**
+         * ほかのサーバーの連合チャンネルのハッシュタグです。同じハッシュタグで連合するチャンネルを作ると、このハッシュタグのノートがそのチャンネルに入ります。
+         */
+        "createFromFederationHashtagDescription": string;
     };
     "_menuDisplay": {
         /**
@@ -10455,6 +10537,18 @@ export interface Locale extends ILocale {
          * 指定したユーザーのみに公開
          */
         "specifiedDescription": string;
+        /**
+         * チャンネル
+         */
+        "channel": string;
+        /**
+         * 選択したチャンネルに公開
+         */
+        "channelDescription": string;
+        /**
+         * 選択中:{name}
+         */
+        "channelSelected": ParameterizedString<"name">;
         /**
          * 連合なし
          */
