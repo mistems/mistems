@@ -1,0 +1,10 @@
+[Unit]
+Description=Misskey DB server stats purge (daily)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=misskey-db-stats-purge.service
+
+[Install]
+WantedBy=timers.target

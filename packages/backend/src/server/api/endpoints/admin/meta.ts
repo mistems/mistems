@@ -379,6 +379,10 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			enableDbServerStats: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
 			enableIdenticonGeneration: {
 				type: 'boolean',
 				optional: false, nullable: false,
@@ -770,6 +774,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				enableChartsForFederatedInstances: instance.enableChartsForFederatedInstances,
 				enableStatsForFederatedInstances: instance.enableStatsForFederatedInstances,
 				enableServerMachineStats: instance.enableServerMachineStats,
+				enableDbServerStats: instance.enableDbServerStats,
 				enableIdenticonGeneration: instance.enableIdenticonGeneration,
 				bannedEmailDomains: instance.bannedEmailDomains,
 				policies: { ...DEFAULT_POLICIES, ...instance.policies },
