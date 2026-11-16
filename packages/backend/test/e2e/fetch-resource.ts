@@ -348,6 +348,42 @@ describe('Webリソース', () => {
 			});
 			assert.strictEqual(res.body.type, 'OrderedCollection');
 		});
+
+		describe('Renote の元のノートが削除されたとき', () => {
+			let carol: misskey.entities.SignupResponse;
+			let dave: misskey.entities.SignupResponse;
+			let davesRenote: misskey.entities.Note;
+			let davesPost: misskey.entities.Note;
+
+			beforeAll(async () => {
+				carol = await signup({ username: 'carol' });
+				dave = await signup({ username: 'dave' });
+				davesPost = await post(dave, { text: 'dave の投稿' });
+				const carolsPost = await post(carol, { text: 'あとで消す' });
+				davesRenote = await post(dave, { renoteId: carolsPost.id });
+				// ノートを削除しても Renote は連鎖して消えない
+				const res = await api('notes/delete', { noteId: carolsPost.id }, carol);
+				assert.strictEqual(res.status, 204);
+			});
+
+			test('outbox のページは 200 を返し、その Renote を含まない。', async () => {
+				const res = await ok({
+					path: `${path(dave.id)}?page=true`,
+					accept: ONLY_AP,
+					type: AP,
+				});
+				assert.strictEqual(res.body.type, 'OrderedCollectionPage');
+				const items = res.body.orderedItems as { type: string, object: unknown, id: string }[];
+				assert.ok(items.every(item => item.type !== 'Announce'));
+				assert.ok(items.every(item => !item.id.includes(davesRenote.id)));
+				assert.ok(items.some(item => item.type === 'Create' && item.id.includes(davesPost.id)));
+			});
+
+			test('/notes/:id/activity は 404 を返す。', async () => await notFound({
+				path: `/notes/${davesRenote.id}/activity`,
+				accept: ONLY_AP,
+			}));
+		});
 	});
 
 	describe('/notes/:id', () => {
