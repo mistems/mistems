@@ -22,7 +22,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<component
 			:is="prefer.s.animation ? TransitionGroup : 'div'"
 			:class="$style.notes"
-			v-bind="listTransitionClasses"
+			:enterActiveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_enterActive"
+			:leaveActiveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_leaveActive"
+			:enterFromClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_enterFrom"
+			:leaveToClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_leaveTo"
+			:moveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_move"
 			tag="div"
 		>
 			<template v-for="(item, i) in displayItems" :key="item.id">
@@ -66,7 +70,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup, onMounted, shallowRef, ref, markRaw, useCssModule } from 'vue';
+import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup, onMounted, shallowRef, ref, markRaw } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
@@ -252,21 +256,15 @@ const timelineGaps = useTimelineGaps(paginator, {
 });
 const displayItems = timelineGaps.displayItems;
 
-const $cssModule = useCssModule();
-
-/**
- * 一覧 (TransitionGroup) のアニメーションのクラス。歯抜けマーカーの位置を保つ補給の間は外して、アニメーションを止める。
+/*
+ * 一覧 (TransitionGroup) のアニメーションのクラスは、歯抜けマーカーの位置を保つ補給の間 (timelineGaps.anchoring) だけ外して、アニメーションを止める (テンプレート側)。
  * - 移動のアニメーションの transform が付いている間は、位置を測っても元の位置が返るので、位置を直す処理が早く止まる
  * - 入場のアニメーションの間だけ content-visibility: visible になるので、終わったあとに画面外のノートの高さが変わる
  * どちらも、位置を直し終えたあとに、保つべきノートが動いてしまう
+ *
+ * NOTE: クラス名はテンプレートで $style から引くこと。useCssModule() で script から引くと、本番ビルドでは
+ * rollup-plugin-unwind-css-module-class-name が __cssModules を外すので undefined になり、普段のアニメーションまで消える
  */
-const listTransitionClasses = computed(() => timelineGaps.anchoring.value ? {} : {
-	enterActiveClass: $cssModule.transition_x_enterActive,
-	leaveActiveClass: $cssModule.transition_x_leaveActive,
-	enterFromClass: $cssModule.transition_x_enterFrom,
-	leaveToClass: $cssModule.transition_x_leaveTo,
-	moveClass: $cssModule.transition_x_move,
-});
 
 // 歯抜けマーカーは実験的機能 (設定 > その他 > 実験的機能)。オフのときはマーカーを立てず、今までの動作にする
 const isGapFillEnabled = () => prefer.s['experimental.enableTimelineGapFill'];
