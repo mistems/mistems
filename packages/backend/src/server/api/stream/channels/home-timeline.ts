@@ -21,6 +21,7 @@ export class HomeTimelineChannel extends Channel {
 	public static kind = 'read:account';
 	private withRenotes: boolean;
 	private withFiles: boolean;
+	private withCollectedChannelNotes: boolean;
 
 	constructor(
 		@Inject(REQUEST)
@@ -37,6 +38,7 @@ export class HomeTimelineChannel extends Channel {
 	public async init(params: JsonObject) {
 		this.withRenotes = !!(params.withRenotes ?? true);
 		this.withFiles = !!(params.withFiles ?? false);
+		this.withCollectedChannelNotes = !!(params.withCollectedChannelNotes ?? true);
 
 		this.subscriber.on('notesStream', this.onNote);
 	}
@@ -50,7 +52,8 @@ export class HomeTimelineChannel extends Channel {
 		if (note.channelId) {
 			// そのチャンネルをフォローしていない
 			if (!this.followingChannels.has(note.channelId)) {
-				return;
+				// チャンネルに収蔵されたリモートのノートは、投稿者をフォローしていれば流す
+				if (!(this.withCollectedChannelNotes && note.user.host != null && Object.hasOwn(this.following, note.userId))) return;
 			}
 		} else {
 			// その投稿のユーザーをフォローしていなかったら弾く

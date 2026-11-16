@@ -23,8 +23,11 @@ import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
-import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, MiMeta } from '@/models/_.js';
+import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, ChannelsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
+import { sanitizeChannelFederationHashtagPart } from '@/misc/channel-federation-hashtag.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
+import { extractHashtags } from '@/misc/extract-hashtags.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { IdService } from '@/core/IdService.js';
 import { UtilityService } from '@/core/UtilityService.js';
@@ -57,6 +60,9 @@ export class ApRendererService {
 
 		@Inject(DI.pollsRepository)
 		private pollsRepository: PollsRepository,
+
+		@Inject(DI.channelsRepository)
+		private channelsRepository: ChannelsRepository,
 
 		private customEmojiService: CustomEmojiService,
 		private userEntityService: UserEntityService,
@@ -426,7 +432,36 @@ export class ApRendererService {
 
 		const files = await getPromisedFiles(note.fileIds);
 
-		const text = note.text ?? '';
+		// チャンネルノートには、リモートの読者向けに本文へ付記する。
+		// - 連合するチャンネル (ハッシュタグがある): ハッシュタグだけを書く。ハッシュタグは note.tags にも
+		//   入っているので AP の tag にも載り、相手のサーバーではハッシュタグのページから辿れる。
+		//   ワードミュートのアンカーもこのハッシュタグが兼ねる
+		// - それ以外: 従来どおり「From: 「チャンネル名」 URL」を書く。この固定 URL がワードミュートの
+		//   アンカーを兼ねるので、チャンネル行が取得できなくても URL は落とさない
+		// content だけでなく _misskey_content / source (Misskey 系の受信側が優先する原文) にも含める。
+		let text = note.text ?? '';
+		if (note.channelId != null) {
+			const channel = note.channel ?? await this.channelsRepository.findOneBy({ id: note.channelId });
+			// 保存時に文字・数字・下線だけに限っているが、念のためここでも使えない文字を落とす。
+			const safeHashtag = channel?.federationHashtag != null
+				? sanitizeChannelFederationHashtagPart(channel.federationHashtag)
+				: '';
+			if (safeHashtag !== '') {
+				const hashtag = `#${safeHashtag}`;
+				const alreadyWritten = extractHashtags(mfm.parse(text)).some(tag => normalizeTag(tag) === normalizeTag(safeHashtag));
+				if (!alreadyWritten) text = `${text}\n\n${hashtag}`.trim();
+			} else {
+				const channelUrl = `${this.config.url}/channels/${note.channelId}`;
+				// チャンネル名は source (MFM原文) にも載るため、改行/制御文字と MFM/メンション記号を潰して
+				// 受信側での「From:」行偽装やミュートアンカー汚染を防ぐ (URL 部分がアンカー本体)
+				const safeName = channel != null
+					? channel.name.replace(/[\r\n\u0000-\u001f]/g, ' ').replace(/[@#$`[\]]/g, '').trim()
+					: null;
+				const namePart = safeName ? `「${safeName}」 ` : '';
+				text = `${text}\n\nFrom: ${namePart}${channelUrl}`.trim();
+			}
+		}
+
 		let poll: MiPoll | null = null;
 
 		if (note.hasPoll) {
@@ -444,7 +479,8 @@ export class ApRendererService {
 
 		const summary = note.cw === '' ? String.fromCharCode(0x200B) : note.cw;
 
-		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml(note, extraHtml);
+		// text にチャンネル付記を反映した上で HTML を生成する (content にも URL が載る)
+		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml({ ...note, text }, extraHtml);
 
 		const emojis = await this.getEmojis(note.emojis);
 		const apemojis = emojis.filter(emoji => !emoji.localOnly).map(emoji => this.renderEmoji(emoji));
@@ -474,7 +510,10 @@ export class ApRendererService {
 			attributedTo,
 			summary: summary ?? undefined,
 			content: content ?? undefined,
-			...(noMisskeyContent ? {} : {
+			// チャンネルのノートは、付記のハッシュタグを相手の Misskey で MFM のハッシュタグとして読ませるため、
+			// 必ず MFM の原文を付ける。HTML だけを送ると、tag に無いハッシュタグのリンクは、相手でただのリンク
+			// (`[#…](https://…/tags/…)`) に変わってしまう
+			...(noMisskeyContent && note.channelId == null ? {} : {
 				_misskey_content: text,
 				source: {
 					content: text,

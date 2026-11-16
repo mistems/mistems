@@ -697,6 +697,7 @@ export type Channels = {
         params: {
             withRenotes?: boolean;
             withFiles?: boolean;
+            withCollectedChannelNotes?: boolean;
         };
         events: {
             note: (payload: Note) => void;
@@ -719,6 +720,7 @@ export type Channels = {
             withRenotes?: boolean;
             withReplies?: boolean;
             withFiles?: boolean;
+            withCollectedChannelNotes?: boolean;
         };
         events: {
             note: (payload: Note) => void;
@@ -992,6 +994,12 @@ type ChannelsSearchRequest = operations['channels___search']['requestBody']['con
 
 // @public (undocumented)
 type ChannelsSearchResponse = operations['channels___search']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ChannelsShowByFederationHashtagRequest = operations['channels___show-by-federation-hashtag']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChannelsShowByFederationHashtagResponse = operations['channels___show-by-federation-hashtag']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type ChannelsShowRequest = operations['channels___show']['requestBody']['content']['application/json'];
@@ -1742,6 +1750,8 @@ declare namespace entities {
         ChannelsSearchResponse,
         ChannelsShowRequest,
         ChannelsShowResponse,
+        ChannelsShowByFederationHashtagRequest,
+        ChannelsShowByFederationHashtagResponse,
         ChannelsTimelineRequest,
         ChannelsTimelineResponse,
         ChannelsUnfavoriteRequest,
@@ -3781,8 +3791,8 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:236:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:251:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:238:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:253:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -261,6 +261,9 @@ export const PREF_DEF = definePreferences({
 	showFixedPostFormInChannel: {
 		default: false,
 	},
+	showLocalTimelinePostButtonInChannel: {
+		default: false,
+	},
 	enableInfiniteScroll: {
 		default: true,
 	},

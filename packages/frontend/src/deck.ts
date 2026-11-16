@@ -71,6 +71,7 @@ export type Column = {
 	withReplies?: boolean;
 	withSensitive?: boolean;
 	onlyFiles?: boolean;
+	withCollectedChannelNotes?: boolean;
 	soundSetting?: SoundStore;
 	// The cache for the name of the antenna, channel, list, clip, or role
 	timelineNameCache?: string;
