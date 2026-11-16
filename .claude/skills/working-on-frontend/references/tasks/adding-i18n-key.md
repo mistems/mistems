@@ -1,12 +1,13 @@
 # i18n キーを追加・改修する
 
-UI 文言の追加・変更を行う際の手順。**手動編集して良いのは `locales/ja-JP.yml` のみ**。
+UI 文言の追加・変更を行う際の手順。翻訳元は `locales/ja-JP.yml` である。他言語ファイルは、**MISTEMS 独自のキーだけ**手で書いてよい。
 
 ## 大前提 (絶対 NG)
 
-- **`locales/<lang>.yml` (ja-JP.yml 以外) の編集は禁止**。これらは Crowdin の自動配信先で、手動編集すると次の同期で上書き喪失する ([locales/README.md](../../../../../locales/README.md), [crowdin.yml](../../../../../crowdin.yml))
+- **`locales/<lang>.yml` (ja-JP.yml 以外) で、上流にあるキーの訳を変えたり消したりしない**。上流では Crowdin の自動配信先で ([locales/README.md](../../../../../locales/README.md), [crowdin.yml](../../../../../crowdin.yml))、変えると統合のたびにコンフリクトし、上流の更新とも食い違う
+- MISTEMS は Crowdin とつながっていないので、**MISTEMS 独自のキー (上流にないキー) は他言語ファイルにも手で書いてよい**。ja-JP.yml に足したら、`en-US.yml` にも同じキーの訳を足す (ステップ 1b)
 - 文字列リテラルを SFC に直書きしない (`<span>こんにちは</span>` 等)。必ず `i18n.ts.<key>` を経由する
-- 既存キーの破壊的リネームは Crowdin 翻訳資産を失わせる。**追加 → 移行 → 旧キー削除** の 3 段階に分割する。詳細手順と誤編集の復旧は [knowledge/i18n-usage.md §Crowdin 安全策](../knowledge/i18n-usage.md)
+- 既存キーの破壊的リネームは Crowdin 翻訳資産を失わせる。**追加 → 移行 → 旧キー削除** の 3 段階に分割する。詳細と誤編集の戻し方は [knowledge/i18n-usage.md §他言語ファイルの扱い](../knowledge/i18n-usage.md)
 
 ## ステップ 1: ja-JP.yml にキーを追加
 
@@ -34,6 +35,12 @@ greeting: "こんにちは、{name}さん"
 - **HTML タグ (`<b>` `<br>` `<strong>` 等) や `:` `'` `&` を含む値は必ずダブルクォートで囲む** (未クォートだと YAML パース失敗)
 
 **詳細:** ICU 非対応の代替戦略・予約キー `_lang_`・Storybook での挙動は → [knowledge/i18n-usage.md §制約と補足](../knowledge/i18n-usage.md)
+
+## ステップ 1b: en-US.yml に訳を足す (MISTEMS 独自のキー)
+
+MISTEMS 独自のキーなら、[locales/en-US.yml](../../../../../locales/en-US.yml) の同じ階層に、同じキー名で英訳を足す。プレースホルダ (`{name}` など) は ja-JP.yml と同じ名前にそろえる。ほかの言語は任意である。
+
+上流にあるキーの文言を変えたいときは、他言語ファイルには触らず、ja-JP.yml だけを変える。
 
 ## ステップ 2: 型定義の自動再生成
 
@@ -82,11 +89,9 @@ pnpm --filter i18n lint
 # frontend で新キー参照箇所の型チェック
 pnpm --filter frontend lint
 
-# 他言語 yml に diff が出ていないことを確認 (出力が空であれば OK)
-git diff --name-only develop -- 'locales/*.yml' | grep -v '^locales/ja-JP\.yml$'
+# 他言語 yml で上流にあるキーを変えていないことを確認 (Locale safety: PASS なら OK)
+node scripts/check-shipping.mjs
 ```
-
-**注意:** `grep -v 'ja-JP.yml'` を **diff 本文** に当てると ja-JP.yml 単体の変更でも `+追加行` が素通りして必ず非空になる。`--name-only` でファイル名だけに絞ってから完全一致で除外するのが正しい。
 
 ## 例: 「ノートを削除しますか？」確認ダイアログを追加する
 
