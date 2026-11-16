@@ -38,6 +38,7 @@ import { i18n } from '@/i18n.js';
 import MkSuperMenu from '@/components/MkSuperMenu.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import { instance } from '@/instance.js';
+import { iAmAdmin } from '@/i.js';
 import { lookup } from '@/utility/lookup.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
@@ -219,7 +220,12 @@ const menuDef = computed<SuperMenuDef[]>(() => [{
 		text: i18n.ts.externalServices,
 		to: '/admin/external-services',
 		active: currentPage.value?.route.name === 'external-services',
-	}, {
+	}, ...(iAmAdmin ? [{
+		icon: 'ti ti-git-branch',
+		text: i18n.ts._frontendVariants.title,
+		to: '/admin/frontend-variants',
+		active: currentPage.value?.route.name === 'frontend-variants',
+	}] : []), {
 		icon: 'ti ti-webhook',
 		text: 'Webhook',
 		to: '/admin/system-webhook',
