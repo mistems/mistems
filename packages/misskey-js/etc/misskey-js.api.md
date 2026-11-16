@@ -996,6 +996,12 @@ type ChannelsSearchRequest = operations['channels___search']['requestBody']['con
 type ChannelsSearchResponse = operations['channels___search']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type ChannelsShowByFederationHashtagRequest = operations['channels___show-by-federation-hashtag']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChannelsShowByFederationHashtagResponse = operations['channels___show-by-federation-hashtag']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type ChannelsShowRequest = operations['channels___show']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -1744,6 +1750,8 @@ declare namespace entities {
         ChannelsSearchResponse,
         ChannelsShowRequest,
         ChannelsShowResponse,
+        ChannelsShowByFederationHashtagRequest,
+        ChannelsShowByFederationHashtagResponse,
         ChannelsTimelineRequest,
         ChannelsTimelineResponse,
         ChannelsUnfavoriteRequest,

@@ -2361,6 +2361,8 @@ _channel:
   federationHashtagChangeConfirm: "ハッシュタグを変えると、リモートサーバーのユーザーがこれまでのハッシュタグで設定したミュートやフォローが効かなくなります。よろしいですか？"
   createFromFederationHashtag: "このハッシュタグのチャンネルを作る"
   createFromFederationHashtagDescription: "ほかのサーバーの連合チャンネルのハッシュタグです。同じハッシュタグで連合するチャンネルを作ると、このハッシュタグのノートがそのチャンネルに入ります。"
+  federationHashtagChannelExists: "このハッシュタグのチャンネルは、このサーバーにすでにあります。"
+  openFederationHashtagChannel: "「{name}」を開く"
 
 _menuDisplay:
   sideFull: "横"

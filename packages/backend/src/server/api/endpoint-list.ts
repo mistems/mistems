@@ -143,6 +143,7 @@ export * as 'channels/my-favorites' from './endpoints/channels/my-favorites.js';
 export * as 'channels/owned' from './endpoints/channels/owned.js';
 export * as 'channels/search' from './endpoints/channels/search.js';
 export * as 'channels/show' from './endpoints/channels/show.js';
+export * as 'channels/show-by-federation-hashtag' from './endpoints/channels/show-by-federation-hashtag.js';
 export * as 'channels/timeline' from './endpoints/channels/timeline.js';
 export * as 'channels/unfavorite' from './endpoints/channels/unfavorite.js';
 export * as 'channels/unfollow' from './endpoints/channels/unfollow.js';

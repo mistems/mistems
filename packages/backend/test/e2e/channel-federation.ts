@@ -276,6 +276,31 @@ describe('チャンネル連合 (federationPolicy)', () => {
 			assert.strictEqual(castAsError(taken.body as any).error.code, 'FEDERATION_HASHTAG_ALREADY_USED');
 		});
 
+		test('channels/show-by-federation-hashtag: ハッシュタグからチャンネルを引ける (先頭の #・大文字小文字・連合をやめたチャンネルも)', async () => {
+			const channel = (await api('channels/create', { name: 'lookup', federationPolicy: 'public', federationHashtag: `${MARKER}Lookup` }, alice)).body;
+
+			const found = await api('channels/show-by-federation-hashtag', { federationHashtag: `#${MARKER}lookup` });
+			assert.strictEqual(found.status, 200);
+			assert.strictEqual(found.body.id, channel.id);
+
+			// 連合をやめてもハッシュタグは残り、同じハッシュタグで作れないので引ける
+			await api('channels/update', { channelId: channel.id, federationPolicy: 'none' }, alice);
+			const stillFound = await api('channels/show-by-federation-hashtag', { federationHashtag: `${MARKER}Lookup` });
+			assert.strictEqual(stillFound.status, 200);
+			assert.strictEqual(stillFound.body.id, channel.id);
+		});
+
+		test('channels/show-by-federation-hashtag: 一致するチャンネルがなければ NO_SUCH_CHANNEL', async () => {
+			const missing = await api('channels/show-by-federation-hashtag', { federationHashtag: `${MARKER}どこにもない` });
+			assert.strictEqual(missing.status, 400);
+			assert.strictEqual(castAsError(missing.body as any).error.code, 'NO_SUCH_CHANNEL');
+
+			// 目印のないハッシュタグは探さない
+			const noMarker = await api('channels/show-by-federation-hashtag', { federationHashtag: 'cats' });
+			assert.strictEqual(noMarker.status, 400);
+			assert.strictEqual(castAsError(noMarker.body as any).error.code, 'NO_SUCH_CHANNEL');
+		});
+
 		test('ほかの人はハッシュタグを変えられない', async () => {
 			const bob = await signup({ username: 'hashtag_bob' });
 			const channel = (await api('channels/create', { name: 'hashtag-owner', federationPolicy: 'public' }, alice)).body;

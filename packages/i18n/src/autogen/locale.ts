@@ -9019,6 +9019,14 @@ export interface Locale extends ILocale {
          * ほかのサーバーの連合チャンネルのハッシュタグです。同じハッシュタグで連合するチャンネルを作ると、このハッシュタグのノートがそのチャンネルに入ります。
          */
         "createFromFederationHashtagDescription": string;
+        /**
+         * このハッシュタグのチャンネルは、このサーバーにすでにあります。
+         */
+        "federationHashtagChannelExists": string;
+        /**
+         * 「{name}」を開く
+         */
+        "openFederationHashtagChannel": ParameterizedString<"name">;
     };
     "_menuDisplay": {
         /**
