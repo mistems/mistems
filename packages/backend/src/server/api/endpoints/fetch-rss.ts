@@ -12,6 +12,10 @@ import { ApiError } from '../error.js';
 const MAX_URL_LENGTH = 8192;
 const MAX_RESPONSE_SIZE = 1024 * 1024;
 const MAX_CONCURRENT_REQUESTS = 32;
+// 取得に失敗した URL は、しばらく取りに行かずに失敗を返す。失敗した応答はキャッシュされないので、
+// 壊れた URL を置いたウィジェットの数だけ、定期的に相手のサイトへ取りに行くことになるため
+const FAILURE_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_FAILURE_CACHE_ENTRIES = 1000;
 
 export const meta = {
 	tags: ['meta'],
@@ -36,6 +40,13 @@ export const meta = {
 			message: 'Failed to fetch RSS.',
 			code: 'FETCH_RSS_FAILED',
 			id: '8db5d3d8-31d7-452f-b0cc-ca3b8925de12',
+			kind: 'server',
+			httpStatusCode: 422,
+		},
+		fetchRssRecentlyFailed: {
+			message: 'Failed to fetch this RSS recently. Try again later.',
+			code: 'FETCH_RSS_RECENTLY_FAILED',
+			id: '13b64124-0af5-4ce9-90b3-9961f7b313f3',
 			kind: 'server',
 			httpStatusCode: 422,
 		},
@@ -248,12 +259,18 @@ export const paramDef = {
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	private readonly inFlightRequests = new Map<string, Promise<Awaited<ReturnType<Parser['parseString']>>>>();
 	private activeRequestCount = 0;
+	/** 取得に失敗した URL と、次に取りに行ってよい時刻 */
+	private readonly recentFailures = new Map<string, number>();
 
 	constructor(
 		private httpRequestService: HttpRequestService,
 	) {
 		super(meta, paramDef, async (ps) => {
 			const url = this.normalizeUrl(ps.url);
+			if (this.isRecentlyFailed(url)) {
+				throw new ApiError(meta.errors.fetchRssRecentlyFailed);
+			}
+
 			const inFlightRequest = this.inFlightRequests.get(url);
 			if (inFlightRequest != null) {
 				return await inFlightRequest;
@@ -266,6 +283,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			this.activeRequestCount++;
 			const request = this.fetchRss(url)
 				.catch(() => {
+					this.recordFailure(url);
 					throw new ApiError(meta.errors.fetchRssFailed);
 				})
 				.finally(() => {
@@ -276,6 +294,24 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			return await request;
 		});
+	}
+
+	private isRecentlyFailed(url: string): boolean {
+		const retryAt = this.recentFailures.get(url);
+		if (retryAt == null) return false;
+		if (Date.now() < retryAt) return true;
+		this.recentFailures.delete(url);
+		return false;
+	}
+
+	private recordFailure(url: string): void {
+		// 挿入順に並ぶので、上限を超えたら古いものから捨てる
+		this.recentFailures.delete(url);
+		if (this.recentFailures.size >= MAX_FAILURE_CACHE_ENTRIES) {
+			const oldest = this.recentFailures.keys().next().value;
+			if (oldest != null) this.recentFailures.delete(oldest);
+		}
+		this.recentFailures.set(url, Date.now() + FAILURE_CACHE_TTL_MS);
 	}
 
 	private normalizeUrl(input: string): string {

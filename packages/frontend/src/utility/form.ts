@@ -34,6 +34,11 @@ export interface NumberFormItem extends FormItemBase {
 	description?: string;
 	required?: boolean;
 	step?: number;
+	/** これより小さい値・大きい値、数でない値のときは保存できない */
+	min?: number;
+	max?: number;
+	/** 入力欄の右に出す単位 */
+	suffix?: string;
 	manualSave?: boolean;
 }
 
