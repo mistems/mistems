@@ -27,13 +27,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span v-if="visibility === 'specified'"><i class="ti ti-mail"></i></span>
 					<span :class="$style.headerRightButtonText">{{ i18n.ts._visibility[visibility] }}</span>
 				</button>
-				<button v-else class="_button" :class="[$style.headerRightItem, $style.visibility]" disabled>
+				<button v-else ref="visibilityButton" v-tooltip="i18n.ts.visibility" class="_button" :class="[$style.headerRightItem, $style.visibility]" :disabled="channel != null" @click="setVisibility">
 					<span><i class="ti ti-device-tv"></i></span>
-					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
+					<span :class="$style.headerRightButtonText"><MkChannelName :channel="targetChannel"/></span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
+			<button v-if="actualVisibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: actualLocalOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
+				<span v-if="!actualLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
 			<button ref="otherSettingsButton" v-tooltip="i18n.ts.other" class="_button" :class="$style.headerRightItem" @click="showOtherSettings"><i class="ti ti-dots"></i></button>
@@ -75,14 +75,27 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkInfo>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
 	<div v-show="useCw" :class="$style.cwOuter">
-		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
+		<input
+			ref="cwInputEl"
+			v-model="cw"
+			:class="$style.cw"
+			:placeholder="i18n.ts.annotation"
+			@keydown="onKeydown"
+			@keyup="onKeyup"
+			@compositionend="onCompositionEnd"
+		/>
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-testid="post-form-text" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<button v-show="useCw" v-tooltip="i18n.ts.swapCwAndText" class="_button" :class="$style.cwSwapButton" :aria-label="i18n.ts.swapCwAndText" @click="swapCwText">
+			<i class="ti ti-switch-vertical"></i>
+		</button>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
+	<MkInfo v-if="matchedSensitiveWords.length > 0" warn :class="$style.sensitiveWordsWarning">{{ i18n.tsx.sensitiveWordsContained({ words: matchedSensitiveWords.join('、') }) }}</MkInfo>
+	<div v-if="targetChannel" :class="$style.channelName"><i class="ti ti-device-tv" style="margin-right: 4px;"></i><MkChannelName :channel="targetChannel"/></div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
 	<div v-if="uploader.items.value.length > 0" style="padding: 12px;">
@@ -92,7 +105,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkUploaderItems :modelValue="uploader.items.value" @update:modelValue="uploader.reorderItems" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
-	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
+	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i" :sensitiveWords="sensitiveWordsTarget != null ? (instance.sensitiveWords ?? []) : []"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
@@ -130,11 +143,14 @@ import type { MenuItem } from '@/types/menu.js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
+import MkChannelName from '@/components/MkChannelName.vue';
+import { isFederatedChannel } from '@/utility/channel.js';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import { erase, unique } from '@/utility/array.js';
+import { detectSensitiveWords } from '@/utility/sensitive-words.js';
 import { extractMentions } from '@/utility/extract-mentions.js';
 import { formatTimeString } from '@/utility/format-time-string.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
@@ -223,6 +239,19 @@ const recentHashtags = ref(JSON.parse(miLocalStorage.getItem('hashtags') ?? '[]'
 const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
+
+/**
+ * {@link localOnly}が持つ値にチャンネル選択有無を加味した値を計算する。
+ * チャンネル選択時は、チャンネルの連合設定 (federationPolicy) で決める (連合しないチャンネルなら true)。
+ * サーバー側 (NoteCreateService.applyChannelFederationPolicy) の決定と一致させ、表示と実際の挙動が食い違わないようにする。
+ * チャンネル選択有無を考慮する必要がある場面では{@link localOnly}ではなくこの値を使用する。
+ */
+const actualLocalOnly = computed<boolean>(() => targetChannel.value ? !isFederatedChannel(targetChannel.value) : localOnly.value);
+/**
+ * {@link visibility}が持つ値にチャンネル選択有無を加味した値を計算する（チャンネル選択時は public。連合するかは {@link actualLocalOnly} で決まる）。
+ * チャンネル選択有無を考慮する必要がある場面では{@link visibility}ではなくこの値を使用する。
+ */
+const actualVisibility = computed<typeof Misskey.noteVisibilities[number]>(() => targetChannel.value ? 'public' : visibility.value);
 const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
@@ -315,6 +344,20 @@ const isTimemachinePostRestricted = computed((): boolean => {
 	return !!(isTimemachineActive.value && (ui === 'default' || ui === null));
 });
 
+// 公開 (かつ非チャンネル) 投稿のみ、サーバー側でセンシティブワードによる自動ホーム送りが行われる。
+// その条件に合わせてセンシティブワードを検出し、警告・プレビューハイライトの対象にする。
+const sensitiveWordsTarget = computed((): string | null => {
+	if (visibility.value !== 'public' || targetChannel.value != null) return null;
+	if ((instance.sensitiveWords?.length ?? 0) === 0) return null;
+	return (useCw.value && cw.value) ? cw.value : text.value;
+});
+
+const matchedSensitiveWords = computed((): string[] => {
+	const target = sensitiveWordsTarget.value;
+	if (target == null) return [];
+	return detectSensitiveWords(target, instance.sensitiveWords ?? []).matched;
+});
+
 const canPost = computed((): boolean => {
 	// タイムマシン/タイムシフト中で、かつUIモードがデフォルトの場合は投稿不可
 	if (isTimemachinePostRestricted.value) {
@@ -354,7 +397,7 @@ watch(text, () => {
 	checkMissingMention();
 }, { immediate: true });
 
-watch(visibility, () => {
+watch(actualVisibility, () => {
 	checkMissingMention();
 }, { immediate: true });
 
@@ -396,11 +439,6 @@ if (replyTargetNote.value && replyTargetNote.value.text != null) {
 
 if ($i.isSilenced && visibility.value === 'public') {
 	visibility.value = 'home';
-}
-
-if (targetChannel.value) {
-	visibility.value = 'public';
-	localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
 }
 
 // 公開以外へのリプライ時は元の公開範囲を引き継ぐ
@@ -453,7 +491,7 @@ function watchForDraft() {
 }
 
 function checkMissingMention() {
-	if (visibility.value === 'specified') {
+	if (actualVisibility.value === 'specified') {
 		const ast = mfm.parse(text.value);
 
 		for (const x of extractMentions(ast)) {
@@ -475,6 +513,14 @@ function addMissingMention() {
 				pushVisibleUser(user);
 			});
 		}
+	}
+}
+
+function swapCwText() {
+	if (useCw.value) {
+		const temp = text.value.split(/\r?\n/).join(' ');
+		text.value = cw.value ?? '';
+		cw.value = temp;
 	}
 }
 
@@ -536,32 +582,37 @@ function updateFileName(file: Misskey.entities.DriveFile, name: Misskey.entities
 }
 
 function setVisibility() {
-	if (targetChannel.value) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
+	// props でチャンネルを指定されて開いたフォームは宛先固定。ピッカーで選んだ場合は選び直せる
+	// (チャンネルのときの公開範囲と連合は actualVisibility / actualLocalOnly がチャンネルの連合設定から決める)
+	if (props.channel) {
 		return;
 	}
 
 	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkVisibilityPicker.vue')), {
-		currentVisibility: visibility.value,
+		currentVisibility: actualVisibility.value,
 		isSilenced: $i.isSilenced,
+		localOnly: localOnly.value,
 		anchorElement: visibilityButton.value,
+		...(targetChannel.value ? { currentChannel: targetChannel.value } : {}),
 		...(replyTargetNote.value ? { isReplyVisibilitySpecified: replyTargetNote.value.visibility === 'specified' } : {}),
 	}, {
 		changeVisibility: v => {
 			visibility.value = v;
+			targetChannel.value = null;
 			if (prefer.s.rememberNoteVisibility) {
 				store.set('visibility', visibility.value);
 			}
 		},
 		closed: () => dispose(),
+		changeChannel: channel => {
+			// computedで読み替えをするので、localOnlyとvisibilityの変更はしない
+			targetChannel.value = channel;
+		},
 	});
 }
 
 async function toggleLocalOnly() {
 	if (targetChannel.value) {
-		visibility.value = 'public';
-		localOnly.value = true; // TODO: チャンネルが連合するようになった折には消す
 		return;
 	}
 
@@ -798,12 +849,14 @@ async function onPaste(ev: ClipboardEvent) {
 		quoteId.value = paste.substring(url.length).match(/^\/notes\/(.+?)\/?$/)?.[1] ?? null;
 	}
 
-	if (paste.length > 1000) {
+	if (paste.length > maxTextLength.value) {
 		ev.preventDefault();
 
 		const { canceled } = await os.confirm({
 			type: 'info',
 			text: i18n.ts.attachAsFileQuestion,
+			okText: i18n.ts.attachAsFileOk,
+			cancelText: i18n.ts.attachAsFileCancel,
 		});
 
 		if (canceled) {
@@ -812,7 +865,7 @@ async function onPaste(ev: ClipboardEvent) {
 		}
 
 		const fileName = formatTimeString(new Date(), pastedFileName).replace(/{{number}}/g, '0');
-		const file = new File([paste], `${fileName}.txt`, { type: 'text/plain' });
+		const file = new File([paste], `${fileName}.txt`, { type: 'text/plain;charset=utf-8' });
 		uploader.addFiles([file]);
 	}
 }
@@ -919,6 +972,15 @@ function saveDraft() {
 
 function deleteDraft() {
 	const draftsData = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}') as StoredDrafts;
+
+	if (targetChannel.value) {
+		// draftKey.valueからchannel:${targetChannel.value.id}部分を削除したのがpartialDraftKey
+		// 通常の投稿からチャンネルに切り替えて投稿した際に、通常の投稿の下書きが残ってしまい不自然な挙動になるのを防ぐ
+		const partialDraftKey = draftKey.value.replace(`channel:${targetChannel.value.id}`, '');
+		if (draftsData[partialDraftKey]) {
+			delete draftsData[partialDraftKey];
+		}
+	}
 
 	delete draftsData[draftKey.value];
 
@@ -1039,9 +1101,9 @@ async function post(ev?: PointerEvent) {
 		channelId: targetChannel.value ? targetChannel.value.id : undefined,
 		poll: poll.value,
 		cw: useCw.value ? cw.value ?? '' : null,
-		localOnly: visibility.value === 'specified' ? false : localOnly.value,
-		visibility: visibility.value,
-		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
+		localOnly: actualLocalOnly.value,
+		visibility: actualVisibility.value,
+		visibleUserIds: actualVisibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
 	};
 
@@ -1421,7 +1483,7 @@ onMounted(() => {
 	if (cwInputEl.value) cwAutocomplete = new Autocomplete(cwInputEl.value, cw);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
 
-	nextTick(() => {
+	nextTick(async () => {
 		// 書きかけの投稿を復元
 		if (!props.instant && !props.mention && !props.specified && !props.mock) {
 			const draft = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}')[draftKey.value] as StoredDrafts[string] | undefined;
@@ -1436,9 +1498,10 @@ onMounted(() => {
 					poll.value = draft.data.poll;
 				}
 				if (draft.data.visibleUserIds) {
-					misskeyApi('users/show', { userIds: draft.data.visibleUserIds }).then(users => {
-						users.forEach(u => pushVisibleUser(u));
+					const users = await misskeyApi('users/show', {
+						userIds: draft.data.visibleUserIds,
 					});
+					visibleUsers.value = users;
 				}
 				quoteId.value = draft.data.quoteId;
 				reactionAcceptance.value = draft.data.reactionAcceptance;
@@ -1464,11 +1527,13 @@ onMounted(() => {
 				};
 			}
 			if (init.visibleUserIds) {
-				misskeyApi('users/show', { userIds: init.visibleUserIds }).then(users => {
-					users.forEach(u => pushVisibleUser(u));
+				const users = await misskeyApi('users/show', {
+					userIds: init.visibleUserIds,
 				});
+				visibleUsers.value = users;
 			}
 			quoteId.value = renoteTargetNote.value ? renoteTargetNote.value.id : null;
+			if (init.renote) quoteId.value = init.renote.id;
 			reactionAcceptance.value = init.reactionAcceptance;
 		}
 
@@ -1600,6 +1665,7 @@ defineExpose({
 	height: 100% ;
 	border-radius: 999px;
 	pointer-events: none;
+	margin-right: 8px;
 }
 
 .submitInner {
@@ -1648,6 +1714,17 @@ defineExpose({
 	}
 }
 //#endregion
+.cwSwapButton {
+	position: absolute;
+	top: 0;
+	right: 0;
+	padding: 8px;
+	border-radius: 6px;
+
+	&:hover {
+		background: var(--MI_THEME-buttonHoverBg);
+	}
+}
 
 .preview {
 	padding: 16px 20px 0 20px;
@@ -1698,6 +1775,15 @@ html[data-color-scheme=light] .preview {
 	margin: 0 20px 16px 20px;
 }
 
+.channelName {
+	display: flex;
+	padding-top: 8px;
+	padding-left: 18px;
+	opacity: 0.7;
+	font-size: 80%;
+	align-items: center;
+}
+
 .scheduledAt {
 	margin: 0 20px 16px 20px;
 }
@@ -1707,6 +1793,10 @@ html[data-color-scheme=light] .preview {
 }
 
 .timemachineWarning {
+	margin: 0 20px 16px 20px;
+}
+
+.sensitiveWordsWarning {
 	margin: 0 20px 16px 20px;
 }
 
@@ -1747,7 +1837,7 @@ html[data-color-scheme=light] .preview {
 
 .cwTextCount {
 	position: absolute;
-	top: 0;
+	bottom: 2px;
 	right: 2px;
 	padding: 2px 6px;
 	font-size: .9em;
@@ -1789,7 +1879,7 @@ html[data-color-scheme=light] .preview {
 
 .textCount {
 	position: absolute;
-	top: 0;
+	bottom: 2px;
 	right: 2px;
 	padding: 4px 6px;
 	font-size: .9em;
@@ -1878,7 +1968,6 @@ html[data-color-scheme=light] .preview {
 	.text {
 		padding: 0 16px;
 	}
-
 	.text {
 		min-height: 80px;
 	}

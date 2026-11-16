@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkA :to="`/channels/${channel.id}`" class="eftoefju _panel" @click="updateLastReadedAt">
 		<div class="banner" :style="bannerStyle">
 			<div class="fade"></div>
-			<div class="name"><i class="ti ti-device-tv"></i> {{ channel.name }}</div>
+			<div class="name"><i class="ti ti-device-tv"></i> <MkChannelName :channel="channel"/></div>
 			<div v-if="channel.isSensitive" class="sensitiveIndicator">{{ i18n.ts.sensitive }}</div>
 			<div class="status">
 				<div>
@@ -55,13 +55,14 @@ import * as Misskey from 'misskey-js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { miLocalStorage } from '@/local-storage.js';
+import MkChannelName from '@/components/MkChannelName.vue';
 
 const props = defineProps<{
 	channel: Misskey.entities.Channel;
 }>();
 
 const getLastReadedAt = (): number | null => {
-	return miLocalStorage.getItemAsJson(`channelLastReadedAt:${props.channel.id}`) ?? null;
+	return (miLocalStorage.getItemAsJson('channelsLastReadedAt') ?? {})[props.channel.id] ?? null;
 };
 
 const lastReadedAt = ref(getLastReadedAt());

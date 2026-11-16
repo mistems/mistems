@@ -26,7 +26,7 @@ import { GlobalModule } from '@/GlobalModule.js';
 import { CoreModule } from '@/core/CoreModule.js';
 import { FederatedInstanceService } from '@/core/FederatedInstanceService.js';
 import { LoggerService } from '@/core/LoggerService.js';
-import { MiMeta, MiNote, UserProfilesRepository } from '@/models/_.js';
+import { MiChannel, MiMeta, MiNote, UserProfilesRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { DownloadService } from '@/core/DownloadService.js';
@@ -323,6 +323,72 @@ describe('ActivityPub', () => {
 				id: genAidx(Date.now()),
 				visibility: 'followers',
 			} as MiNote);
+		});
+
+		describe('チャンネルノートの本文付記 (チャンネル連合)', () => {
+			const createChannelNote = (text: string | null, channel: MiChannel | null, tags: string[] = []) => ({
+				id: genAidx(Date.now()),
+				userId: genAidx(Date.now()),
+				text,
+				cw: null,
+				visibility: 'public',
+				localOnly: false,
+				visibleUserIds: [],
+				mentions: [],
+				mentionedRemoteUsers: '[]',
+				fileIds: [],
+				emojis: [],
+				tags,
+				hasPoll: false,
+				replyId: null,
+				renoteId: null,
+				channelId: channel?.id ?? genAidx(Date.now()),
+				channel,
+			} as unknown as MiNote);
+
+			test('ハッシュタグのないチャンネルでは、本文末尾にチャンネル名と URL を付け (MFM 原文にも付ける)、元のノートは書き換えない', async () => {
+				const channel = { id: genAidx(Date.now()), name: 'テスト\nチャンネル @alice #tag' } as MiChannel;
+				const note = createChannelNote('**hello**', channel);
+				const rendered = await rendererService.renderNote(note, false);
+
+				const anchor = `/channels/${channel.id}`;
+				assert.strictEqual(note.text, '**hello**');
+				assert.ok(rendered._misskey_content?.startsWith('**hello**\n\nFrom: 「テスト チャンネル alice tag」 '));
+				assert.ok(rendered._misskey_content?.endsWith(anchor));
+				assert.strictEqual(rendered.source?.content, rendered._misskey_content);
+				assert.ok(rendered.content?.includes('「テスト チャンネル alice tag」'));
+				assert.ok(rendered.content?.includes(anchor));
+			});
+
+			test('連合するチャンネルでは、付記はハッシュタグだけにし (From と URL は付けない)、AP の tag にも載せる', async () => {
+				const channel = { id: genAidx(Date.now()), name: '雑談', federationPolicy: 'public', federationHashtag: '連合チャンネル_雑談' } as MiChannel;
+				const note = createChannelNote('**hello**', channel, ['連合チャンネル_雑談']);
+				const rendered = await rendererService.renderNote(note, false);
+
+				assert.strictEqual(rendered._misskey_content, '**hello**\n\n#連合チャンネル_雑談');
+				assert.strictEqual(rendered.source?.content, rendered._misskey_content);
+				assert.ok(rendered.content?.includes('連合チャンネル_雑談'));
+				assert.ok(!rendered.content?.includes('From: '), rendered.content ?? '');
+				assert.ok(!rendered.content?.includes(`/channels/${channel.id}`), rendered.content ?? '');
+				const tags = (rendered.tag ?? []) as { type: string; name?: string }[];
+				assert.deepStrictEqual(tags.filter(t => t.type === 'Hashtag').map(t => t.name), ['#連合チャンネル_雑談']);
+			});
+
+			test('本文にすでにチャンネルのハッシュタグがあれば、付記を重ねない', async () => {
+				const channel = { id: genAidx(Date.now()), name: '雑談', federationPolicy: 'public', federationHashtag: '連合チャンネル_雑談' } as MiChannel;
+				const note = createChannelNote('hello #連合チャンネル_雑談', channel, ['連合チャンネル_雑談']);
+				const rendered = await rendererService.renderNote(note, false);
+
+				assert.strictEqual(rendered._misskey_content, 'hello #連合チャンネル_雑談');
+			});
+
+			test('チャンネルが見つからなくても URL は付ける', async () => {
+				const note = createChannelNote(null, null);
+				const rendered = await rendererService.renderNote(note, false);
+				// content (HTML) にも載る
+				assert.ok(rendered.content?.includes('From: '));
+				assert.ok(rendered.content?.includes(`/channels/${note.channelId}`));
+			});
 		});
 	});
 

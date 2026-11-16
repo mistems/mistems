@@ -89,7 +89,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
 	(ev: 'opening'): void;
 	(ev: 'opened'): void;
-	(ev: 'click'): void;
+	(ev: 'click', mouseEvent?: MouseEvent): void;
 	(ev: 'esc'): void;
 	(ev: 'close'): void; // TODO: (refactor) closing に改名する
 	(ev: 'closed'): void;
@@ -153,9 +153,9 @@ function close(opts: { useSendAnimation?: boolean } = {}) {
 	emit('close');
 }
 
-function onBgClick() {
+function onBgClick(ev?: MouseEvent) {
 	if (contentClicking) return;
-	emit('click');
+	emit('click', ev);
 }
 
 if (type.value === 'drawer') {
