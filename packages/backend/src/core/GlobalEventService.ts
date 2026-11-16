@@ -235,6 +235,7 @@ export interface InternalEventTypes {
 	userTokenRegenerated: { id: MiUser['id']; oldToken: string; newToken: string; };
 	remoteUserUpdated: { id: MiUser['id']; };
 	localUserUpdated: { id: MiUser['id']; };
+	remoteEmojiUpdated: { name: string; host: string; };
 	follow: { followerId: MiUser['id']; followeeId: MiUser['id']; };
 	unfollow: { followerId: MiUser['id']; followeeId: MiUser['id']; };
 	blockingCreated: { blockerId: MiUser['id']; blockeeId: MiUser['id']; };
