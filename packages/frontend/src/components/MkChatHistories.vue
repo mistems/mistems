@@ -33,12 +33,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onDeactivated, onMounted, ref } from 'vue';
+import { onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
+import { useStream } from '@/stream.js';
+import { store } from '@/store.js';
 
 const $i = ensureSignin();
 
@@ -52,27 +54,41 @@ const history = ref<{
 const initializing = ref(true);
 const fetching = ref(false);
 
+// 取得中に呼ばれたら、終わったあとにもう一度取得する (取得中に届いた新着を取りこぼさないため)
+let refetchRequested = false;
+
 async function fetchHistory() {
-	if (fetching.value) return;
+	if (fetching.value) {
+		refetchRequested = true;
+		return;
+	}
 
 	fetching.value = true;
 
-	const [userMessages, roomMessages] = await Promise.all([
-		misskeyApi('chat/history', { room: false }),
-		misskeyApi('chat/history', { room: true }),
-	]);
+	try {
+		const [userMessages, roomMessages] = await Promise.all([
+			misskeyApi('chat/history', { room: false }),
+			misskeyApi('chat/history', { room: true }),
+		]);
 
-	history.value = [...userMessages, ...roomMessages]
-		.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-		.map(m => ({
-			id: m.id,
-			message: m,
-			other: (!('room' in m) || m.room == null) ? (m.fromUserId === $i.id ? m.toUser : m.fromUser) : null,
-			isMe: m.fromUserId === $i.id,
-		}));
+		history.value = [...userMessages, ...roomMessages]
+			.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+			.map(m => ({
+				id: m.id,
+				message: m,
+				other: (!('room' in m) || m.room == null) ? (m.fromUserId === $i.id ? m.toUser : m.fromUser) : null,
+				isMe: m.fromUserId === $i.id,
+			}));
 
-	fetching.value = false;
-	initializing.value = false;
+		initializing.value = false;
+	} finally {
+		fetching.value = false;
+	}
+
+	if (refetchRequested) {
+		refetchRequested = false;
+		fetchHistory();
+	}
 }
 
 let isActivated = true;
@@ -85,15 +101,30 @@ onDeactivated(() => {
 	isActivated = false;
 });
 
+// リアルタイムモードでは新着を main ストリームの newChatMessage で取り直すので、定期取得は
+// 既読の状態や自分の送信を追うためだけに使い、間隔を長くとる。タブが裏にある間は useInterval が止める
+const POLLING_INTERVAL = store.s.realtimeMode ? 1000 * 60 : 1000 * 10;
+
 useInterval(() => {
-	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
 	if (isActivated) {
 		fetchHistory();
 	}
-}, 1000 * 10, {
+}, POLLING_INTERVAL, {
 	immediate: false,
 	afterMounted: true,
 });
+
+if (store.s.realtimeMode) {
+	const connection = useStream().useChannel('main');
+	connection.on('newChatMessage', () => {
+		if (isActivated) {
+			fetchHistory();
+		}
+	});
+	onUnmounted(() => {
+		connection.dispose();
+	});
+}
 
 onActivated(() => {
 	fetchHistory();
