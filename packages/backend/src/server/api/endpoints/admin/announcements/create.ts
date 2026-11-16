@@ -6,6 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { AnnouncementService } from '@/core/AnnouncementService.js';
+import { AnnouncementGroupService } from '@/core/AnnouncementGroupService.js';
 import { ApiError } from '../../../error.js';
 
 export const meta = {
@@ -20,6 +21,11 @@ export const meta = {
 			message: 'Invalid auto archive date.',
 			code: 'INVALID_AUTO_ARCHIVE_AT',
 			id: '2a892bd5-487d-46a2-a5fe-3d85ad51defe',
+		},
+		noSuchGroup: {
+			message: 'No such announcement group.',
+			code: 'NO_SUCH_GROUP',
+			id: '52a01115-4671-43b0-a6fd-3b0c7192241e',
 		},
 	},
 
@@ -72,6 +78,7 @@ export const paramDef = {
 		needConfirmationToRead: { type: 'boolean', default: false },
 		userId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
 		autoArchiveAt: { type: 'integer', nullable: true, default: null },
+		groupId: { type: 'string', format: 'misskey:id', nullable: true, default: null },
 	},
 	required: ['title', 'text', 'imageUrl'],
 } as const;
@@ -80,11 +87,16 @@ export const paramDef = {
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
 		private announcementService: AnnouncementService,
+		private announcementGroupService: AnnouncementGroupService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			const autoArchiveAt = ps.autoArchiveAt != null ? new Date(ps.autoArchiveAt) : null;
 			if (ps.autoArchiveAt != null && (ps.autoArchiveAt <= Date.now() || Number.isNaN(autoArchiveAt?.getTime()))) {
 				throw new ApiError(meta.errors.invalidAutoArchiveAt);
+			}
+
+			if (ps.groupId != null && !(await this.announcementGroupService.exists(ps.groupId))) {
+				throw new ApiError(meta.errors.noSuchGroup);
 			}
 
 			const { packed } = await this.announcementService.create({
@@ -100,6 +112,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				needConfirmationToRead: ps.needConfirmationToRead,
 				userId: ps.userId,
 				autoArchiveAt,
+				groupId: ps.groupId,
 			}, me);
 
 			return packed;

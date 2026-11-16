@@ -12,6 +12,7 @@ import {
 	MiAd,
 	MiAnnouncement,
 	MiAnnouncementRead,
+	MiAnnouncementGroup,
 	MiAntenna,
 	MiApp,
 	MiAuthSession,
@@ -109,6 +110,12 @@ const $announcementsRepository: Provider = {
 const $announcementReadsRepository: Provider = {
 	provide: DI.announcementReadsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiAnnouncementRead).extend(miRepository as MiRepository<MiAnnouncementRead>),
+	inject: [DI.db],
+};
+
+const $announcementGroupsRepository: Provider = {
+	provide: DI.announcementGroupsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiAnnouncementGroup).extend(miRepository as MiRepository<MiAnnouncementGroup>),
 	inject: [DI.db],
 };
 
@@ -551,6 +558,7 @@ const $reversiGamesRepository: Provider = {
 		$notesRepository,
 		$announcementsRepository,
 		$announcementReadsRepository,
+		$announcementGroupsRepository,
 		$appsRepository,
 		$avatarDecorationsRepository,
 		$noteFavoritesRepository,
@@ -629,6 +637,7 @@ const $reversiGamesRepository: Provider = {
 		$notesRepository,
 		$announcementsRepository,
 		$announcementReadsRepository,
+		$announcementGroupsRepository,
 		$appsRepository,
 		$avatarDecorationsRepository,
 		$noteFavoritesRepository,

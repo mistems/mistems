@@ -16,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div v-if="announcement" :key="announcement.id" class="_panel" :class="$style.announcement">
 				<div v-if="announcement.forYou" :class="$style.forYou"><i class="ti ti-pin"></i> {{ i18n.ts.forYou }}</div>
 				<div :class="$style.header">
-					<span v-if="$i && !announcement.silence && !announcement.isRead" style="margin-right: 0.5em;">🆕</span>
+					<span v-if="$i && !announcement.silence && !isAnnouncementMutedForMe(announcement) && !announcement.isRead" style="margin-right: 0.5em;">🆕</span>
 					<span style="margin-right: 0.5em;">
 						<i v-if="announcement.icon === 'info'" class="ti ti-info-circle"></i>
 						<i v-else-if="announcement.icon === 'warning'" class="ti ti-alert-triangle" style="color: var(--MI_THEME-warn);"></i>
@@ -35,7 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						{{ i18n.ts.updatedAt }}: <MkTime :time="announcement.updatedAt" mode="detail"/>
 					</div>
 				</div>
-				<div v-if="$i && !announcement.silence && !announcement.isRead" :class="$style.footer">
+				<div v-if="$i && !announcement.silence && !isAnnouncementMutedForMe(announcement) && !announcement.isRead" :class="$style.footer">
 					<MkButton primary @click="read(announcement)"><i class="ti ti-check"></i> {{ i18n.ts.gotIt }}</MkButton>
 				</div>
 			</div>
@@ -57,6 +57,7 @@ import { definePage } from '@/page.js';
 import { $i } from '@/i.js';
 import { prefer } from '@/preferences.js';
 import { updateCurrentAccount } from '@/accounts.js';
+import { isAnnouncementMutedForMe } from '@/utility/announcement-group.js';
 
 const props = defineProps<{
 	announcementId: string;
