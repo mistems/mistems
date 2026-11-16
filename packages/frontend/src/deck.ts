@@ -48,6 +48,7 @@ export const columnTypes = [
 	'direct',
 	'roleTimeline',
 	'chat',
+	'timemachine',
 ] as const;
 
 export type ColumnType = typeof columnTypes[number];
@@ -74,6 +75,10 @@ export type Column = {
 	soundSetting?: SoundStore;
 	// The cache for the name of the antenna, channel, list, clip, or role
 	timelineNameCache?: string;
+	// タイムマシン用プロパティ
+	timemachineTl?: 'home' | 'local' | 'social' | 'global';
+	timemachineDate?: string;
+	timemachineTime?: string;
 };
 
 const _currentProfile = prefer.s['deck.profiles'].find(p => p.name === prefer.s['deck.profile']);

@@ -22,29 +22,43 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<component
 			:is="prefer.s.animation ? TransitionGroup : 'div'"
 			:class="$style.notes"
-			:enterActiveClass="$style.transition_x_enterActive"
-			:leaveActiveClass="$style.transition_x_leaveActive"
-			:enterFromClass="$style.transition_x_enterFrom"
-			:leaveToClass="$style.transition_x_leaveTo"
-			:moveClass="$style.transition_x_move"
+			:enterActiveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_enterActive"
+			:leaveActiveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_leaveActive"
+			:enterFromClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_enterFrom"
+			:leaveToClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_leaveTo"
+			:moveClass="timelineGaps.anchoring.value ? undefined : $style.transition_x_move"
 			tag="div"
 		>
-			<template v-for="(note, i) in paginator.items.value" :key="note.id">
-				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, note.createdAt)" :data-scroll-anchor="note.id">
-					<div :class="$style.date">
-						<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(paginator.items.value[i -1].createdAt, note.createdAt)?.prevText }}</span>
-						<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-						<span>{{ getSeparatorInfo(paginator.items.value[i -1].createdAt, note.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
+			<template v-for="(item, i) in displayItems" :key="item.id">
+				<div v-if="isTimelineGap(item)" :class="$style.gap" :data-gap-id="item.id" role="group" :aria-label="i18n.ts.fetchNotesBetween" :aria-busy="item.fetching">
+					<!-- 取得中もボタンを見えない状態で残し、マーカーの高さを変えない (変わると、位置を保つべき下のノートが動く) -->
+					<MkLoading v-if="item.fetching" :inline="true" :class="$style.gapLoading"/>
+					<div :class="[$style.gapButtons, { [$style.gapButtonsHidden]: item.fetching }]">
+						<!-- 上のノートを動かさずに、マーカーの下へ続きを読み込む -->
+						<button class="_button" :class="$style.gapButton" :title="i18n.ts.fetchNotesBetweenBelowDescription" @click="timelineGaps.fill(item, 'newer')">
+							<i class="ti ti-arrow-bar-to-down"></i> {{ i18n.ts.fetchNotesBetweenBelow }}
+						</button>
+						<!-- 下のノートを動かさずに、マーカーの上へ続きを読み込む (その分スクロールする) -->
+						<button class="_button" :class="$style.gapButton" :title="i18n.ts.fetchNotesBetweenAboveDescription" @click="timelineGaps.fill(item, 'older')">
+							<i class="ti ti-arrow-bar-to-up"></i> {{ i18n.ts.fetchNotesBetweenAbove }}
+						</button>
 					</div>
-					<MkNote :class="$style.note" :note="note" :withHardMute="true"/>
 				</div>
-				<div v-else-if="note._shouldInsertAd_" :data-scroll-anchor="note.id">
-					<MkNote :class="$style.note" :note="note" :withHardMute="true"/>
+				<div v-else-if="getPrevNote(i) != null && isSeparatorNeeded(getPrevNote(i)!.createdAt, item.createdAt)" :data-scroll-anchor="item.id">
+					<div :class="$style.date">
+						<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(getPrevNote(i)!.createdAt, item.createdAt)?.prevText }}</span>
+						<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
+						<span>{{ getSeparatorInfo(getPrevNote(i)!.createdAt, item.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
+					</div>
+					<MkNote :class="$style.note" :note="item" :withHardMute="true"/>
+				</div>
+				<div v-else-if="item._shouldInsertAd_" :data-scroll-anchor="item.id">
+					<MkNote :class="$style.note" :note="item" :withHardMute="true"/>
 					<div :class="$style.ad">
 						<MkAd :preferForms="['horizontal', 'horizontal-big']"/>
 					</div>
 				</div>
-				<MkNote v-else :class="$style.note" :note="note" :withHardMute="true" :data-scroll-anchor="note.id"/>
+				<MkNote v-else :class="$style.note" :note="item" :withHardMute="true" :data-scroll-anchor="item.id"/>
 			</template>
 		</component>
 		<button v-show="paginator.canFetchOlder.value" key="_more_" v-appear="prefer.s.enableInfiniteScroll ? paginator.fetchOlder : null" :disabled="paginator.fetchingOlder.value" class="_button" :class="$style.more" @click="paginator.fetchOlder">
@@ -78,6 +92,7 @@ import { DI } from '@/di.js';
 import { globalEvents, useGlobalEvent } from '@/events.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
 import { Paginator } from '@/utility/paginator.js';
+import { useTimelineGaps, isTimelineGap } from '@/composables/use-timeline-gaps.js';
 
 const props = withDefaults(defineProps<{
 	src: BasicTimelineType | 'mentions' | 'directs' | 'list' | 'antenna' | 'channel' | 'role';
@@ -208,6 +223,9 @@ let scrollContainer: HTMLElement | null = null;
 function onScrollContainerScroll() {
 	if (isTop()) {
 		paginator.releaseQueue();
+		// スクロールで先頭に戻ったときも、保留中の歯抜けマーカーの自動補給を試す
+		// (scrollToTop を伴うコンポーネント側の releaseQueue() はスクロールイベント内から呼ばない)
+		timelineGaps.tryAutoFill();
 	}
 }
 
@@ -229,13 +247,68 @@ onUnmounted(() => {
 const visibility = useDocumentVisibility();
 let isPausingUpdate = false;
 
+// 未取得区間 (歯抜け) のマーカー。paginator.items には混ぜず displayItems で合成する
+const timelineGaps = useTimelineGaps(paginator, {
+	canAutoFill: () => isTop() && !isPausingUpdate,
+	getGapElement: (gapId) => rootEl.value?.querySelector<HTMLElement>(`[data-gap-id="${CSS.escape(gapId)}"]`) ?? null,
+	getScrollContainer: () => scrollContainer,
+	getNoteElement: (noteId) => rootEl.value?.querySelector<HTMLElement>(`[data-scroll-anchor="${CSS.escape(noteId)}"]`) ?? null,
+});
+const displayItems = timelineGaps.displayItems;
+
+/*
+ * 一覧 (TransitionGroup) のアニメーションのクラスは、歯抜けマーカーの位置を保つ補給の間 (timelineGaps.anchoring) だけ外して、アニメーションを止める (テンプレート側)。
+ * - 移動のアニメーションの transform が付いている間は、位置を測っても元の位置が返るので、位置を直す処理が早く止まる
+ * - 入場のアニメーションの間だけ content-visibility: visible になるので、終わったあとに画面外のノートの高さが変わる
+ * どちらも、位置を直し終えたあとに、保つべきノートが動いてしまう
+ *
+ * NOTE: クラス名はテンプレートで $style から引くこと。useCssModule() で script から引くと、本番ビルドでは
+ * rollup-plugin-unwind-css-module-class-name が __cssModules を外すので undefined になり、普段のアニメーションまで消える
+ */
+
+// 歯抜けマーカーは実験的機能 (設定 > その他 > 実験的機能)。オフのときはマーカーを立てず、今までの動作にする
+const isGapFillEnabled = () => prefer.s['experimental.enableTimelineGapFill'];
+
+paginator.onQueueOverflow = (oldestRemainingQueuedId) => {
+	if (!isGapFillEnabled()) return;
+	timelineGaps.onQueueOverflow(oldestRemainingQueuedId);
+};
+
+/**
+ * 日付セパレータ判定用に、displayItems[i] の直前にあるノートをマーカーを飛ばして返す
+ */
+function getPrevNote(i: number): (Misskey.entities.Note & MisskeyEntity) | null {
+	for (let j = i - 1; j >= 0; j--) {
+		const item = displayItems.value[j];
+		if (item != null && !isTimelineGap(item)) return item;
+	}
+	return null;
+}
+
+// 歯抜けマーカーのトリガーは 3 つ:
+//   1. WS 再接続 (下の stream の _disconnected_ → _connected_): 切断中に流れたノートは誰も取り直さないため
+//   2. 先読みキュー溢れ (paginator.onQueueOverflow): 最古側が捨てられるため
+//   3. 長時間 hidden からの復帰 (ここ): タブ凍結中にソケットが黙って死に、close が遅れて届くケースの保険。
+//      1 で拾えないケースの安全網であり、実際に欠損が無ければ自動補給で空が返り即消える。
+//      ポーリングモードはキュー経由で順次追いつくので対象外
+// 閾値は仮の値 (設計書の未決事項)。設定化する場合はここを起点にする
+const HIDDEN_GAP_THRESHOLD_MS = 1000 * 60 * 5;
+let hiddenAt: number | null = null;
+
 watch(visibility, () => {
 	if (visibility.value === 'hidden') {
 		isPausingUpdate = true;
+		hiddenAt = Date.now();
 	} else { // 'visible'
 		isPausingUpdate = false;
+		if (isGapFillEnabled() && stream != null && hiddenAt != null && Date.now() - hiddenAt >= HIDDEN_GAP_THRESHOLD_MS) {
+			timelineGaps.openGap();
+		}
+		hiddenAt = null;
 		if (isTop()) {
-			releaseQueue();
+			releaseQueue(); // 内部で tryAutoFill も呼ぶ
+		} else {
+			timelineGaps.tryAutoFill();
 		}
 	}
 });
@@ -268,11 +341,13 @@ if (!store.s.realtimeMode) {
 }
 
 useGlobalEvent('noteDeleted', (noteId) => {
+	timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 	paginator.removeItem(noteId);
 });
 
 useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 	if (props.src === 'antenna' && props.antenna === antennaId) {
+		timelineGaps.onNoteRemoved(noteId); // removeItem より前に呼ぶ (付け替え先を items から引くため)
 		paginator.removeItem(noteId);
 	}
 });
@@ -280,10 +355,14 @@ useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 function releaseQueue() {
 	paginator.releaseQueue();
 	scrollToTop(rootEl.value!);
+	timelineGaps.tryAutoFill();
 }
 
 function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 	adInsertionCounter++;
+
+	// 「現在まで」のマーカーは、切断後に最初に届いたノートで上限を確定させる
+	timelineGaps.bindUntil(note.id);
 
 	if (instance.notesPerOneAd > 0 && adInsertionCounter % instance.notesPerOneAd === 0) {
 		note._shouldInsertAd_ = true;
@@ -305,6 +384,26 @@ function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 }
 
 const stream = store.s.realtimeMode ? useStream() : null;
+
+// 再接続時: 切断中に流れたノートは誰も取り直さないので、切断直前の最新 id から現在までを歯抜けマーカーにする
+if (stream != null) {
+	let wasDisconnected = false;
+	const onStreamDisconnected = () => {
+		wasDisconnected = true;
+	};
+	const onStreamConnected = () => {
+		if (!wasDisconnected) return;
+		wasDisconnected = false;
+		if (!isGapFillEnabled()) return;
+		timelineGaps.openGap();
+	};
+	stream.on('_disconnected_', onStreamDisconnected);
+	stream.on('_connected_', onStreamConnected);
+	onUnmounted(() => {
+		stream.off('_disconnected_', onStreamDisconnected);
+		stream.off('_connected_', onStreamConnected);
+	});
+}
 
 const connections = {
 	antenna: null as Misskey.IChannelConnection<Misskey.Channels['antenna']> | null,
@@ -573,5 +672,42 @@ defineExpose({
 	box-sizing: border-box;
 	padding: 16px;
 	background: var(--MI_THEME-panel);
+}
+
+.gap {
+	position: relative;
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+}
+
+.gapButtons {
+	display: flex;
+	flex-direction: column;
+}
+
+.gapButtonsHidden {
+	visibility: hidden;
+}
+
+.gapLoading {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+
+.gapButton {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 4px 16px;
+	font-size: 90%;
+
+	&:hover {
+		background: var(--MI_THEME-buttonHoverBg);
+	}
+
+	& + & {
+		border-top: solid 0.5px var(--MI_THEME-divider);
+	}
 }
 </style>
