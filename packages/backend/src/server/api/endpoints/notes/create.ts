@@ -129,6 +129,18 @@ export const meta = {
 			code: 'CANNOT_SPECIFY_VISIBILITY_FOR_CHANNEL_NOTE',
 			id: '7604697f-1883-44b3-bbe1-15174130b1ed',
 		},
+
+		renoteLockedByModeration: {
+			message: 'Renote of this note has been locked by moderation.',
+			code: 'RENOTE_LOCKED_BY_MODERATION',
+			id: '5f8d7a3c-2b1e-4c9a-9e7d-1a2b3c4d5e6f',
+		},
+
+		renoteLockedByAuthor: {
+			message: 'Renote of this note has been locked by the author.',
+			code: 'RENOTE_LOCKED_BY_AUTHOR',
+			id: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
+		},
 	},
 } as const;
 
@@ -142,6 +154,7 @@ export const paramDef = {
 		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
 		localOnly: { type: 'boolean', default: false },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
+		userRenoteLock: { type: 'boolean', default: false },
 		noExtractMentions: { type: 'boolean', default: false },
 		noExtractHashtags: { type: 'boolean', default: false },
 		noExtractEmojis: { type: 'boolean', default: false },
@@ -247,6 +260,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					cw: ps.cw ?? null,
 					localOnly: ps.localOnly,
 					reactionAcceptance: ps.reactionAcceptance,
+					userRenoteLock: ps.userRenoteLock,
 					visibility: ps.visibility,
 					visibleUserIds: ps.visibleUserIds ?? [],
 					channelId: ps.channelId ?? null,
@@ -271,6 +285,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						throw new ApiError(meta.errors.noSuchRenoteTarget);
 					} else if (err.id === 'bde24c37-121f-4e7d-980d-cec52f599f02') {
 						throw new ApiError(meta.errors.cannotReRenote);
+					} else if (err.id === '5f8d7a3c-2b1e-4c9a-9e7d-1a2b3c4d5e6f') {
+						throw new ApiError(meta.errors.renoteLockedByModeration);
+					} else if (err.id === 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d') {
+						throw new ApiError(meta.errors.renoteLockedByAuthor);
 					} else if (err.id === '2b4fe776-4414-4a2d-ae39-f3418b8fd4d3') {
 						throw new ApiError(meta.errors.youHaveBeenBlocked);
 					} else if (err.id === '90b9d6f0-893a-4fef-b0f1-e9a33989f71a') {
