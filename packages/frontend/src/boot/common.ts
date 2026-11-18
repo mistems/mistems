@@ -20,6 +20,7 @@ import { refreshCurrentAccount, login } from '@/accounts.js';
 import { store } from '@/store.js';
 import { fetchInstance, instance } from '@/instance.js';
 import { updateDeviceKind } from '@/utility/device-kind.js';
+import { installIosViewportGuard } from '@/utility/ios-viewport-guard.js';
 import { reloadChannel } from '@/utility/unison-reload.js';
 import { getUrlWithoutLoginId } from '@/utility/login-id.js';
 import { getAccountFromId } from '@/utility/get-account-from-id.js';
@@ -227,6 +228,9 @@ export async function common(createVue: () => Promise<App<Element>>) {
 				);
 			});
 	}
+
+	// MISTEMS: iOS でアプリを切り替えて戻ったときに、画面が上へずれたままになるのを直す
+	installIosViewportGuard();
 
 	if (prefer.s.makeEveryTextElementsSelectable) {
 		window.document.documentElement.classList.add('forceSelectableAll');
