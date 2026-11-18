@@ -76,4 +76,10 @@ export function installIosViewportGuard(): void {
 	window.visualViewport?.addEventListener('resize', () => scheduleReset(false));
 	// キーボードを閉じたあとにずれが残る場合に備える
 	window.document.addEventListener('focusout', () => scheduleReset(false));
+	// 上のきっかけのあとにずれた場合に備える。
+	// ドキュメント自体のスクロール (要素のスクロールは window まで伝わらない) と、指を離したときにも確かめる。
+	// ずれた状態では html の overscroll-behavior: none のため、指でスクロールしても戻せないので、
+	// 上へスクロールしようとして指を離したところで戻す
+	window.addEventListener('scroll', () => scheduleReset(false), { passive: true });
+	window.addEventListener('touchend', () => scheduleReset(false), { passive: true });
 }
