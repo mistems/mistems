@@ -58,6 +58,7 @@ export const store = markRaw(new Pizzax('base', {
 				withRenotes: true,
 				withSensitive: true,
 				onlyFiles: false,
+				withCollectedChannelNotes: true,
 			},
 		},
 	},

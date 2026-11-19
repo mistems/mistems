@@ -12,6 +12,7 @@ import { GlobalModule } from '@/GlobalModule.js';
 import { MiNote } from '@/models/Note.js';
 import { IPoll } from '@/models/Poll.js';
 import { MiDriveFile } from '@/models/DriveFile.js';
+import { MiChannel } from '@/models/Channel.js';
 
 describe('NoteCreateService', () => {
 	let noteCreateService: NoteCreateService;
@@ -142,6 +143,185 @@ describe('NoteCreateService', () => {
 			const note = { renote: base, files: [file] };
 			expect(noteCreateService['isRenote'](note)).toBe(true);
 			expect(noteCreateService['isQuote'](note)).toBe(true);
+		});
+	});
+
+	describe('applyChannelFederationPolicy (チャンネル連合)', () => {
+		const localUser = { id: 'local-user-id', host: null };
+		const remoteUser = { id: 'remote-user-id', host: 'remote.example' };
+		const channel = (federationPolicy: MiChannel['federationPolicy']) => ({ id: 'some-channel-id', federationPolicy } as MiChannel);
+		const apply = (data: { channel: MiChannel | null; visibility?: string; localOnly?: boolean; visibleUsers?: unknown[] }, user: { id: string; host: string | null } = localUser) => {
+			noteCreateService['applyChannelFederationPolicy'](data as any, user);
+			return data;
+		};
+
+		test('none: public + localOnly になる', () => {
+			const data = apply({ channel: channel('none'), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+		});
+
+		test('public: public で連合する', () => {
+			const data = apply({ channel: channel('public'), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('public: サイレンス等で home に降格済みなら home を維持する', () => {
+			const data = apply({ channel: channel('public'), visibility: 'home', localOnly: false });
+			expect(data.visibility).toBe('home');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('public: ノート単位の localOnly は尊重し、public + localOnly に落とす', () => {
+			const data = apply({ channel: channel('public'), visibility: 'public', localOnly: true });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+		});
+
+		test.each(['followers', 'specified'])('%s 可視性は連合させず public + localOnly に落とす', (visibility) => {
+			const data = apply({ channel: channel('public'), visibility, localOnly: false, visibleUsers: [{ id: 'x' }] });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+			expect(data.visibleUsers).toEqual([]);
+		});
+
+		test.each(['unknown', 'home'])('未知の federationPolicy (%s) は連合しない側に倒す', (policy) => {
+			const data = apply({ channel: channel(policy as any), visibility: 'public', localOnly: false });
+			expect(data.visibility).toBe('public');
+			expect(data.localOnly).toBe(true);
+		});
+
+		test('リモートユーザーのノートには適用しない (受信した可視性と localOnly を保つ)', () => {
+			const data = apply({ channel: channel('none'), visibility: 'home', localOnly: false }, remoteUser);
+			expect(data.visibility).toBe('home');
+			expect(data.localOnly).toBe(false);
+		});
+
+		test('チャンネル外のノートには適用しない', () => {
+			const data = apply({ channel: null, visibility: 'followers', localOnly: false });
+			expect(data.visibility).toBe('followers');
+			expect(data.localOnly).toBe(false);
+		});
+	});
+
+	describe('collectIntoFederatedChannelByHashtag (チャンネル連合のハッシュタグ)', () => {
+		const localUser = { id: 'local-user-id', host: null };
+		const remoteUser = { id: 'remote-user-id', host: 'remote.example' };
+		const federatedChannel = { id: 'federated-channel-id', federationPolicy: 'public', federationHashtag: '連合チャンネル_雑談' } as MiChannel;
+		const replyChannel = { id: 'reply-channel-id', federationPolicy: 'public' } as MiChannel;
+
+		const collect = async (data: Record<string, unknown>, user: { id: string; host: string | null } = remoteUser) => {
+			const service = noteCreateService['channelFederationHashtagService'];
+			const original = service.findCollectingChannel;
+			const calls: string[][] = [];
+			service.findCollectingChannel = async (tags: string[]) => {
+				calls.push(tags);
+				return tags.some(t => t.toLowerCase() === '連合チャンネル_雑談') ? federatedChannel : null;
+			};
+			try {
+				await noteCreateService['collectIntoFederatedChannelByHashtag'](data as any, user);
+			} finally {
+				service.findCollectingChannel = original;
+			}
+			return { data, calls };
+		};
+
+		test('リモートの公開のノートでハッシュタグが一致すれば、チャンネルに入れる', async () => {
+			const { data } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'] });
+			expect(data.channel).toBe(federatedChannel);
+		});
+
+		test.each(['home', 'followers', 'specified'])('公開以外 (%s) は入れない', async (visibility) => {
+			const { data, calls } = await collect({ channel: null, visibility, localOnly: false, apHashtags: ['連合チャンネル_雑談'] });
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+
+		test('ローカルのユーザーのノートは入れない', async () => {
+			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'] }, localUser);
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+
+		test('リプライでチャンネルが決まっていれば、そちらを優先する', async () => {
+			const { data, calls } = await collect({ channel: replyChannel, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'] });
+			expect(data.channel).toBe(replyChannel);
+			expect(calls.length).toBe(0);
+		});
+
+		test('一致するチャンネルがなければ入れない', async () => {
+			const { data } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['ほかのタグ'] });
+			expect(data.channel).toBe(null);
+		});
+
+		test('AP の tag になくても、本文の付記にハッシュタグがあれば入れ、ノートのハッシュタグにも足す (古い MISTEMS の付記)', async () => {
+			const { data } = await collect({
+				channel: null, visibility: 'public', localOnly: false, apHashtags: ['ほかのタグ'],
+				text: 'hello\n\nFrom: 「雑談」 #連合チャンネル_雑談 https://b.test/channels/x',
+			});
+			expect(data.channel).toBe(federatedChannel);
+			expect(data.apHashtags).toEqual(['ほかのタグ', '連合チャンネル_雑談']);
+		});
+
+		test('AP の tag と本文の両方にあるハッシュタグは、ノートのハッシュタグに重ねない', async () => {
+			const { data } = await collect({
+				channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'],
+				text: 'hello\n\n#連合チャンネル_雑談',
+			});
+			expect(data.channel).toBe(federatedChannel);
+			expect(data.apHashtags).toEqual(['連合チャンネル_雑談']);
+		});
+
+		test('本文のふつうのハッシュタグは、収蔵の判定に使わない', async () => {
+			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: [], text: 'hello #雑談' });
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
+		});
+
+		describe('stripChannelFederationHashtagFromText (本文の末尾の付記を取り除く)', () => {
+			const strip = (data: Record<string, unknown>, user: { id: string; host: string | null } = remoteUser) => {
+				noteCreateService['stripChannelFederationHashtagFromText'](data as any, user);
+				return data;
+			};
+
+			test('収蔵したリモートのノートの本文の末尾にあるチャンネルのハッシュタグを取り除く', async () => {
+				const { data } = await collect({
+					channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'],
+					text: 'hello\n\n#連合チャンネル_雑談',
+				});
+				expect(data.channel).toBe(federatedChannel);
+				strip(data);
+				expect(data.text).toBe('hello');
+				// ノートのハッシュタグからは外さない
+				expect(data.apHashtags).toEqual(['連合チャンネル_雑談']);
+			});
+
+			test('本文の途中にあるチャンネルのハッシュタグは残す', () => {
+				const data = strip({ channel: federatedChannel, text: '#連合チャンネル_雑談 で話す' });
+				expect(data.text).toBe('#連合チャンネル_雑談 で話す');
+			});
+
+			test('ほかのチャンネルのハッシュタグは残す', () => {
+				const data = strip({ channel: federatedChannel, text: 'hello\n\n#連合チャンネル_告知' });
+				expect(data.text).toBe('hello\n\n#連合チャンネル_告知');
+			});
+
+			test('ローカルのユーザーのノートは変えない', () => {
+				const data = strip({ channel: federatedChannel, text: 'hello\n\n#連合チャンネル_雑談' }, localUser);
+				expect(data.text).toBe('hello\n\n#連合チャンネル_雑談');
+			});
+
+			test('チャンネルに入らないノートは変えない', () => {
+				const data = strip({ channel: null, text: 'hello\n\n#連合チャンネル_雑談' });
+				expect(data.text).toBe('hello\n\n#連合チャンネル_雑談');
+			});
+		});
+
+		test('中身のないリノートは入れない', async () => {
+			const { data, calls } = await collect({ channel: null, visibility: 'public', localOnly: false, apHashtags: ['連合チャンネル_雑談'], renote: { id: 'x' } });
+			expect(data.channel).toBe(null);
+			expect(calls.length).toBe(0);
 		});
 	});
 });
