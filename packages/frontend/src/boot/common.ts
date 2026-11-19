@@ -20,6 +20,8 @@ import { refreshCurrentAccount, login } from '@/accounts.js';
 import { store } from '@/store.js';
 import { fetchInstance, instance } from '@/instance.js';
 import { updateDeviceKind } from '@/utility/device-kind.js';
+import { installIosViewportGuard } from '@/utility/ios-viewport-guard.js';
+import { installViewportDebug } from '@/utility/viewport-debug.js';
 import { reloadChannel } from '@/utility/unison-reload.js';
 import { getUrlWithoutLoginId } from '@/utility/login-id.js';
 import { getAccountFromId } from '@/utility/get-account-from-id.js';
@@ -227,6 +229,20 @@ export async function common(createVue: () => Promise<App<Element>>) {
 				);
 			});
 	}
+
+	// MISTEMS: iOS でアプリを切り替えて戻ったときに、画面が上へずれたままになるのを直す
+	installIosViewportGuard();
+
+	// MISTEMS: 上のずれを調べるための表示とログ。開発者モードのときだけ出す (utility/viewport-debug.ts)
+	let uninstallViewportDebug: (() => void) | null = null;
+	watch(prefer.r.devMode, (enabled) => {
+		if (enabled && uninstallViewportDebug == null) {
+			uninstallViewportDebug = installViewportDebug();
+		} else if (!enabled && uninstallViewportDebug != null) {
+			uninstallViewportDebug();
+			uninstallViewportDebug = null;
+		}
+	}, { immediate: true });
 
 	if (prefer.s.makeEveryTextElementsSelectable) {
 		window.document.documentElement.classList.add('forceSelectableAll');
