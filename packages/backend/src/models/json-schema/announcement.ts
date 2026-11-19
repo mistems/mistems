@@ -52,6 +52,11 @@ export const packedAnnouncementSchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		groupId: {
+			type: 'string',
+			optional: false, nullable: true,
+			format: 'id',
+		},
 		forYou: {
 			type: 'boolean',
 			optional: false, nullable: false,

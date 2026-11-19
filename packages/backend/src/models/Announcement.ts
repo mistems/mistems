@@ -6,6 +6,7 @@
 import { Entity, Index, Column, PrimaryColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
+import { MiAnnouncementGroup } from './AnnouncementGroup.js';
 
 @Entity('announcement')
 export class MiAnnouncement {
@@ -90,6 +91,25 @@ export class MiAnnouncement {
 	})
 	@JoinColumn()
 	public user: MiUser | null;
+
+	@Index()
+	@Column({
+		...id(),
+		nullable: true,
+	})
+	public groupId: MiAnnouncementGroup['id'] | null;
+
+	@ManyToOne(() => MiAnnouncementGroup, {
+		onDelete: 'SET NULL',
+	})
+	@JoinColumn()
+	public group: MiAnnouncementGroup | null;
+
+	// グループの中の表示順 (昇順。同じなら新しい順)
+	@Column('integer', {
+		default: 0,
+	})
+	public displayOrder: number;
 
 	constructor(data: Partial<MiAnnouncement>) {
 		if (data == null) return;

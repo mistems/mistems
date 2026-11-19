@@ -146,6 +146,10 @@ export const moderationLogTypes = [
 	'updateProxyAccountDescription',
 	'lockNoteRenote',
 	'unlockNoteRenote',
+	'createAnnouncementGroup',
+	'updateAnnouncementGroup',
+	'deleteAnnouncementGroup',
+	'reorderAnnouncements',
 ] as const;
 
 export type ModerationLogPayloads = {
@@ -435,6 +439,24 @@ export type ModerationLogPayloads = {
 		noteUserId: string;
 		noteUserUsername: string;
 		noteUserHost: string | null;
+	};
+	createAnnouncementGroup: {
+		groupId: string;
+		group: any;
+	};
+	updateAnnouncementGroup: {
+		groupId: string;
+		before: any;
+		after: any;
+	};
+	deleteAnnouncementGroup: {
+		groupId: string;
+		group: any;
+	};
+	reorderAnnouncements: {
+		// 表示順がグループごとだったころのログにだけある
+		groupId?: string | null;
+		announcementIds: string[];
 	};
 };
 
