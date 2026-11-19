@@ -172,7 +172,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				silence: announcement.silence,
 				needConfirmationToRead: announcement.needConfirmationToRead,
 				userId: announcement.userId,
-				reads: reads.get(announcement)!,
+				reads: reads.get(announcement) ?? 0,
 			}));
 		});
 	}
