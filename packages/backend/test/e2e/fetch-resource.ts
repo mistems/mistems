@@ -6,8 +6,10 @@
 process.env.NODE_ENV = 'test';
 
 import * as assert from 'assert';
+import * as crypto from 'node:crypto';
+import * as http from 'node:http';
 import { beforeAll, beforeEach, describe, test } from 'vitest';
-import { api, channel, clip, galleryPost, page, play, post, signup, simpleGet, uploadFile } from '../utils.js';
+import { api, channel, clip, galleryPost, host, page, play, port, post, relativeFetch, signup, simpleGet, uploadFile } from '../utils.js';
 import type { SimpleGetResponse } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
@@ -326,6 +328,64 @@ describe('Webリソース', () => {
 		}));
 
 		// test.todo('POSTできる？');
+
+		describe('署名の形式を受け付けられない POST は 401 を返す', () => {
+			const postInbox = async (headers: Record<string, string>) => await relativeFetch('/inbox', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/activity+json', ...headers },
+				body: JSON.stringify({ type: 'Create', actor: 'https://remote.example/users/1' }),
+			});
+
+			test('署名がない', async () => {
+				const res = await postInbox({});
+				assert.strictEqual(res.status, 401);
+			});
+
+			// 署名の値は検証しないが (検証は受け付けたあとのジョブで行う)、形式と Date・Host・Digest はそろえた要求を送る
+			const postSignedInbox = (date: Date) => new Promise<number>((resolve, reject) => {
+				const body = JSON.stringify({ type: 'Create', actor: 'https://remote.invalid/users/1' });
+				const digest = `SHA-256=${crypto.createHash('sha256').update(body).digest('base64')}`;
+				const req = http.request({
+					host: '127.0.0.1',
+					port,
+					path: '/inbox',
+					method: 'POST',
+					headers: {
+						'Host': host,
+						'Content-Type': 'application/activity+json',
+						'Date': date.toUTCString(),
+						'Digest': digest,
+						'Signature': 'keyId="https://remote.invalid/users/1#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest",signature="AAAA"',
+					},
+				}, res => {
+					res.resume();
+					resolve(res.statusCode ?? 0);
+				});
+				req.on('error', reject);
+				req.end(body);
+			});
+
+			test('Date が 10 分前なら受け付ける (配送が遅れた要求)', async () => {
+				assert.strictEqual(await postSignedInbox(new Date(Date.now() - 1000 * 60 * 10)), 202);
+			});
+
+			test('Date が 2 時間前なら 401', async () => {
+				assert.strictEqual(await postSignedInbox(new Date(Date.now() - 1000 * 60 * 60 * 2)), 401);
+			});
+
+			test('Date が 2 時間後なら 401', async () => {
+				assert.strictEqual(await postSignedInbox(new Date(Date.now() + 1000 * 60 * 60 * 2)), 401);
+			});
+
+			test('RFC 9421 の形式', async () => {
+				const res = await postInbox({
+					'Signature-Input': 'sig1=("@method" "@target-uri" "content-digest");created=1700000000;keyid="https://remote.example/users/1#main-key"',
+					'Signature': 'sig1=:AAAA:',
+					'Content-Digest': 'sha-256=:AAAA:',
+				});
+				assert.strictEqual(res.status, 401);
+			});
+		});
 	});
 
 	describe('/users/:id/inbox', () => {
