@@ -27,7 +27,7 @@ BASE=$(git merge-base origin/develop HEAD)
 
 `.ts` を一律で含めると本エージェントの守備範囲外 (composable / store / service 層) まで巻き込んで誤検知が増えるため、対象は `.vue` のみとし、Storybook 併設チェックのために以下を **別リスト** として追加する:
 
-- `locales/*.yml` (とくに `ja-JP.yml` 以外の変更は即 Critical)
+- `locales/*.yml` (`ja-JP.yml` 以外で上流にあるキーを変えていたら即 Critical)
 - `packages/frontend/src/components/**/*.stories.impl.ts`
 
 差分対象が空なら「レビュー対象の Vue コンポーネント変更なし」と短く報告して終了。
@@ -54,7 +54,7 @@ BASE=$(git merge-base origin/develop HEAD)
 - 引数なし: `i18n.ts.<path>` (例: `i18n.ts.deleted`)。
 - 引数あり: `i18n.tsx.<path>(...)` (関数呼び出し、例: `i18n.tsx.takeOverConfirm({ name })`)。
 - 新規 i18n キーは `locales/ja-JP.yml` **のみ** に追加。
-- **`locales/ja-JP.yml` 以外の `.yml` 変更があれば即 Critical** (`en-US.yml` 等は Crowdin 自動配信先で、手動編集すると上書き喪失する)。
+- **`locales/ja-JP.yml` 以外の `.yml` で、上流にあるキー (起点の同じファイルにあるキー) を変えたり消したりしていれば即 Critical** (上流では Crowdin の自動配信先で、統合のたびにコンフリクトする)。MISTEMS 独自のキーを足すのは問題ない。`ja-JP.yml` に MISTEMS 独自のキーを足したのに `en-US.yml` に訳が無ければ Minor として指摘する。判定には `node scripts/check-shipping.mjs` の locale safety を使える
 
 差分検出:
 
@@ -150,4 +150,4 @@ git diff --name-only --diff-filter=A "$BASE"...HEAD -- \
 - [MkButton.vue](../../packages/frontend/src/components/MkButton.vue)
 - [MkInput.vue](../../packages/frontend/src/components/MkInput.vue) — generic SFC 例
 - [MkButton.stories.impl.ts](../../packages/frontend/src/components/MkButton.stories.impl.ts) — Storybook 雛形
-- [AGENTS.md](../../AGENTS.md) — 共通の安全規約と検証方針
+- [CLAUDE.md](../../CLAUDE.md) — MISTEMS 開発の規約と検証方針
