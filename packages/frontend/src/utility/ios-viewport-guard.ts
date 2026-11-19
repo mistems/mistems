@@ -21,6 +21,9 @@ const KEYBOARD_THRESHOLD = 100;
 /** キーボードの開け閉めや画面の復帰のアニメーションが終わるのを待つ時間 (ms) */
 const SETTLE_DELAY = 300;
 
+/** スクロール位置を戻したときに window へ送るイベントの名前 */
+export const IOS_VIEWPORT_RESET_EVENT = 'mistems:ios-viewport-reset';
+
 export function isIosLike(ua: string, maxTouchPoints: number): boolean {
 	// iPadOS はデスクトップ表示の既定では UA が Mac と同じなので、タッチ点の数で見分ける
 	return /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1);
@@ -49,7 +52,11 @@ export function installIosViewportGuard(): void {
 			layoutHeight: window.document.documentElement.clientHeight,
 			visualHeight: vv?.height ?? window.document.documentElement.clientHeight,
 		});
-		if (shouldReset) window.scrollTo(0, 0);
+		if (shouldReset) {
+			window.scrollTo(0, 0);
+			// 調査用の表示 (utility/viewport-debug.ts) に、戻したことを知らせる
+			window.dispatchEvent(new Event(IOS_VIEWPORT_RESET_EVENT));
+		}
 	};
 
 	let timer: number | null = null;
