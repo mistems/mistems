@@ -15,7 +15,7 @@ export class MiFlash {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('timestamp with time zone', {
 		comment: 'The updated date of the Flash.',
 	})

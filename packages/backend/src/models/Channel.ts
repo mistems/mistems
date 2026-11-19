@@ -75,14 +75,14 @@ export class MiChannel {
 	})
 	public isArchived: boolean;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 		comment: 'The count of notes.',
 	})
 	public notesCount: number;
 
-	@Index()
+	// Index dropped by migration 1794546098079 (unused in production; see the plan 2026-11-12-使われていないインデックスの整理.md).
 	@Column('integer', {
 		default: 0,
 		comment: 'The count of users.',
