@@ -13742,6 +13742,14 @@ export interface Locale extends ILocale {
          */
         "editImage": string;
         /**
+         * 左に回転
+         */
+        "rotateLeft": string;
+        /**
+         * 右に回転
+         */
+        "rotateRight": string;
+        /**
          * {x}に圧縮
          */
         "compressedToX": ParameterizedString<"x">;

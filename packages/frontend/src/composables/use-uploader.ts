@@ -19,6 +19,7 @@ import { uploadFile, UploadAbortedError } from '@/utility/drive.js';
 import type { Content } from '@/components/MkLightbox.item.vue';
 import * as os from '@/os.js';
 import { isPreviewable, getType } from '@/utility/lightbox.js';
+import { rotateImageFile } from '@/utility/rotate-image-file.js';
 import { ensureSignin } from '@/i.js';
 
 export type UploaderFeatures = {
@@ -184,6 +185,21 @@ export function useUploader(options: {
 		item.thumbnail = THUMBNAIL_SUPPORTED_TYPES.includes(file.type) ? newObjectUrl : null;
 	}
 
+	/** 編集した画像で項目のファイルを置き換え、前処理をやり直す */
+	function replaceItemFile(item: UploaderItem, file: File) {
+		const newObjectUrl = createItemObjectUrl(item, file);
+		items.value.splice(items.value.indexOf(item), 1, {
+			...item,
+			file: markRaw(file),
+			thumbnail: THUMBNAIL_SUPPORTED_TYPES.includes(file.type) ? newObjectUrl : null,
+			objectUrl: newObjectUrl,
+		});
+		const reactiveItem = items.value.find(x => x.id === item.id)!;
+		preprocess(reactiveItem).then(() => {
+			triggerRef(items);
+		});
+	}
+
 	function removeItem(item: UploaderItem) {
 		revokeItemObjectUrls(item);
 		items.value.splice(items.value.indexOf(item), 1);
@@ -284,17 +300,19 @@ export function useUploader(options: {
 					text: i18n.ts.cropImage,
 					action: async () => {
 						const cropped = await os.cropImageFile(item.file, { aspectRatio: null });
-						const newObjectUrl = createItemObjectUrl(item, cropped);
-						items.value.splice(items.value.indexOf(item), 1, {
-							...item,
-							file: markRaw(cropped),
-							thumbnail: THUMBNAIL_SUPPORTED_TYPES.includes(cropped.type) ? newObjectUrl : null,
-							objectUrl: newObjectUrl,
-						});
-						const reactiveItem = items.value.find(x => x.id === item.id)!;
-						preprocess(reactiveItem).then(() => {
-							triggerRef(items);
-						});
+						replaceItemFile(item, cropped);
+					},
+				}, {
+					icon: 'ti ti-rotate',
+					text: i18n.ts._uploader.rotateLeft,
+					action: async () => {
+						replaceItemFile(item, await rotateImageFile(item.file, 'left'));
+					},
+				}, {
+					icon: 'ti ti-rotate-clockwise',
+					text: i18n.ts._uploader.rotateRight,
+					action: async () => {
+						replaceItemFile(item, await rotateImageFile(item.file, 'right'));
 					},
 				}, /*{
 					icon: 'ti ti-resize',
@@ -310,17 +328,7 @@ export function useUploader(options: {
 							image: item.file,
 						}, {
 							ok: (file) => {
-									const newObjectUrl = createItemObjectUrl(item, file);
-								items.value.splice(items.value.indexOf(item), 1, {
-									...item,
-									file: markRaw(file),
-									thumbnail: THUMBNAIL_SUPPORTED_TYPES.includes(file.type) ? newObjectUrl : null,
-									objectUrl: newObjectUrl,
-								});
-								const reactiveItem = items.value.find(x => x.id === item.id)!;
-								preprocess(reactiveItem).then(() => {
-									triggerRef(items);
-								});
+								replaceItemFile(item, file);
 							},
 							closed: () => dispose(),
 						});
