@@ -351,6 +351,10 @@ const reactionsPaginator = markRaw(new Paginator('notes/reactions', {
 const replies = ref<Misskey.entities.Note[]>([]);
 const repliesLoaded = ref(false);
 
+if (note.repliesCount > 0) {
+	loadReplies();
+}
+
 function loadReplies() {
 	repliesLoaded.value = true;
 	misskeyApi('notes/children', {
