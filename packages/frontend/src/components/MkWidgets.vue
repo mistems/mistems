@@ -52,7 +52,7 @@ import { genId } from '@/utility/id.js';
 import MkSelect from '@/components/MkSelect.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
-import { widgets as widgetDefs, federationWidgets } from '@/widgets/index.js';
+import { widgets as widgetDefs, federationWidgets, dbServerStatsWidgets } from '@/widgets/index.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
@@ -64,11 +64,12 @@ const props = defineProps<{
 }>();
 
 const _widgetDefs = computed(() => {
-	if (instance.federation === 'none') {
-		return widgetDefs.filter(x => !federationWidgets.includes(x as any));
-	} else {
-		return widgetDefs;
-	}
+	return widgetDefs.filter(x => {
+		if (instance.federation === 'none' && federationWidgets.includes(x as any)) return false;
+		// DB サーバー統計は、管理画面で有効化するまで一覧に出さない
+		if (dbServerStatsWidgets.includes(x as any) && !instance.enableDbServerStats) return false;
+		return true;
+	});
 });
 
 const _widgets = computed(() => props.widgets.filter(x => _widgetDefs.value.includes(x.name as any)));

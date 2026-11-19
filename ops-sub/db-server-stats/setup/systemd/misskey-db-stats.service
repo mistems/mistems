@@ -1,0 +1,13 @@
+[Unit]
+Description=Misskey DB server stats collector
+After=postgresql.service
+
+[Service]
+Type=oneshot
+# 収集用の OS ユーザー。DB にも同名のロールを作り、Unix ソケットの peer 認証でつなぐ (README の 2)
+User=misskey_stats
+Group=misskey_stats
+# 前回値を置く /var/lib/misskey-stats を systemd に作らせ、所有者を User に合わせる
+StateDirectory=misskey-stats
+EnvironmentFile=/etc/misskey-db-stats.env
+ExecStart=/usr/local/bin/collect-stats.sh
