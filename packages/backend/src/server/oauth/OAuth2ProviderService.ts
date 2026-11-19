@@ -564,7 +564,7 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 
 				applyNoStore(reply);
 				return await HtmlTemplateService.replyHtml(reply, OAuthPage({
-					...await this.htmlTemplateService.getCommonData(),
+					...await this.htmlTemplateService.getCommonData(request.headers.cookie),
 					transactionId,
 					clientName: clientInfo.name,
 					clientLogo: clientInfo.logo ?? undefined,
