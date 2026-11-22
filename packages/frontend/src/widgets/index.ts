@@ -25,6 +25,7 @@ export default function(app: App) {
 	app.component('WidgetPostForm', defineAsyncComponent(() => import('./WidgetPostForm.vue')));
 	app.component('WidgetSlideshow', defineAsyncComponent(() => import('./WidgetSlideshow.vue')));
 	app.component('WidgetServerMetric', defineAsyncComponent(() => import('./server-metric/index.vue')));
+	app.component('WidgetDbServerMetric', defineAsyncComponent(() => import('./db-server-metric/index.vue')));
 	app.component('WidgetOnlineUsers', defineAsyncComponent(() => import('./WidgetOnlineUsers.vue')));
 	app.component('WidgetJobQueue', defineAsyncComponent(() => import('./WidgetJobQueue.vue')));
 	app.component('WidgetInstanceCloud', defineAsyncComponent(() => import('./WidgetInstanceCloud.vue')));
@@ -42,6 +43,11 @@ export default function(app: App) {
 export const federationWidgets = [
 	'federation',
 	'instanceCloud',
+] as const;
+
+// DB サーバー統計のウィジェット（管理画面で有効化し、かつモデレーター以上のときだけ出す）
+export const dbServerStatsWidgets = [
+	'dbServerMetric',
 ] as const;
 
 export const widgets = [
@@ -62,6 +68,7 @@ export const widgets = [
 	'postForm',
 	'slideshow',
 	'serverMetric',
+	'dbServerMetric',
 	'onlineUsers',
 	'jobQueue',
 	'button',

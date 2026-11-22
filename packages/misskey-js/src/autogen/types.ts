@@ -5724,6 +5724,7 @@ export type components = {
             maxFileSize: number;
             /** @enum {string} */
             federation: 'all' | 'specified' | 'none';
+            enableDbServerStats: boolean;
         };
         MetaDetailedOnly: {
             features?: {
@@ -10074,6 +10075,7 @@ export interface operations {
                         enableChartsForFederatedInstances: boolean;
                         enableStatsForFederatedInstances: boolean;
                         enableServerMachineStats: boolean;
+                        enableDbServerStats: boolean;
                         enableIdenticonGeneration: boolean;
                         manifestJsonOverride: string;
                         policies: Record<string, never>;
@@ -13746,6 +13748,7 @@ export interface operations {
                     enableChartsForFederatedInstances?: boolean;
                     enableStatsForFederatedInstances?: boolean;
                     enableServerMachineStats?: boolean;
+                    enableDbServerStats?: boolean;
                     enableIdenticonGeneration?: boolean;
                     serverRules?: string[];
                     bannedEmailDomains?: string[];

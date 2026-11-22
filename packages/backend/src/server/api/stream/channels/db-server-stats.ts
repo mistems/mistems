@@ -1,0 +1,82 @@
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import Xev from 'xev';
+import { Inject, Injectable, Scope } from '@nestjs/common';
+import { bindThis } from '@/decorators.js';
+import { isJsonObject } from '@/misc/json-value.js';
+import type { JsonObject, JsonValue } from '@/misc/json-value.js';
+import Channel, { type ChannelRequest } from '../channel.js';
+import { REQUEST } from '@nestjs/core';
+
+const ev = new Xev();
+
+/**
+ * 購読している間、DbServerStatsService に「見ている」合図を送る間隔。
+ * DbServerStatsService は最後の合図から 5 分たつと SELECT を止めるので、それより十分短くする。
+ */
+const watchingHeartbeatInterval = 60 * 1000;
+
+@Injectable({ scope: Scope.TRANSIENT })
+export class DbServerStatsChannel extends Channel {
+	public readonly chName = 'dbServerStats';
+	public static shouldShare = true;
+	// サーバーの統計 (serverStats) と同じく、誰でも購読できる。統計を出すかは管理画面の enableDbServerStats で決める
+	public static requireCredential = false as const;
+	private heartbeatId: NodeJS.Timeout | null = null;
+
+	constructor(
+		@Inject(REQUEST)
+		request: ChannelRequest,
+	) {
+		super(request);
+	}
+
+	@bindThis
+	public async init(params: JsonObject): Promise<boolean> {
+		ev.addListener('dbServerStats', this.onStats);
+		this.sendWatching();
+		this.heartbeatId = setInterval(this.sendWatching, watchingHeartbeatInterval);
+		return true;
+	}
+
+	@bindThis
+	private sendWatching() {
+		// DbServerStatsService が別のプロセスで動いていても届くよう、ev (cluster をまたぐ) で送る
+		ev.emit('dbServerStatsWatching', null);
+	}
+
+	@bindThis
+	private onStats(stats: JsonObject) {
+		this.send('stats', stats);
+	}
+
+	@bindThis
+	public onMessage(type: string, body: JsonValue) {
+		switch (type) {
+			case 'requestLog':
+				if (!isJsonObject(body)) return;
+				if (typeof body.id !== 'string' && typeof body.id !== 'number') return;
+				if (typeof body.length !== 'number') return;
+				ev.once(`dbServerStatsLog:${body.id}`, statsLog => {
+					this.send('statsLog', statsLog);
+				});
+				ev.emit('requestDbServerStatsLog', {
+					id: body.id,
+					length: body.length,
+				});
+				break;
+		}
+	}
+
+	@bindThis
+	public dispose() {
+		ev.removeListener('dbServerStats', this.onStats);
+		if (this.heartbeatId) {
+			clearInterval(this.heartbeatId);
+			this.heartbeatId = null;
+		}
+	}
+}

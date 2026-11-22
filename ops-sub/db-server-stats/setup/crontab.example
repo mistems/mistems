@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: syuilo and misskey-project
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# crontab だけで完結させる場合の例。
+# `crontab -u misskey_stats -e` で開いて貼り付ける (README の 2 で作る OS ユーザー)。
+# cron では StateDirectory が使えないので、先に前回値の置き場を作っておく:
+#   sudo install -d -o misskey_stats -g misskey_stats -m 755 /var/lib/misskey-stats
+#
+# 環境変数は `crontab -e` で行頭に書くか、スクリプト側で
+# `. /etc/misskey-db-stats.env` のように読み込ませる。
+
+# peer 認証 (README の 2-A) なら Unix ソケットのディレクトリを指す
+PGHOST=/var/run/postgresql
+PGUSER=misskey_stats
+PGDATABASE=misskey
+MISSKEY_HOST_ID=primary
+
+# 60 秒間隔で収集（cron は 1 分粒度。30 秒間隔にしたい場合は systemd を使う）
+* * * * * /usr/local/bin/collect-stats.sh
+
+# 日次 retention（毎日 04:00 に古い行を削除）
+0 4 * * * /usr/local/bin/purge-stats.sh

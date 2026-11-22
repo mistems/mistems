@@ -1,0 +1,11 @@
+[Unit]
+Description=Misskey DB server stats collector (60s interval)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=1s
+Unit=misskey-db-stats.service
+
+[Install]
+WantedBy=timers.target
