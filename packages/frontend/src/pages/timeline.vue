@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkPostForm v-if="prefer.r.showFixedPostForm.value" :class="$style.postForm" class="_panel" fixed style="margin-bottom: var(--MI-margin);"/>
 		<MkStreamingNotesTimeline
 			ref="tlComponent"
-			:key="src + withRenotes + withReplies + onlyFiles + withSensitive"
+			:key="src + withRenotes + withReplies + onlyFiles + withSensitive + withCollectedChannelNotes"
 			:class="$style.tl"
 			:src="(src.split(':')[0] as (BasicTimelineType | 'list'))"
 			:list="src.split(':')[1]"
@@ -20,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:withReplies="withReplies"
 			:withSensitive="withSensitive"
 			:onlyFiles="onlyFiles"
+			:withCollectedChannelNotes="withCollectedChannelNotes"
 			:sound="true"
 		/>
 	</div>
@@ -40,6 +41,7 @@ import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
 import { definePage } from '@/page.js';
 import { antennasCache, userListsCache, favoritedChannelsCache } from '@/cache.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 import { deviceKind } from '@/utility/device-kind.js';
 import { deepMerge } from '@/utility/merge.js';
 import { miLocalStorage } from '@/local-storage.js';
@@ -104,6 +106,12 @@ const withSensitive = computed<boolean>({
 	set: (x) => saveTlFilter('withSensitive', x),
 });
 
+// 保存済みの設定に値がない (この項目ができる前に保存した) ときは、既定の true として扱う
+const withCollectedChannelNotes = computed<boolean>({
+	get: () => store.r.tl.value.filter.withCollectedChannelNotes ?? true,
+	set: (x) => saveTlFilter('withCollectedChannelNotes', x),
+});
+
 const showFixedPostForm = prefer.model('showFixedPostForm');
 
 async function chooseList(ev: PointerEvent): Promise<void> {
@@ -149,11 +157,13 @@ async function chooseChannel(ev: PointerEvent): Promise<void> {
 	const channels = await favoritedChannelsCache.fetch();
 	const items: (MenuItem | undefined)[] = [
 		...channels.map(channel => {
-			const lastReadedAt = miLocalStorage.getItemAsJson(`channelLastReadedAt:${channel.id}`) ?? null;
+			const lastReadedAt = (miLocalStorage.getItemAsJson('channelsLastReadedAt') ?? {})[channel.id] ?? null;
 			const hasUnreadNote = (lastReadedAt && channel.lastNotedAt) ? Date.parse(channel.lastNotedAt) > lastReadedAt : !!(!lastReadedAt && channel.lastNotedAt);
 
 			return {
 				type: 'link' as const,
+				// 連合するチャンネルには、グローバルタイムラインと同じアイコンを付ける
+				icon: isFederatedChannel(channel) ? 'ti ti-whirl' : undefined,
 				text: channel.name,
 				indicate: hasUnreadNote,
 				to: `/channels/${channel.id}`,
@@ -239,7 +249,18 @@ const headerActions = computed<PageHeaderItem[]>(() => {
 				text: i18n.ts.fileAttachedOnly,
 				ref: onlyFiles,
 				disabled: isBasicTimeline(src.value) && hasWithReplies(src.value) ? withReplies : false,
-			}, {
+			});
+
+			if (src.value === 'home' || src.value === 'social') {
+				menuItems.push({
+					type: 'switch',
+					icon: 'ti ti-device-tv',
+					text: i18n.ts.withCollectedChannelNotes,
+					ref: withCollectedChannelNotes,
+				});
+			}
+
+			menuItems.push({
 				type: 'divider',
 			}, {
 				type: 'switch',

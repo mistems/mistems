@@ -196,6 +196,8 @@ import type {
 	ChannelsSearchResponse,
 	ChannelsShowRequest,
 	ChannelsShowResponse,
+	ChannelsShowByFederationHashtagRequest,
+	ChannelsShowByFederationHashtagResponse,
 	ChannelsTimelineRequest,
 	ChannelsTimelineResponse,
 	ChannelsUnfavoriteRequest,
@@ -804,6 +806,7 @@ export type Endpoints = {
 	'channels/owned': { req: ChannelsOwnedRequest; res: ChannelsOwnedResponse };
 	'channels/search': { req: ChannelsSearchRequest; res: ChannelsSearchResponse };
 	'channels/show': { req: ChannelsShowRequest; res: ChannelsShowResponse };
+	'channels/show-by-federation-hashtag': { req: ChannelsShowByFederationHashtagRequest; res: ChannelsShowByFederationHashtagResponse };
 	'channels/timeline': { req: ChannelsTimelineRequest; res: ChannelsTimelineResponse };
 	'channels/unfavorite': { req: ChannelsUnfavoriteRequest; res: EmptyResponse };
 	'channels/unfollow': { req: ChannelsUnfollowRequest; res: EmptyResponse };

@@ -6,7 +6,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <PageWithHeader :actions="headerActions" :tabs="headerTabs">
 	<div class="_spacer" style="--MI_SPACER-w: 800px;">
-		<MkNotesTimeline :paginator="paginator"/>
+		<div class="_gaps">
+			<!-- 同じハッシュタグのチャンネルがすでにあれば、作る案内の代わりにそのチャンネルへ誘導する (同じハッシュタグでは作れないため) -->
+			<MkInfo v-if="federationChannel != null">
+				<div class="_gaps_s">
+					<div>{{ i18n.ts._channel.federationHashtagChannelExists }}</div>
+					<div>
+						<MkButton inline rounded primary type="routerLink" :to="`/channels/${federationChannel.id}`"><i class="ti ti-device-tv"></i> {{ i18n.tsx._channel.openFederationHashtagChannel({ name: federationChannel.name }) }}</MkButton>
+					</div>
+				</div>
+			</MkInfo>
+			<MkInfo v-else-if="$i && isFederationHashtag && federationChannelChecked">
+				<div class="_gaps_s">
+					<div>{{ i18n.ts._channel.createFromFederationHashtagDescription }}</div>
+					<div>
+						<MkButton inline rounded primary @click="createChannel()"><i class="ti ti-whirl"></i> {{ i18n.ts._channel.createFromFederationHashtag }}</MkButton>
+					</div>
+				</div>
+			</MkInfo>
+			<MkNotesTimeline :paginator="paginator"/>
+		</div>
 	</div>
 	<template v-if="$i" #footer>
 		<div :class="$style.footer">
@@ -19,10 +38,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, markRaw, ref } from 'vue';
+import { computed, markRaw, ref, watch } from 'vue';
+import * as Misskey from 'misskey-js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
 import MkButton from '@/components/MkButton.vue';
+import MkInfo from '@/components/MkInfo.vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
@@ -30,6 +51,11 @@ import { store } from '@/store.js';
 import * as os from '@/os.js';
 import { genEmbedCode } from '@/utility/get-embed-code.js';
 import { Paginator } from '@/utility/paginator.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
+import { channelNameFromFederationHashtag, isChannelFederationHashtag } from '@/utility/channel.js';
+import { useRouter } from '@/router.js';
+
+const router = useRouter();
 
 const props = defineProps<{
 	tag: string;
@@ -41,6 +67,35 @@ const paginator = markRaw(new Paginator('notes/search-by-tag', {
 		tag: props.tag,
 	})),
 }));
+
+// ほかのサーバーの連合チャンネルのハッシュタグ (「連合チャンネル_」を含む) なら、同じハッシュタグのチャンネルを作れるようにする
+const isFederationHashtag = computed(() => isChannelFederationHashtag(props.tag));
+
+/** このサーバーにある、同じハッシュタグのチャンネル */
+const federationChannel = ref<Misskey.entities.Channel | null>(null);
+/** federationChannel を調べ終えたか (調べ終えるまでは、チャンネルを作る案内を出さない) */
+const federationChannelChecked = ref(false);
+
+watch(() => props.tag, async (tag) => {
+	federationChannel.value = null;
+	federationChannelChecked.value = false;
+	if (!isChannelFederationHashtag(tag)) return;
+
+	// 見つからないとき (NO_SUCH_CHANNEL) と失敗したときは、今までどおりチャンネルを作る案内を出す
+	const channel = await misskeyApi('channels/show-by-federation-hashtag', { federationHashtag: tag }).catch(() => null);
+	if (props.tag !== tag) return; // 調べている間に別のハッシュタグへ移った
+	federationChannel.value = channel;
+	federationChannelChecked.value = true;
+}, { immediate: true });
+
+function createChannel() {
+	router.push('/channels/new', {
+		query: {
+			name: channelNameFromFederationHashtag(props.tag),
+			federationHashtag: props.tag,
+		},
+	});
+}
 
 async function post() {
 	store.set('postFormHashtags', props.tag);

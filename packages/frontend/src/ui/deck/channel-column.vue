@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <XColumn :menu="menu" :column="column" :isStacked="isStacked" :refresher="async () => { await timeline?.reloadTimeline() }">
 	<template #header>
-		<i class="ti ti-device-tv"></i><span style="margin-left: 8px;">{{ column.name || column.timelineNameCache || i18n.ts._deck._columns.channel }}</span>
+		<i class="ti ti-device-tv"></i><i v-if="federated" v-tooltip="i18n.ts._channel._federationPolicy.public" class="ti ti-whirl" style="margin-left: 4px;"></i><span style="margin-left: 8px;">{{ column.name || column.timelineNameCache || i18n.ts._deck._columns.channel }}</span>
 	</template>
 
 	<div v-if="column.channelId" class="_gaps_s">
@@ -20,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref, shallowRef, watch, useTemplateRef } from 'vue';
+import { computed, onMounted, ref, shallowRef, watch, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import XColumn from './column.vue';
 import type { Column } from '@/deck.js';
@@ -32,6 +32,7 @@ import MkPostForm from '@/components/MkPostForm.vue';
 import MkButton from '@/components/MkButton.vue';
 import * as os from '@/os.js';
 import { favoritedChannelsCache } from '@/cache.js';
+import { isFederatedChannel } from '@/utility/channel.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { prefer } from '@/preferences.js';
 import { $i } from '@/i.js';
@@ -45,6 +46,8 @@ const props = defineProps<{
 
 const timeline = useTemplateRef('timeline');
 const channel = shallowRef<Misskey.entities.Channel>();
+// タイトルバーで、連合するチャンネルをグローバルタイムラインと同じアイコンで示す (表示中のチャンネルを取得できたときだけ)
+const federated = computed(() => channel.value != null && channel.value.id === props.column.channelId && isFederatedChannel(channel.value));
 const soundSetting = ref<SoundStore>(props.column.soundSetting ?? { type: null, volume: 1 });
 
 watch([() => props.column.channelId, () => prefer.r.showFixedPostFormInChannel.value], ([newChannelId, showFixedPostForm], oldValue, onCleanup) => {
@@ -84,7 +87,7 @@ async function setChannel() {
 	const { canceled, result: chosenChannelId } = await os.select({
 		title: i18n.ts.selectChannel,
 		items: channels.map(x => ({
-			value: x.id, label: x.name,
+			value: x.id, label: x.name, icon: isFederatedChannel(x) ? 'ti ti-whirl' : undefined,
 		})),
 		default: channels.find(x => x.id === props.column.channelId)?.id,
 	});
