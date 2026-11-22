@@ -1162,6 +1162,15 @@ describe('Endpoints', () => {
 		});
 	});
 
+	describe('stats', () => {
+		test('reactionsCount が非負の数値で返る', async () => {
+			const res = await api('stats', {});
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual(typeof res.body.reactionsCount, 'number');
+			assert.ok(res.body.reactionsCount >= 0);
+		});
+	});
+
 	describe('URL preview', () => {
 		test('Error from summaly becomes HTTP 422', async () => {
 			const res = await simpleGet('/url?url=https://e:xample.com');
