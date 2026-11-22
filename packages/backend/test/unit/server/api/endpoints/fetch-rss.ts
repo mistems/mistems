@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import FetchRssEndpoint, { meta } from '@/server/api/endpoints/fetch-rss.js';
 import { ApiError } from '@/server/api/error.js';
@@ -172,9 +172,53 @@ describe('fetch-rss endpoint', () => {
 		const requests = Array.from({ length: 32 }, (_, i) => exec(`https://example.com/${i}.xml`));
 		await Promise.allSettled(requests);
 
-		httpRequestService.send.mockResolvedValue(response('https://example.com/0.xml'));
-		await expect(exec('https://example.com/0.xml')).resolves.toBeDefined();
+		// 失敗した URL はしばらく取りに行かないので、空いた枠は別の URL で確かめる
+		httpRequestService.send.mockResolvedValue(response('https://example.com/after-failure.xml'));
+		await expect(exec('https://example.com/after-failure.xml')).resolves.toBeDefined();
 		expect(httpRequestService.send).toHaveBeenCalledTimes(33);
+	});
+
+	describe('取得に失敗した URL', () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		test('10 分のあいだは取りに行かずに失敗を返し、過ぎたらまた取りに行く', async () => {
+			vi.useFakeTimers({ toFake: ['Date'] });
+			httpRequestService.send.mockRejectedValue(new Error('upstream failed'));
+			await expectApiError(exec('https://example.com/broken.xml'), 'FETCH_RSS_FAILED', 422);
+			expect(httpRequestService.send).toHaveBeenCalledTimes(1);
+
+			vi.advanceTimersByTime(9 * 60 * 1000);
+			// 正規化すると同じ URL になるものも同じに扱う。覚えた失敗で断ったことは、別のエラーで分かる
+			await expectApiError(exec('HTTPS://EXAMPLE.COM/broken.xml#x'), 'FETCH_RSS_RECENTLY_FAILED', 422);
+			expect(httpRequestService.send).toHaveBeenCalledTimes(1);
+
+			vi.advanceTimersByTime(2 * 60 * 1000);
+			httpRequestService.send.mockResolvedValue(response('https://example.com/broken.xml'));
+			await expect(exec('https://example.com/broken.xml')).resolves.toBeDefined();
+			expect(httpRequestService.send).toHaveBeenCalledTimes(2);
+		});
+
+		test('ほかの URL には影響しない', async () => {
+			httpRequestService.send.mockRejectedValueOnce(new Error('upstream failed'));
+			await expectApiError(exec('https://example.com/broken.xml'), 'FETCH_RSS_FAILED', 422);
+
+			httpRequestService.send.mockResolvedValue(response('https://example.com/ok.xml'));
+			await expect(exec('https://example.com/ok.xml')).resolves.toBeDefined();
+		});
+
+		test('同時実行の上限で断ったときは、失敗として覚えない', async () => {
+			const pending = deferred<Response>();
+			httpRequestService.send.mockReturnValue(pending.promise);
+			const requests = Array.from({ length: 32 }, (_, i) => exec(`https://example.com/${i}.xml`));
+			await expectApiError(exec('https://example.com/overflow.xml'), 'FETCH_RSS_UNAVAILABLE', 503);
+			pending.resolve(response('https://example.com/feed.xml'));
+			await Promise.all(requests);
+
+			httpRequestService.send.mockResolvedValue(response('https://example.com/overflow.xml'));
+			await expect(exec('https://example.com/overflow.xml')).resolves.toBeDefined();
+		});
 	});
 
 	test('has the expected rate limit metadata', () => {
@@ -187,6 +231,7 @@ describe('fetch-rss endpoint', () => {
 	test('uses only the declared structured API errors', () => {
 		expect(new ApiError(meta.errors.invalidUrl)).toMatchObject({ code: 'INVALID_URL', httpStatusCode: 400 });
 		expect(new ApiError(meta.errors.fetchRssFailed)).toMatchObject({ code: 'FETCH_RSS_FAILED', httpStatusCode: 422 });
+		expect(new ApiError(meta.errors.fetchRssRecentlyFailed)).toMatchObject({ code: 'FETCH_RSS_RECENTLY_FAILED', httpStatusCode: 422 });
 		expect(new ApiError(meta.errors.fetchRssUnavailable)).toMatchObject({ code: 'FETCH_RSS_UNAVAILABLE', httpStatusCode: 503 });
 	});
 });
