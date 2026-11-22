@@ -26,19 +26,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</MkButton>
 	</div>
 </template>
-<template v-else-if="tweetId && tweetExpanded">
-	<div ref="twitter">
+<template v-else-if="tweetId && postExpanded">
+	<div>
 		<iframe
-			ref="tweet"
 			allow="fullscreen;web-share"
 			sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
 			scrolling="no"
-			:style="{ position: 'relative', width: '100%', height: `${tweetHeight}px`, border: 0 }"
+			:style="{ position: 'relative', width: '100%', height: `${postHeight}px`, border: 0 }"
 			:src="`https://platform.twitter.com/embed/index.html?embedId=${embedId}&amp;hideCard=false&amp;hideThread=false&amp;lang=en&amp;theme=${store.s.darkMode ? 'dark' : 'light'}&amp;id=${tweetId}`"
 		></iframe>
 	</div>
 	<div :class="$style.action">
-		<MkButton :small="true" inline @click="tweetExpanded = false">
+		<MkButton :small="true" inline @click="setPostExpanded(false)">
+			<i class="ti ti-x"></i> {{ i18n.ts.close }}
+		</MkButton>
+	</div>
+</template>
+<template v-else-if="bskyDid && bskyPostRecordKey && postExpanded">
+	<div>
+		<iframe
+			allow="fullscreen;web-share"
+			sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
+			scrolling="no"
+			:style="{ position: 'relative', width: '100%', height: `${postHeight}px`, border: 0 }"
+			:src="`https://embed.bsky.app/embed/${bskyDid}/app.bsky.feed.post/${bskyPostRecordKey}?id=${embedId}&colorMode=${store.s.darkMode ? 'dark' : 'light'}`"
+		></iframe>
+	</div>
+	<div :class="$style.action">
+		<MkButton :small="true" inline @click="setPostExpanded(false)">
 			<i class="ti ti-x"></i> {{ i18n.ts.close }}
 		</MkButton>
 	</div>
@@ -66,8 +81,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</component>
 	<template v-if="showActions">
 		<div v-if="tweetId" :class="$style.action">
-			<MkButton :small="true" inline @click="tweetExpanded = true">
+			<MkButton :small="true" inline @click="setPostExpanded(true)">
 				<i class="ti ti-brand-x"></i> {{ i18n.ts.expandTweet }}
+			</MkButton>
+		</div>
+		<div v-if="bskyPostRecordKey" :class="$style.action">
+			<MkButton :small="true" inline @click="setPostExpanded(true)">
+				<i class="ti ti-brand-bluesky"></i> {{ i18n.ts.expandTweet }}
 			</MkButton>
 		</div>
 		<div v-if="!playerEnabled && player.url" :class="$style.action">
@@ -83,9 +103,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, onDeactivated, onUnmounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onActivated, onDeactivated, onUnmounted, ref } from 'vue';
 import { url as local } from '@@/js/config.js';
 import { versatileLang } from '@@/js/intl-const.js';
+import { maybeMakeRelative } from '@@/js/url.js';
 import type { SummalyResult } from '@misskey-dev/summaly';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
@@ -94,7 +115,6 @@ import MkButton from '@/components/MkButton.vue';
 import { transformPlayerUrl } from '@/utility/url-preview.js';
 import { store } from '@/store.js';
 import { prefer } from '@/preferences.js';
-import { maybeMakeRelative } from '@@/js/url.js';
 
 const props = withDefaults(defineProps<{
 	url: string;
@@ -123,14 +143,27 @@ const icon = computed(() => summalyResult.value?.icon ?? null);
 const sitename = computed(() => summalyResult.value?.sitename ?? null);
 const sensitive = computed(() => summalyResult.value?.sensitive ?? false);
 const player = computed(() => summalyResult.value?.player ?? { url: null, width: null, height: null });
-const playerEnabled = ref(false);
-const tweetId = ref<string | null>(null);
-const tweetExpanded = ref(props.detail);
+const playerEnabled = ref(false); // 初期値はsummaly取り終わったあとに設定
 const embedId = `embed${Math.random().toString().replace(/\D/, '')}`;
-const tweetHeight = ref(150);
+const postExpanded = ref(false); // 初期値はsummaly取り終わったあとに設定
+let postExpandedByUser = false;
+const postHeight = ref(150);
+
+const tweetId = ref<string | null>(null);
+
+const bskyHandleOrDid = ref<string | null>(null);
+const bskyDid = ref<string | null>(null);
+const bskyPostRecordKey = ref<string | null>(null);
+
 const unknownUrl = ref(false);
+let isDeactivated = false;
+
+onActivated(() => {
+	isDeactivated = false;
+});
 
 onDeactivated(() => {
+	isDeactivated = true;
 	playerEnabled.value = false;
 });
 
@@ -140,6 +173,15 @@ if (!['http:', 'https:'].includes(requestUrl.protocol)) throw new Error('invalid
 if (requestUrl.hostname === 'twitter.com' || requestUrl.hostname === 'mobile.twitter.com' || requestUrl.hostname === 'x.com' || requestUrl.hostname === 'mobile.x.com') {
 	const m = requestUrl.pathname.match(/^\/.+\/status(?:es)?\/(\d+)/);
 	if (m) tweetId.value = m[1];
+}
+
+if (requestUrl.hostname === 'bsky.app') {
+	const bskyPostPageUrl = requestUrl.pathname.slice(1).split('/');
+
+	if (bskyPostPageUrl[0] === 'profile' && bskyPostPageUrl[1] && bskyPostPageUrl[2] === 'post' && bskyPostPageUrl[3]) {
+		bskyHandleOrDid.value = bskyPostPageUrl[1];
+		bskyPostRecordKey.value = bskyPostPageUrl[3];
+	}
 }
 
 if (requestUrl.hostname === 'music.youtube.com' && requestUrl.pathname.match('^/(?:watch|channel)')) {
@@ -159,10 +201,17 @@ window.fetch(`/url?url=${encodeURIComponent(requestUrl.href)}&lang=${versatileLa
 
 		return res.json();
 	})
+	.catch(err => {
+		if (_DEV_) {
+			console.warn('Failed to fetch url preview', err);
+		}
+		return null;
+	})
 	.then((info: SummalyResult | null) => {
 		if (!info || info.url == null) {
 			fetching.value = false;
 			unknownUrl.value = true;
+			autoExpandPost();
 			return;
 		}
 
@@ -170,15 +219,80 @@ window.fetch(`/url?url=${encodeURIComponent(requestUrl.href)}&lang=${versatileLa
 		unknownUrl.value = false;
 
 		summalyResult.value = info;
+
+		if (!info.sensitive) {
+			autoExpandPost();
+			if (!isDeactivated) {
+				playerEnabled.value = (props.showActions && prefer.s.expandUrlPreviewAutomatically);
+			}
+		}
 	});
 
-function adjustTweetHeight(message: MessageEvent) {
-	if (message.origin !== 'https://platform.twitter.com') return;
-	const embed = message.data?.['twttr.embed'];
-	if (embed?.method !== 'twttr.private.resize') return;
-	if (embed?.id !== embedId) return;
-	const height = embed?.params[0]?.height;
-	if (height) tweetHeight.value = height;
+function setPostExpanded(expanded: boolean) {
+	postExpandedByUser = true;
+	// 解決中の Bluesky の展開があれば無効にする (閉じたあとに開き直さないように)
+	bskyOpenRequestId++;
+	if (expanded && bskyPostRecordKey.value != null) {
+		openBskyEmbed(true);
+	} else {
+		postExpanded.value = expanded;
+	}
+}
+
+function autoExpandPost() {
+	if (!props.detail || postExpandedByUser) return;
+	if (bskyPostRecordKey.value != null) {
+		openBskyEmbed(false);
+	} else {
+		postExpanded.value = true;
+	}
+}
+
+let bskyDidPromise: Promise<string | null> | null = null;
+let bskyOpenRequestId = 0;
+
+function resolveBskyDid(): Promise<string | null> {
+	if (bskyDid.value != null) return Promise.resolve(bskyDid.value);
+	const handleOrDid = bskyHandleOrDid.value;
+	if (handleOrDid == null) return Promise.resolve(null);
+
+	if (handleOrDid.startsWith('did:')) {
+		bskyDid.value = handleOrDid;
+		return Promise.resolve(handleOrDid);
+	}
+
+	// handleで来ている場合はdidに変換 (同時に呼ばれても問い合わせは 1 回にする)
+	bskyDidPromise ??= window.fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handleOrDid)}`)
+		.then(res => res.ok ? res.json() as Promise<{ did?: unknown }> : null)
+		.then(data => {
+			const did = data?.did;
+			if (typeof did !== 'string' || !did.startsWith('did:')) return null;
+			bskyDid.value = did;
+			return did;
+		})
+		.catch(() => null)
+		.finally(() => {
+			bskyDidPromise = null;
+		});
+	return bskyDidPromise;
+}
+
+async function openBskyEmbed(byUser: boolean) {
+	if (bskyPostRecordKey.value == null) return;
+
+	const requestId = ++bskyOpenRequestId;
+	const did = await resolveBskyDid();
+
+	// 待つ間に新しい操作があった、または自動展開のあとにユーザーが操作したら反映しない
+	if (requestId !== bskyOpenRequestId) return;
+	if (!byUser && postExpandedByUser) return;
+
+	if (did == null) {
+		if (byUser) os.toast(i18n.ts.somethingHappened);
+		return;
+	}
+
+	postExpanded.value = true;
 }
 
 function openPlayer(): void {
@@ -193,10 +307,25 @@ function openPlayer(): void {
 	});
 }
 
-window.addEventListener('message', adjustTweetHeight);
+function adjustSocialsEmbedHeight(message: MessageEvent) {
+	if (message.origin === 'https://platform.twitter.com') {
+		const embed = message.data?.['twttr.embed'];
+		if (embed?.method === 'twttr.private.resize' && embed?.id === embedId) {
+			const height = embed?.params[0]?.height;
+			if (height) postHeight.value = height;
+		}
+	} else if (message.origin === 'https://embed.bsky.app') {
+		if (message.data?.id === embedId) {
+			const height = message.data?.height;
+			if (typeof height === 'number' && height > 0) postHeight.value = height;
+		}
+	}
+}
+
+window.addEventListener('message', adjustSocialsEmbedHeight);
 
 onUnmounted(() => {
-	window.removeEventListener('message', adjustTweetHeight);
+	window.removeEventListener('message', adjustSocialsEmbedHeight);
 });
 </script>
 
