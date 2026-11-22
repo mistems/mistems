@@ -2101,6 +2101,8 @@ declare namespace entities {
         NotesReactionsResponse,
         NotesReactionsCreateRequest,
         NotesReactionsDeleteRequest,
+        NotesRefetchRequest,
+        NotesRefetchResponse,
         NotesRenoteLockCreateRequest,
         NotesRenoteLockDeleteRequest,
         NotesRenotesRequest,
@@ -3095,6 +3097,12 @@ type NotesReactionsRequest = operations['notes___reactions']['requestBody']['con
 type NotesReactionsResponse = operations['notes___reactions']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type NotesRefetchRequest = operations['notes___refetch']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type NotesRefetchResponse = operations['notes___refetch']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type NotesRenoteLockCreateRequest = operations['notes___renote-lock___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -3298,7 +3306,7 @@ type QueueStats = {
 type QueueStatsLog = QueueStats[];
 
 // @public (undocumented)
-export const queueTypes: readonly ["system", "endedPollNotification", "postScheduledNote", "deliver", "inbox", "db", "relationship", "objectStorage", "userWebhookDeliver", "systemWebhookDeliver"];
+export const queueTypes: readonly ["system", "endedPollNotification", "postScheduledNote", "refetchNote", "deliver", "inbox", "db", "relationship", "objectStorage", "userWebhookDeliver", "systemWebhookDeliver"];
 
 // @public (undocumented)
 type RenoteMuteCreateRequest = operations['renote-mute___create']['requestBody']['content']['application/json'];
