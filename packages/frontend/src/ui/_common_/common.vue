@@ -241,6 +241,10 @@ if ($i) {
 	left: 0;
 	z-index: 1001;
 	height: 100dvh;
+	box-sizing: border-box;
+	/* MISTEMS: iOS のホーム画面の Web アプリが、スリープ復帰などでステータスバーの裏まで描く状態に切り替わったときに、メニューの先頭が隠れないようにする。ふだんは 0 */
+	padding-top: env(safe-area-inset-top, 0px);
+	background: var(--MI_THEME-navBg);
 }
 
 .widgetsDrawerBg {
@@ -254,7 +258,8 @@ if ($i) {
 	z-index: 1001;
 	width: 310px;
 	height: 100dvh;
-	padding: var(--MI-margin) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px)) !important;
+	/* MISTEMS: 上の余白は、ステータスバーの裏まで描く状態への備え (ui/universal.vue と同じ) */
+	padding: calc(var(--MI-margin) + env(safe-area-inset-top, 0px)) var(--MI-margin) calc(var(--MI-margin) + env(safe-area-inset-bottom, 0px)) !important;
 	box-sizing: border-box;
 	overflow: auto;
 	overscroll-behavior: contain;
