@@ -129,6 +129,9 @@ $widgets-hide-threshold: 1090px;
 
 .root {
 	height: 100dvh;
+	box-sizing: border-box;
+	/* MISTEMS: iOS のホーム画面の Web アプリが、スリープ復帰などでステータスバーの裏まで描く状態に切り替わったときに、ヘッダーが隠れないようにする。ふだんは 0 */
+	padding-top: env(safe-area-inset-top, 0px);
 	overflow: clip;
 	contain: strict;
 	display: flex;
