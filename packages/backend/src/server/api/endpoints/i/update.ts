@@ -213,6 +213,10 @@ export const paramDef = {
 		mutedInstances: { type: 'array', items: {
 			type: 'string',
 		} },
+		// お知らせのグループの ID。'ungrouped' はグループに入っていないお知らせ
+		mutedAnnouncementGroupIds: { type: 'array', maxItems: 256, uniqueItems: true, items: {
+			type: 'string', minLength: 1, maxLength: 32,
+		} },
 		notificationRecieveConfig: {
 			type: 'object',
 			nullable: false,
@@ -360,6 +364,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				profileUpdates.hardMutedWords = ps.hardMutedWords;
 			}
 			if (ps.mutedInstances !== undefined) profileUpdates.mutedInstances = ps.mutedInstances;
+			if (ps.mutedAnnouncementGroupIds !== undefined) profileUpdates.mutedAnnouncementGroupIds = ps.mutedAnnouncementGroupIds;
 			if (ps.notificationRecieveConfig !== undefined) profileUpdates.notificationRecieveConfig = ps.notificationRecieveConfig;
 			if (typeof ps.isLocked === 'boolean') updates.isLocked = ps.isLocked;
 			if (typeof ps.isExplorable === 'boolean') updates.isExplorable = ps.isExplorable;

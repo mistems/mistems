@@ -58,6 +58,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</MkFolder>
 			</SearchMarker>
 		</FormSection>
+		<FormSection v-if="announcementGroups.length > 0">
+			<SearchMarker
+				:keywords="['announcement', 'group', 'mute', 'notify']"
+			>
+				<MkFolder>
+					<template #label><SearchLabel>{{ i18n.ts._announcement.groupNotifications }}</SearchLabel></template>
+					<div class="_gaps_s">
+						<div><SearchText>{{ i18n.ts._announcement.groupNotificationsDescription }}</SearchText></div>
+						<MkSwitch
+							v-for="group in announcementGroupItems"
+							:key="group.key"
+							:modelValue="!isAnnouncementGroupMuted(group.id)"
+							@update:modelValue="(v) => setAnnouncementGroupMuted(group.id, !v)"
+						>
+							<template #label><i :class="group.icon"></i> {{ group.name }}</template>
+						</MkSwitch>
+					</div>
+				</MkFolder>
+			</SearchMarker>
+		</FormSection>
 		<FormSection>
 			<div class="_gaps_m">
 				<FormLink to="/settings/sounds">{{ i18n.ts.notificationSoundSettings }}</FormLink>
@@ -107,6 +127,7 @@ import { Paginator } from '@/utility/paginator.js';
 import MkPagination from '@/components/MkPagination.vue';
 import { userPage } from '@@/js/user.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
+import { announcementGroupIconClass, isAnnouncementGroupMuted, setAnnouncementGroupMuted } from '@/utility/announcement-group.js';
 
 const $i = ensureSignin();
 
@@ -142,6 +163,18 @@ const allowButton = useTemplateRef('allowButton');
 const pushRegistrationInServer = computed(() => allowButton.value?.pushRegistrationInServer);
 const sendReadMessage = computed(() => pushRegistrationInServer.value?.sendReadMessage || false);
 const userLists = await misskeyApi('users/lists/list');
+const announcementGroups = await misskeyApi('announcements/groups', {});
+const announcementGroupItems = computed(() => [...announcementGroups.map(group => ({
+	key: group.id,
+	id: group.id as string | null,
+	name: group.name,
+	icon: announcementGroupIconClass(group.icon),
+})), {
+	key: 'ungrouped',
+	id: null,
+	name: i18n.ts.other,
+	icon: 'ti ti-dots',
+}]);
 
 async function readAllNotifications() {
 	await os.apiWithDialog('notifications/mark-all-as-read', {});
