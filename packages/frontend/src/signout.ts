@@ -5,27 +5,19 @@
 
 import { apiUrl } from '@@/js/config.js';
 import { cloudBackup } from '@/preferences/utility.js';
+import { removeAccount, login } from '@/accounts.js';
+import { host } from '@@/js/config.js';
 import { store } from '@/store.js';
+import { prefer } from '@/preferences.js';
 import { waiting } from '@/os.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 import { clear } from '@/utility/idb-proxy.js';
 import { $i } from '@/i.js';
 import { encodePushSubscriptionKey } from '@/utility/encode-push-subscription-key.js';
 
-export async function signout(showWaiting = true) {
-	if (!$i) return;
-
-	if (showWaiting) {
-		waiting();
-	}
-
-	if (store.s.enablePreferencesAutoCloudBackup) {
-		try {
-			await cloudBackup();
-		} catch {
-			// nop
-		}
-	}
+/** クライアントに保存しているすべてのデータを削除します。 */
+async function removeAllData() {
+	if ($i == null) return;
 
 	localStorage.clear();
 
@@ -83,6 +75,65 @@ export async function signout(showWaiting = true) {
 		// nothing
 	}
 	//#endregion
+}
+
+/** 現在のアカウントに関連するデータを削除します。 */
+async function removeCurrentAccountData() {
+	if ($i == null) return;
+
+	// 設定・状態を削除
+	prefer.clearAccountSettingsFromDevice();
+	await store.clearAccountDataFromDevice();
+}
+
+/**
+ * アカウントからログアウトし、そのアカウントに関するデータを削除します。
+ * @param all すべてのアカウントからログアウトするか？
+ * @param showWaiting 待機中の表示を出すか？ (呼び出し元で出している場合は false)
+ */
+export async function signout(all = false, showWaiting = true) {
+	if (!$i) return;
+
+	const currentAccountId = $i.id;
+
+	if (showWaiting) {
+		waiting();
+	}
+
+	if (store.s.enablePreferencesAutoCloudBackup) {
+		try {
+			await cloudBackup();
+		} catch {
+			// nop
+		}
+	}
+
+	if (prefer.s.accounts.length <= 1 || all) {
+		// 最後のアカウントを削除する場合・全てのアカウントからログアウトする場合は全データ削除
+		await removeAllData();
+	} else {
+		// 複数アカウントある場合は現在のアカウントのデータのみ削除
+		await removeCurrentAccountData();
+
+		// 現在のアカウント情報を削除
+		await removeAccount(host, $i.id);
+
+		// アカウント切り替え
+		const nextAccountToken = Object.entries(store.s.accountTokens).find(([key, _]) => {
+			const [accountHost, userId] = key.split('/');
+			return accountHost === host && userId !== currentAccountId;
+		})?.[1];
+
+		if (nextAccountToken != null) {
+			// ログインの際の遷移の挙動はlogin関数内で行うのでここではunisonReloadを呼ばず終了
+			await login(nextAccountToken, undefined, false);
+			return;
+		} else {
+			// 現時点では外部ホストのアカウントをログインさせることはできないので、
+			// 通常の全アカウントからのログアウトと同様に扱う（全データ削除）
+			await removeAllData();
+		}
+	}
 
 	unisonReload('/');
 }
