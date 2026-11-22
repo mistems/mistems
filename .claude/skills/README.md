@@ -28,5 +28,5 @@ ECC (everything-claude-code) 由来の MIT スキルが含まれる場合は、�
 
 ## 関連
 
-- 各スキルの description で自動索引される設計のため、実装済スキルの手書き索引 (一覧表) は本ファイルにも `AGENTS.md` にも持たない方針 (手書き索引は腐敗するため、frontmatter の description を唯一の索引とする)
+- 各スキルの description で自動索引される設計のため、実装済スキルの手書き索引 (一覧表) は本ファイルにも `CLAUDE.md` にも持たない方針 (手書き索引は腐敗するため、frontmatter の description を唯一の索引とする)
 - スキルそのものの健全性検査は [/harness-audit](../commands/harness-audit.md) で採点できる

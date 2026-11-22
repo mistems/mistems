@@ -6,7 +6,7 @@
 
 1. **SPDX ヘッダー** — `.vue` は HTML コメント形式 `<!-- ... -->`、`.stories.impl.ts` は TS コメント形式 `/* ... */`。欠落すると CI (`spdx` ジョブ) が落ちる
 2. **`Mk` プレフィックス必須** — 共有コンポーネントは `MkButton.vue` / `global/MkAvatar.vue` のように `Mk` で始める。ページ固有 UI は `Mk` を付けず `pages/` 側に置く
-3. **`locales/ja-JP.yml` のみ編集可** — i18n キー追加時に他言語 (`en-US.yml` 等) を手で触ってはいけない。Crowdin の自動配信で上書きされて失われる。詳細は [tasks/adding-i18n-key.md](adding-i18n-key.md) を参照
+3. **他言語の locale では上流のキーを触らない** — i18n キーは `locales/ja-JP.yml` に足す。MISTEMS 独自のキーなら `en-US.yml` にも訳を足すが、上流にあるキーの訳は変えない。詳細は [tasks/adding-i18n-key.md](adding-i18n-key.md) を参照
 4. **文字列リテラルの直書き禁止** — テンプレート / JS どちらでも、ユーザーに見せる文言は必ず `i18n.ts.<key>` か `i18n.tsx.<key>(...)` 経由 → [knowledge/i18n-usage.md](../knowledge/i18n-usage.md)
 5. **ブラウザ標準 UI を直接呼ばない** — `alert()` / `confirm()` / `window.prompt()` は禁止、必ず `os.alert` / `os.confirm` / `os.popup` 経由 → [knowledge/os-api.md](../knowledge/os-api.md)
 
