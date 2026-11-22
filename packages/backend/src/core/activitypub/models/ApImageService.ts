@@ -62,7 +62,7 @@ export class ApImageService {
 			return null;
 		}
 
-		this.logger.info(`Creating the Image: ${image.url}`);
+		this.logger.debug(`Creating the Image: ${image.url}`);
 
 		// Cache if remote file cache is on AND either
 		// 1. remote sensitive file is also on

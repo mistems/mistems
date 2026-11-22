@@ -444,7 +444,7 @@ export default abstract class Chart<T extends Schema> {
 				...columns,
 			}) as RawRecord<T>;
 
-			this.logger.info(`${this.name + (group ? `:${group}` : '')}(${span}): New commit created`);
+			this.logger.debug(`${this.name + (group ? `:${group}` : '')}(${span}): New commit created`);
 
 			return log;
 		} finally {
@@ -572,7 +572,7 @@ export default abstract class Chart<T extends Schema> {
 					.execute(),
 			]);
 
-			this.logger.info(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
+			this.logger.debug(`${this.name + (logHour.group ? `:${logHour.group}` : '')}: Updated`);
 		};
 
 		const groups = removeDuplicates(buffer.map(log => log.group));
