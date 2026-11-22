@@ -231,6 +231,7 @@ if (props.initialVisibleUsers) {
 	props.initialVisibleUsers.forEach(u => pushVisibleUser(u));
 }
 const reactionAcceptance = ref(store.s.reactionAcceptance);
+const userRenoteLock = ref(false);
 const scheduledAt = ref<number | null>(null);
 const draghover = ref(false);
 const quoteId = ref<string | null>(null);
@@ -487,6 +488,7 @@ function watchForDraft() {
 	watch(localOnly, () => saveDraft());
 	watch(quoteId, () => saveDraft());
 	watch(reactionAcceptance, () => saveDraft());
+	watch(userRenoteLock, () => saveDraft());
 	watch(scheduledAt, () => saveDraft());
 }
 
@@ -712,6 +714,11 @@ function showOtherSettings() {
 		action: () => {
 			toggleReactionAcceptance();
 		},
+	}, {
+		type: 'switch',
+		icon: 'ti ti-repeat-off',
+		text: i18n.ts._renoteLock.lockRenoteByOthersInPost,
+		ref: userRenoteLock,
 	}, { type: 'divider' }, {
 		type: 'button',
 		text: i18n.ts._drafts.saveToDraft,
@@ -1105,6 +1112,7 @@ async function post(ev?: PointerEvent) {
 		visibility: actualVisibility.value,
 		visibleUserIds: actualVisibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
+		userRenoteLock: userRenoteLock.value,
 	};
 
 	if (withHashtags.value && hashtags.value && hashtags.value.trim() !== '') {
