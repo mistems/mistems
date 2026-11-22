@@ -18,11 +18,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="$style.info">
 		<div v-if="mock">
-			<MkTime :time="note.createdAt" colored/>
+			<MkTime :time="note.createdAt" :mode="timeMode" colored/>
 		</div>
-		<MkA v-else :to="notePage(note)">
-			<MkTime :time="note.createdAt" colored/>
-		</MkA>
+		<!-- MkA も右クリックで自前のメニューを出すので、先 (capture) で受け取って MkA まで届かないようにする -->
+		<span v-else @contextmenu.capture="showTimeMenu">
+			<MkA :to="notePage(note)">
+				<MkTime :time="note.createdAt" :mode="timeMode" colored/>
+			</MkA>
+		</span>
 		<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 			<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
 			<i v-else-if="note.visibility === 'followers'" class="ti ti-lock"></i>
@@ -35,18 +38,97 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject } from 'vue';
+import { inject, computed } from 'vue';
 import * as Misskey from 'misskey-js';
 import { i18n } from '@/i18n.js';
 import { notePage } from '@@/js/note.js';
 import { userPage } from '@@/js/user.js';
 import { DI } from '@/di.js';
+import * as os from '@/os.js';
+import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
+import { timemachineAvailable } from '@/utility/check-permissions.js';
+import { formatTimestamp } from '@/utility/timemachine-format.js';
+import { useRouter } from '@/router.js';
+import { url } from '@@/js/config.js';
+import type { MenuItem } from '@/types/menu.js';
 
-defineProps<{
+const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
-}>();
+	isRealtime?: boolean;
+}>(), {
+	isRealtime: false,
+});
 
+const router = useRouter();
 const mock = inject(DI.mock, false);
+const forceAbsoluteTime = inject<boolean>('forceAbsoluteTime', false);
+
+// リアルタイムノートの場合は常に相対時刻を使用
+const timeMode = computed(() => props.isRealtime ? 'relative' : (forceAbsoluteTime ? 'absolute' : 'relative'));
+
+// 時刻のリンクのメニュー。MkA の共通メニュー (ウィンドウで開く・ページで表示など) に、タイムマシンへの移動を足したもの
+function showTimeMenu(ev: MouseEvent) {
+	const selection = window.getSelection();
+	if (selection && selection.toString() !== '') return;
+	ev.preventDefault();
+	ev.stopPropagation();
+
+	const path = notePage(props.note);
+	const menuItems: MenuItem[] = [{
+		type: 'label',
+		text: path,
+	}, {
+		icon: 'ti ti-app-window',
+		text: i18n.ts.openInWindow,
+		action: () => {
+			os.pageWindow(path);
+		},
+	}, {
+		icon: 'ti ti-player-eject',
+		text: i18n.ts.showInPage,
+		action: () => {
+			router.pushByPath(path, 'forcePage');
+		},
+	}, { type: 'divider' }, {
+		icon: 'ti ti-external-link',
+		text: i18n.ts.openInNewTab,
+		action: () => {
+			window.open(path, '_blank', 'noopener');
+		},
+	}, {
+		icon: 'ti ti-link',
+		text: i18n.ts.copyLink,
+		action: () => {
+			copyToClipboard(`${url}${path}`);
+		},
+	}];
+
+	if (timemachineAvailable) {
+		// ノートの作成時刻に1分加算してタイムマシンへのジャンプ時刻を生成
+		const noteTimestamp = new Date(props.note.createdAt).getTime() + 60000;
+		const timemachinePath = `/timemachine?goto=${formatTimestamp(noteTimestamp, 'goto')}`;
+		menuItems.push({ type: 'divider' }, {
+			type: 'parent',
+			icon: 'ti ti-clock-bolt',
+			text: i18n.ts.jumpToTimemachine,
+			children: [{
+				icon: 'ti ti-app-window',
+				text: i18n.ts.openInWindow,
+				action: () => {
+					os.pageWindow(timemachinePath);
+				},
+			}, {
+				icon: 'ti ti-player-eject',
+				text: i18n.ts.showInPage,
+				action: () => {
+					router.pushByPath(timemachinePath, 'forcePage');
+				},
+			}],
+		});
+	}
+
+	os.contextMenu(menuItems, ev);
+}
 </script>
 
 <style lang="scss" module>
